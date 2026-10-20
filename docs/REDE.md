@@ -66,8 +66,10 @@ Se nem o anfitrião acessa a aplicação, verifique se o processo está rodando 
 
 Todos devem usar o mesmo endereço de servidor. Duas pessoas executando uma cópia local criam servidores separados; o mesmo código não sincroniza essas instâncias.
 
-O cronômetro continua mesmo se alguém se desconectar. O anfitrião pode substituir um ausente por bot no lobby ou no painel de Diplomacia durante a campanha. A substituição encerra a sessão desse jogador na partida. Se o anfitrião desconectar, outra pessoa conectada assume o controle da sala. Reconexão recupera a sessão enquanto ela não foi substituída e o servidor não foi reiniciado. Salas atuais ficam em memória: **não use ainda uma sessão de 5 horas como se ela tivesse salvamento automático**.
+O cronômetro continua se um jogador desconectar enquanto o grupo ainda joga. Quando todos os humanos saem, a campanha pausa. Ao recuperar um servidor, as salas também ficam pausadas até alguém reconectar.
+
+O anfitrião pode substituir um ausente por bot no lobby ou em Diplomacia; isso encerra a sessão daquele jogador. Outra pessoa conectada assume o controle se o anfitrião sair. O estado e os hashes dos tokens são salvos em `.local/rooms-state.json`, com backup. Guarde a aba/sessão para reentrar como o mesmo jogador. Preserve esse diretório ao atualizar o servidor e use volume persistente em hospedagens que substituem discos.
 
 ## O que foi verificado neste ambiente
 
-A instalação pelo lockfile, compilação, testes de regras e uma partida com três navegadores foram verificados neste ambiente. O servidor de produção respondeu por IPv4 local e pelo loopback IPv6 `::1`, usando `HOST=::`. Acesso via Radmin, Tailscale ou IPv6 entre computadores do grupo depende das redes reais e não foi verificado daqui. O guia descreve como hospedar; não representa uma conexão externa já configurada.
+A instalação pelo lockfile, compilação, testes de regras e uma partida com três navegadores foram verificados neste ambiente. O servidor também suporta `HOST=::`; IPv4 local e loopback IPv6 `::1` já foram exercitados. O servidor headless passou por queda forçada e recuperação de sessão em outro processo. Acesso via Radmin, Tailscale ou IPv6 entre computadores do grupo depende das redes reais e não foi verificado daqui. O guia descreve como hospedar; não representa uma conexão externa já configurada.

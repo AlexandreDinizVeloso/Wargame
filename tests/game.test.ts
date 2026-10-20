@@ -20,7 +20,7 @@ function fixture(mode: 'quick' | 'campaign' = 'quick') {
   const game = createGame('TEST01', mode, true);
   const players = ['Ana', 'Bruno', 'Clara'].map((name) => addPlayer(game, name));
   startGame(game);
-  game.targetScore = 999;
+  game.victoryTargets = { conquest: 999, prosperity: 999, concord: 999, faith: 999 };
   game.seed = 42;
   return { game, players };
 }
@@ -57,7 +57,7 @@ test('servidor recusa ordens de outro reino, marchas não vizinhas e quantidades
   } = fixture();
   assert.throws(
     () => submitOrder(game, b.id, { provinceId: 'p16', action: 'train' }),
-    /suas províncias/,
+    /suas tropas/,
   );
   assert.throws(
     () =>
@@ -67,7 +67,7 @@ test('servidor recusa ordens de outro reino, marchas não vizinhas e quantidades
   for (const amount of [0, -1, 6, 1.5, NaN])
     assert.throws(
       () => submitOrder(game, p.id, { provinceId: 'p16', action: 'move', targetId: 'p8', amount }),
-      /1 tropa/,
+      /1 tropa|troops inválido/,
     );
 });
 test('ordens reservam recursos e a substituição não cobra duas vezes', () => {
@@ -97,7 +97,7 @@ test('recrutamento consome reservas, adiciona tropas e dilui o treinamento', () 
   submitOrder(game, p.id, { provinceId: t.id, action: 'recruit' });
   resolveTurn(game);
   assert.equal(t.troops, 9);
-  assert.ok(t.training < 50);
+  assert.ok(t.training < 1.2);
   assert.equal(p.manpower, 10 - 3 + economyOf(game.provinces, p.id).manpower);
 });
 test('moral e treinamento mudam resultados de combate e marchas deixam guarnição', () => {
@@ -107,7 +107,7 @@ test('moral e treinamento mudam resultados de combate e marchas deixam guarniç�
   } = fixture();
   const t = game.provinces[16];
   t.morale = 100;
-  t.training = 100;
+  t.training = 1.5;
   submitOrder(game, p.id, { provinceId: t.id, action: 'move', targetId: 'p8', amount: 5 });
   resolveTurn(game);
   assert.equal(t.troops, 1);
@@ -145,8 +145,8 @@ test('romper pacto preserva influência não negativa ao cancelar missões que f
     game,
     players: [a, b],
   } = fixture();
-  game.provinces[16].faith = 'Ortodoxia';
-  game.provinces[24].faith = 'Ortodoxia';
+  game.provinces[16].religion = 'Ortodoxia';
+  game.provinces[24].religion = 'Ortodoxia';
   a.influence = 4;
   submitOrder(game, a.id, { provinceId: 'p16', action: 'convert' });
   submitOrder(game, a.id, { provinceId: 'p24', action: 'convert' });
@@ -168,31 +168,31 @@ test('ordens e semente de resolução não vazam para outros clientes', () => {
   assert.equal('orders' in viewFor(game, b.id), false);
   assert.equal('seed' in viewFor(game, b.id), false);
 });
-test('conversão exige duas missões, pacificação reduz revolta e intolerância gera tensão', () => {
+test('conversão exige duas missões e guarnição coopera com pacificação', () => {
   const {
     game,
     players: [a],
   } = fixture();
   const p = game.provinces[16];
-  p.faith = 'Ortodoxia';
+  p.religion = 'Ortodoxia';
   p.unrest = 40;
   a.doctrine = 'devout';
   submitOrder(game, a.id, { provinceId: p.id, action: 'convert' });
   resolveTurn(game);
-  assert.equal(p.faith, 'Ortodoxia');
+  assert.equal(p.religion, 'Ortodoxia');
   assert.equal(p.conversion, 50);
-  assert.equal(p.unrest, 52);
+  assert.equal(p.unrest, 30);
   submitOrder(game, a.id, { provinceId: p.id, action: 'convert' });
   resolveTurn(game);
-  assert.equal(p.faith, a.faith);
+  assert.equal(p.religion, a.faith);
   assert.equal(a.conversions, 1);
   assert.equal(p.conversion, 0);
   const unrest = p.unrest;
   submitOrder(game, a.id, { provinceId: p.id, action: 'pacify' });
   resolveTurn(game);
-  assert.equal(p.unrest, Math.max(0, unrest - 29));
+  assert.equal(p.unrest, Math.max(0, unrest - 35));
 });
-test('Campanha aplica suprimentos e desgaste; Rápido mantém logística simplificada', () => {
+test('ambos os modos aplicam atrito e a Campanha registra desgaste', () => {
   const a = fixture('campaign'),
     b = fixture('quick');
   a.game.provinces[16].troops = 30;
@@ -201,7 +201,9 @@ test('Campanha aplica suprimentos e desgaste; Rápido mantém logística simplif
   b.game.provinces[16].morale = 90;
   resolveTurn(a.game);
   resolveTurn(b.game);
-  assert.ok(a.game.provinces[16].morale < b.game.provinces[16].morale);
+  assert.equal(a.game.provinces[16].troops, 28);
+  assert.equal(b.game.provinces[16].troops, 28);
+  assert.equal(a.game.lastReport!.attritionLosses[0].losses, 2);
   a.players[0].warExhaustion = 50;
   resolveTurn(a.game);
   assert.equal(a.players[0].warExhaustion, 44);
@@ -233,11 +235,12 @@ test('todos os caminhos de vitória pontuam e a partida termina com resultado', 
   a.objective = 'concord';
   a.peaceTurns = 3;
   refreshScores(game);
-  assert.equal(a.score, 5);
+  assert.equal(a.score, 3.8);
   a.objective = 'faith';
   refreshScores(game);
-  assert.equal(a.score, 4);
-  game.targetScore = 4;
+  assert.equal(a.score, 3);
+  Object.assign(game.provinces[8], { ownerId: a.id, pacification: 100, religion: a.faith });
+  game.victoryTargets.faith = 4;
   resolveTurn(game);
   assert.equal(game.phase, 'finished');
   assert.equal(game.winnerId, a.id);
@@ -260,9 +263,10 @@ test('partida completa com 8 bots termina sem recursos ou tropas negativos', () 
       assert.ok(p.influence >= 0);
     }
     for (const t of g.provinces) {
-      assert.ok(t.troops >= 1);
+      assert.ok(t.troops >= 0);
       assert.ok(t.morale >= 0 && t.morale <= 100);
-      assert.ok(t.training >= 0 && t.training <= 100);
+      assert.ok(t.training >= 1 && t.training <= 1.5);
+      assert.ok(t.mercenaries >= 0 && t.mercenaries <= t.troops);
     }
   }
   assert.equal(g.phase, 'finished');

@@ -3,9 +3,11 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachRooms } from './rooms';
+import { makeStaticMap } from '../shared/map';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
+const headless = process.argv.includes('--headless');
 const mime: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -20,7 +22,35 @@ const server = http.createServer((req, res) => {
   res.setHeader('Referrer-Policy', 'same-origin');
   if (req.url?.split('?')[0] === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', game: 'concordia', version: '0.1.0' }));
+    res.end(
+      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.2.0', protocolVersion: 2 }),
+    );
+    return;
+  }
+  if (req.url?.split('?')[0] === '/api/schema') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        protocolVersion: 2,
+        transport: '/ws',
+        map: makeStaticMap(),
+        orderTypes: [
+          'MOVE_ATTACK',
+          'RECRUIT',
+          'TRAIN',
+          'PACIFY',
+          'CONVERT',
+          'BUILD_FORT',
+          'DEVELOP',
+          'DIPLOMACY',
+        ],
+      }),
+    );
+    return;
+  }
+  if (headless) {
+    res.writeHead(404);
+    res.end('Servidor headless: utilize /ws ou /api/schema.');
     return;
   }
   if (!production) {
@@ -66,19 +96,25 @@ const server = http.createServer((req, res) => {
   });
   stream.pipe(res);
 });
-const roomService = attachRooms(server);
-const vite = production
-  ? null
-  : await (
-      await import('vite')
-    ).createServer({ root, server: { middlewareMode: true, hmr: { server } }, appType: 'spa' });
+const roomService = attachRooms(server, {
+  stateFile: process.env.ROOMS_STATE_FILE ?? path.join(root, '.local', 'rooms-state.json'),
+});
+const vite =
+  production || headless
+    ? null
+    : await (
+        await import('vite')
+      ).createServer({ root, server: { middlewareMode: true, hmr: { server } }, appType: 'spa' });
 const port = Number(process.env.PORT ?? 3000),
   host = process.env.HOST ?? '0.0.0.0';
-server.listen(port, host, () =>
+server.listen(port, host, () => {
+  const address = server.address(),
+    actualPort = address && typeof address === 'object' ? address.port : port;
   console.log(
-    `Concórdia: servidor ${production ? 'produção' : 'desenvolvimento'} na porta ${port} (${host}).`,
-  ),
-);
+    `Concórdia: servidor ${headless ? 'headless' : production ? 'produção' : 'desenvolvimento'} na porta ${actualPort} (${host}).`,
+  );
+  process.send?.({ type: 'listening', port: actualPort });
+});
 async function shutdown() {
   roomService.close();
   await vite?.close();
