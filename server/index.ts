@@ -3,7 +3,9 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachRooms } from './rooms';
-import { makeStaticMap } from '../shared/map';
+import { makeMap, makeStaticMap } from '../shared/map';
+import { NATIONS, RELIGIONS, EMBLEMS, holyCityId } from '../shared/rules';
+import { OBJECTIVES } from '../shared/types';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
@@ -23,7 +25,7 @@ const server = http.createServer((req, res) => {
   if (req.url?.split('?')[0] === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
-      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.2.0', protocolVersion: 2 }),
+      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.3.0', protocolVersion: 3 }),
     );
     return;
   }
@@ -31,17 +33,42 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
-        protocolVersion: 2,
+        protocolVersion: 3,
+        nations: NATIONS.map((n) => ({ ...n, emblemPath: EMBLEMS[n.emblem] })),
+        religions: RELIGIONS,
+        holyCities: Object.fromEntries(
+          (['WORLD', 'EUROPE', 'AMERICAS', 'ASIA'] as const).map((scope) => [
+            scope,
+            Object.fromEntries(
+              Object.keys(RELIGIONS).map((id) => [
+                id,
+                holyCityId(
+                  id as keyof typeof RELIGIONS,
+                  makeMap(
+                    scope === 'WORLD' ? 'campaign' : 'quick',
+                    scope === 'WORLD' ? 'EUROPE' : scope,
+                  ),
+                ),
+              ]),
+            ),
+          ]),
+        ),
+        objectives: OBJECTIVES,
         transport: '/ws',
         map: makeStaticMap(),
         orderTypes: [
-          'MOVE_ATTACK',
-          'RECRUIT',
-          'TRAIN',
+          'RECRUIT_BATTALION',
+          'MOVE_BATTALION',
+          'ENTRENCH_BATTALION',
+          'TRAIN_BATTALION',
+          'MERGE_BATTALIONS',
+          'SPLIT_BATTALION',
+          'EMBARK_BATTALION',
+          'BUILD_FORT',
+          'BUILD_PORT',
+          'BUILD_MARKET',
           'PACIFY',
           'CONVERT',
-          'BUILD_FORT',
-          'DEVELOP',
           'DIPLOMACY',
         ],
       }),

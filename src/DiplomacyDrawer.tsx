@@ -1,308 +1,499 @@
 import { useState } from 'react';
+import { ArrowRight, Coins, Flag, Handshake, ScrollText, Swords, Users } from 'lucide-react';
+import type { CasusBelli, DiplomacyAction, GameView, PeaceTerm } from '../shared/types';
 import {
-  ArrowDownToLine,
-  Ban,
-  Bot,
-  Coins,
-  Flag,
-  Handshake,
-  MoveRight,
-  Shield,
-  Skull,
-  Sparkles,
-  Users,
-} from 'lucide-react';
-import { OBJECTIVES } from '../shared/types';
-import type { DiplomaticOrder, GameView, Player } from '../shared/types';
-import { reservedResources } from '../shared/rules';
-import { number, ObjectiveIcon, type Command } from './ui';
-
+  CASUS_LABELS,
+  peaceDescription,
+  controller,
+  getRelation,
+  peaceTermCost,
+} from '../shared/rules';
+import { CoatOfArms, Empty, Meter, number, type Command } from './ui';
 export default function DiplomacyDrawer({
   game,
-  me,
-  selectedId,
-  onSelect,
+  playerId,
   command,
 }: {
   game: GameView;
-  me: Player;
-  selectedId: string;
-  onSelect: (id: string) => void;
+  playerId: string;
   command: Command;
 }) {
-  const [money, setMoney] = useState(12),
-    [tribute, setTribute] = useState(3),
-    [provinceId, setProvinceId] = useState('');
-  const target = game.players.find((p) => p.id === selectedId),
-    relation = target
-      ? game.relations.find(
-          (r) => (r.a === me.id && r.b === target.id) || (r.b === me.id && r.a === target.id),
-        )
-      : undefined;
-  const reserved = reservedResources(
-      { orders: { [me.id]: game.plannedOrders }, provinces: game.provinces },
-      me.id,
-    ),
-    free = me.gold - reserved.gold,
-    locked = me.ready || game.phase !== 'planning';
-  const owned = game.provinces.filter((p) => p.ownerId === target?.id),
-    targetProvince = owned.some((p) => p.id === provinceId) ? provinceId : (owned[0]?.id ?? '');
-  const pending = (kind: 'alliance' | 'military_access' | 'tribute') =>
-    game.offers.some(
-      (o) =>
-        o.kind === kind &&
-        ((o.from === me.id && o.to === target?.id) || (o.to === me.id && o.from === target?.id)),
-    );
-  const act = (action: DiplomaticOrder['action'], amount?: number, targetProvinceId?: string) => {
-    if (!target) return;
-    const order: DiplomaticOrder = { type: 'DIPLOMACY', action, targetRealmId: target.id };
-    if (amount !== undefined) order.amount = amount;
-    if (targetProvinceId) order.targetProvinceId = targetProvinceId;
-    command({ type: 'SUBMIT_ORDER', order });
-  };
+  const me = game.players.find((p) => p.id === playerId)!,
+    [targetId, setTarget] = useState(game.players.find((p) => p.id !== playerId)?.id ?? ''),
+    [casusBelli, setCB] = useState<CasusBelli>('CONQUEST'),
+    [allies, setAllies] = useState<string[]>([]),
+    [money, setMoney] = useState(12),
+    [provinceId, setProvince] = useState('');
+  const target =
+      game.players.find((p) => p.id === targetId) ?? game.players.find((p) => p.id !== playerId)!,
+    r = getRelation(game, playerId, target.id)!;
+  const [selectedWarId, setWarId] = useState(''),
+    [selectedProvinces, setProvinces] = useState<string[]>([]),
+    [reparations, setReparations] = useState(false),
+    [humiliate, setHumiliate] = useState(false),
+    [force, setForce] = useState<'NONE' | 'EMPIRE' | 'RELIGION'>('NONE'),
+    [subjugate, setSubjugate] = useState(false),
+    [tribute, setTribute] = useState(0);
+  const active = game.phase === 'planning',
+    wars = game.wars.filter((w) => w.active),
+    mine = wars.filter((w) => [...w.attackerIds, ...w.defenderIds].includes(playerId)),
+    war = mine.find((w) => w.id === selectedWarId) ?? mine[0];
+  const score = war ? war.warScore * (war.attackerIds.includes(playerId) ? 1 : -1) : 0;
+  const enemies = war
+    ? war.attackerIds.includes(playerId)
+      ? war.defenderIds
+      : war.attackerIds
+    : [];
+  const occupied = game.provinces.filter(
+    (p) =>
+      p.ownerId &&
+      enemies.includes(p.ownerId) &&
+      p.occupierId &&
+      !!war &&
+      (war.attackerIds.includes(playerId) ? war.attackerIds : war.defenderIds).includes(
+        p.occupierId,
+      ),
+  );
+  const terms: PeaceTerm[] = [
+    ...(selectedProvinces.filter((id) => occupied.some((p) => p.id === id)).length
+      ? [
+          {
+            type: 'CEDE_PROVINCES' as const,
+            provinceIds: selectedProvinces.filter((id) => occupied.some((p) => p.id === id)),
+          },
+        ]
+      : []),
+    ...(reparations ? [{ type: 'WAR_REPARATIONS' as const, immediateTribute: tribute }] : []),
+    ...(humiliate ? [{ type: 'HUMILIATE_DISARM' as const }] : []),
+    ...(force !== 'NONE' ? [{ type: 'FORCE_EMPIRE_OR_RELIGION' as const, choice: force }] : []),
+    ...(subjugate ? [{ type: 'SUBJUGATE' as const }] : []),
+  ];
+  const cost = peaceTermCost(game.provinces, terms);
+  const action = (type: DiplomacyAction, amount?: number, targetProvinceId?: string) =>
+    command({
+      type: 'SUBMIT_ORDER',
+      order: {
+        type: 'DIPLOMACY',
+        action: type,
+        targetRealmId: target.id,
+        ...(amount !== undefined ? { amount } : {}),
+        ...(targetProvinceId ? { targetProvinceId } : {}),
+      },
+    });
+  const rivalProvinces = game.provinces.filter(
+    (p) => controller(p) === target.id && p.kind === 'LAND',
+  );
+  const availableAllies = game.players.filter(
+    (p) => p.id !== playerId && p.id !== target.id && getRelation(game, playerId, p.id)?.allied,
+  );
   return (
-    <div className="diplomacy-inspector">
-      <div className="drawer-intro">
-        <div className="eyebrow">PACTOS & INTERESSES</div>
-        <h2>O conselho dos reinos</h2>
-        <p>Cada tratado altera o tabuleiro. Escolha uma nação para ver suas relações no mapa.</p>
+    <div className="diplomacy-ledger">
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">O CONSELHO DAS NAÇÕES</span>
+          <h2>Diplomacia & guerras</h2>
+        </div>
+        <span className="tag">{wars.length} GUERRA(S)</span>
       </div>
-      {game.offers
-        .filter((o) => o.to === me.id)
-        .map((o) => (
-          <div className="diplomatic-offer" key={o.id}>
-            <Handshake size={17} />
-            <div>
-              <strong>{game.players.find((p) => p.id === o.from)?.nation}</strong>
-              <p>
-                {o.kind === 'alliance'
-                  ? 'Propõe uma aliança.'
-                  : o.kind === 'military_access'
-                    ? 'Solicita acesso ao seu território.'
-                    : `Exige ${o.amount} ouro por rodada, por 5 rodadas.`}
-              </p>
-              <div>
-                <button
-                  className="button primary small-button"
-                  disabled={game.phase !== 'planning'}
-                  onClick={() => command({ type: 'ANSWER_OFFER', offerId: o.id, accept: true })}
-                >
-                  Aceitar
-                </button>
-                <button
-                  className="button ghost small-button"
-                  disabled={game.phase !== 'planning'}
-                  onClick={() => command({ type: 'ANSWER_OFFER', offerId: o.id, accept: false })}
-                >
-                  Recusar
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
       <div className="realm-list">
         {game.players.map((p) => {
-          const r = game.relations.find(
-              (r) => (r.a === me.id && r.b === p.id) || (r.b === me.id && r.a === p.id),
-            ),
-            progress = Math.max(...Object.values(p.victoryProgress));
+          const rel = p.id === playerId ? null : getRelation(game, playerId, p.id);
           return (
             <button
               key={p.id}
-              className={`realm-row ${selectedId === p.id ? 'active' : ''}`}
-              onClick={() => onSelect(p.id)}
+              className={`realm-row ${p.id === target.id ? 'selected' : ''}`}
+              disabled={p.id === playerId}
+              onClick={() => {
+                setTarget(p.id);
+                setProvince('');
+              }}
             >
-              <span className="nation-shield" style={{ color: p.color, borderColor: p.color }}>
-                <Flag size={16} />
-              </span>
-              <div>
-                <strong>
-                  {p.nation}
-                  {p.id === me.id ? ' · você' : ''}
-                </strong>
+              <CoatOfArms nationId={p.nationId} size={26} />
+              <span>
+                <strong>{p.nation}</strong>
                 <small>
-                  {p.bot ? <Bot size={10} /> : <Users size={10} />} {p.name}
-                  {!p.online && !p.bot ? ' · ausente' : ''}
+                  {p.name} ·{' '}
+                  {p.subjectOfId
+                    ? 'Subjugado'
+                    : p.id === playerId
+                      ? 'Seu reino'
+                      : rel?.atWar
+                        ? 'Em guerra'
+                        : rel?.allied
+                          ? 'Aliado'
+                          : rel && rel.truceUntil >= game.turn
+                            ? 'Trégua'
+                            : 'Em paz'}
                 </small>
-                <div className="mini-progress">
-                  <i style={{ width: `${progress}%`, background: p.color }} />
-                </div>
-              </div>
-              <span className="realm-relation">
-                {p.id === me.id ? '—' : `${(r?.trust ?? 0) > 0 ? '+' : ''}${r?.trust ?? 0}`}
-                <small>{number(progress)}% legado</small>
               </span>
+              <b className={rel && rel.trust < 0 ? 'danger' : ''}>
+                {p.id === playerId
+                  ? '—'
+                  : `${(rel?.trust ?? 0) > 0 ? '+' : ''}${number(rel?.trust ?? 0)}`}
+              </b>
             </button>
           );
         })}
       </div>
-      {target && (
-        <section className="selected-realm">
-          <div className="section-title">
-            <h3 style={{ color: target.color }}>{target.nation}</h3>
-            <span className={`badge ${relation?.atWar ? 'red' : relation?.allied ? 'blue' : ''}`}>
-              {target.id === me.id
-                ? 'SEU REINO'
-                : relation?.allied
-                  ? 'ALIADO'
-                  : relation?.atWar
-                    ? 'EM GUERRA'
-                    : relation && relation.truceUntil >= game.turn
-                      ? 'TRÉGUA'
-                      : 'NEUTRO'}
-            </span>
+      <div className="realm-detail">
+        <div className="section-heading">
+          <h3>{target.nation}</h3>
+          <span className="tag">CONFIANÇA {number(r.trust)}</span>
+        </div>
+        <div className="ledger-grid">
+          <div>
+            <small>PRESTÍGIO</small>
+            <strong>{number(target.prestige)}</strong>
           </div>
-          <div className="realm-progress">
-            {Object.entries(OBJECTIVES).map(([id, o]) => (
-              <div key={id}>
-                <ObjectiveIcon objective={id as Player['objective']} size={13} />
-                <span>{o.name}</span>
-                <strong>{number(target.victoryProgress[id as Player['objective']], 1)}%</strong>
-              </div>
-            ))}
+          <div>
+            <small>DESGASTE</small>
+            <strong>{number(target.warExhaustion)}%</strong>
           </div>
-          {target.id !== me.id && (
-            <>
-              <p className="tiny muted">
-                Relações com seu reino: {relation?.trust ?? 0} / 100. Máximo de duas alianças.
-                Tratados exigem consentimento.
-              </p>
-              {relation && relation.truceUntil >= game.turn && !relation.allied && (
-                <p className="diplomacy-note">Trégua até o fim da rodada {relation.truceUntil}.</p>
+        </div>
+        {r.truceUntil >= game.turn && (
+          <p className="warning-box">Trégua até o fim da rodada {r.truceUntil}.</p>
+        )}
+        {r.atWar ? (
+          <p className="warning-box">
+            <Swords size={15} />A guerra exige um tratado para ser encerrada.
+          </p>
+        ) : (
+          <>
+            <div className="button-pair">
+              <button
+                disabled={!active}
+                onClick={() => action(r.allied ? 'BREAK_ALLIANCE' : 'PROPOSE_ALLIANCE')}
+              >
+                <Handshake size={15} />
+                {r.allied ? 'Romper aliança' : 'Propor aliança'}
+              </button>
+              <button
+                disabled={!active || r.militaryAccess.includes(playerId)}
+                onClick={() => action('MILITARY_ACCESS')}
+              >
+                <Flag size={15} />
+                {r.militaryAccess.includes(playerId) ? 'Acesso concedido' : 'Acesso militar'}
+              </button>
+            </div>
+            <details className="command-details">
+              <summary>
+                <Swords size={15} />
+                Declaração formal de guerra
+              </summary>
+              <label>
+                Casus belli
+                <select value={casusBelli} onChange={(e) => setCB(e.target.value as CasusBelli)}>
+                  <option value="CONQUEST">Conquista</option>
+                  <option value="IMPERIAL_BAN">Banimento imperial</option>
+                  <option value="HOLY_WAR">Guerra Santa</option>
+                  <option value="HUMILIATION">Humilhação</option>
+                </select>
+              </label>
+              {availableAllies.length > 0 && (
+                <fieldset>
+                  <legend>Convocar aliados ofensivos</legend>
+                  {availableAllies.map((p) => (
+                    <label className="check-label" key={p.id}>
+                      <input
+                        type="checkbox"
+                        checked={allies.includes(p.id)}
+                        onChange={(e) =>
+                          setAllies((v) =>
+                            e.target.checked ? [...v, p.id] : v.filter((id) => id !== p.id),
+                          )
+                        }
+                      />
+                      {p.nation}
+                    </label>
+                  ))}
+                </fieldset>
               )}
-              <div className="diplomatic-actions">
-                <button
-                  className="button outline full"
-                  disabled={locked || pending('alliance') || !owned.length}
-                  onClick={() => act(relation?.allied ? 'BREAK_ALLIANCE' : 'PROPOSE_ALLIANCE')}
-                  title={
-                    relation?.allied
-                      ? game.hegemonyLeaderId === target.id
-                        ? 'Sem penalidade de estabilidade nem trégua contra a hegemonia.'
-                        : '−4 influência, −10 moral, −50 confiança; trégua nesta rodada e na próxima.'
-                      : 'Aliança requer aceitação; impede ataques mútuos.'
-                  }
-                >
-                  <Handshake size={16} />
-                  {relation?.allied
-                    ? 'Romper aliança'
-                    : pending('alliance')
-                      ? 'Proposta pendente'
-                      : 'Propor aliança'}
-                </button>
-                <button
-                  className="button outline full"
-                  disabled={
-                    locked ||
-                    pending('military_access') ||
-                    relation?.militaryAccess.includes(me.id) ||
-                    relation?.atWar ||
-                    !owned.length
-                  }
-                  onClick={() => act('MILITARY_ACCESS')}
-                  title="Solicita trânsito para suas tropas. O território continua pertencendo ao reino anfitrião."
-                >
-                  <MoveRight size={16} />
-                  {relation?.militaryAccess.includes(me.id)
-                    ? 'Acesso militar concedido'
-                    : 'Solicitar acesso militar'}
-                </button>
-                <button
-                  className="button outline full"
-                  disabled={locked || !owned.length}
-                  onClick={() => act('EMBARGO')}
-                  title="Renda comercial do alvo −15%, sua própria −5%. A imposição reduz confiança em 25."
-                >
-                  <Ban size={16} />
-                  {relation?.embargoes.includes(me.id) ? 'Retirar embargo' : 'Embargo comercial'}
-                </button>
-              </div>
-              <div className="diplo-finance">
-                <label>
-                  Tributo por rodada
+              {game.diet.retaliationEdictActive && (
+                <p className="warning-box">
+                  Édito ativo: toda a Dieta defenderá o alvo e você sofrerá banimento.
+                </p>
+              )}
+              <button
+                className="danger-button"
+                disabled={!active || r.allied || r.truceUntil >= game.turn || !!me.subjectOfId}
+                onClick={() =>
+                  command({
+                    type: 'DECLARE_WAR',
+                    targetRealmId: target.id,
+                    casusBelli,
+                    offensiveAllyIds: allies,
+                  })
+                }
+              >
+                Declarar guerra <Swords size={15} />
+              </button>
+            </details>
+          </>
+        )}
+        <div className="button-pair">
+          <button disabled={!active} onClick={() => action('EMBARGO')}>
+            {r.embargoes.includes(playerId) ? 'Retirar embargo' : 'Embargo comercial'}
+          </button>
+          <button
+            disabled={!active || r.atWar}
+            onClick={() => action('DEMAND_TRIBUTE', Math.min(30, Math.max(1, money)))}
+          >
+            Exigir tributo
+          </button>
+        </div>
+        <label>
+          Ouro para ação diplomática
+          <input
+            type="number"
+            min={1}
+            max={1000}
+            value={money}
+            onChange={(e) => setMoney(Math.max(1, Math.min(1000, Number(e.target.value) || 1)))}
+          />
+        </label>
+        <button
+          className="action-row"
+          disabled={!active}
+          onClick={() => action('SEND_SUBSIDY', money)}
+        >
+          <Coins size={16} />
+          <span>
+            Enviar subsídio<small>Transfere ouro e melhora confiança.</small>
+          </span>
+          <b>{money} ouro</b>
+        </button>
+        <label>
+          Província para rebeldes
+          <select
+            value={provinceId || rivalProvinces[0]?.id || ''}
+            onChange={(e) => setProvince(e.target.value)}
+          >
+            {rivalProvinces.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} · revolta {number(p.unrest)}%
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="action-row"
+          disabled={!active || money < 12 || !rivalProvinces.length}
+          onClick={() => action('FUND_REBELS', money, provinceId || rivalProvinces[0]?.id)}
+        >
+          <Users size={16} />
+          <span>
+            Financiar rebeldes<small>+30 revolta; mínimo 12 ouro; autoria encoberta.</small>
+          </span>
+          <b>{money} ouro</b>
+        </button>
+        {game.hostId === playerId && !target.online && !target.bot && (
+          <button
+            disabled={!active}
+            onClick={() => command({ type: 'REPLACE_WITH_BOT', playerId: target.id })}
+          >
+            Substituir ausente por bot
+          </button>
+        )}
+      </div>
+      <div className="field-heading">
+        Tratados & chamados <span>{game.offers.filter((o) => o.to === playerId).length}</span>
+      </div>
+      {game.offers
+        .filter((o) => o.to === playerId)
+        .map((o) => (
+          <div className="offer-card" key={o.id}>
+            <strong>
+              {
+                {
+                  alliance: 'Proposta de aliança',
+                  military_access: 'Pedido de acesso militar',
+                  tribute: 'Exigência de tributo',
+                  call_to_arms: o.defensive ? 'Chamado defensivo' : 'Chamado ofensivo',
+                  peace: 'Tratado de paz',
+                }[o.kind]
+              }
+            </strong>
+            <small>
+              {game.players.find((p) => p.id === o.from)?.nation}
+              {o.kind === 'tribute' ? ` · ${o.amount} ouro por rodada` : ''}
+            </small>
+            {o.kind === 'call_to_arms' && o.defensive && (
+              <p className="fine-print">
+                Recusar rompe a aliança e custa 15 prestígio e 5 autoridade imperial.
+              </p>
+            )}
+            {o.terms && (
+              <p className="fine-print">
+                {o.terms.map((t) => peaceDescription(t, game.provinces)).join(' · ') ||
+                  'Paz sem exigências'}
+              </p>
+            )}
+            <div className="button-pair">
+              <button
+                disabled={!active}
+                onClick={() => command({ type: 'ANSWER_OFFER', offerId: o.id, accept: true })}
+              >
+                Aceitar
+              </button>
+              <button
+                disabled={!active}
+                onClick={() => command({ type: 'ANSWER_OFFER', offerId: o.id, accept: false })}
+              >
+                Recusar
+              </button>
+            </div>
+          </div>
+        ))}
+      <div className="field-heading">Guerras do mundo</div>
+      {wars.length === 0 ? (
+        <Empty>Os tratados preservam a paz no mundo.</Empty>
+      ) : (
+        wars.map((w) => (
+          <div className="war-card" key={w.id}>
+            <strong>
+              <Swords size={14} />
+              {w.name}
+            </strong>
+            <small>
+              {CASUS_LABELS[w.casusBelli]} · desde a rodada {w.startedTurn}
+            </small>
+            <Meter
+              label="Pontuação do atacante"
+              value={(w.warScore + 100) / 2}
+              display={`${w.warScore > 0 ? '+' : ''}${number(w.warScore)}`}
+            />
+            <p className="fine-print">
+              Ataque:{' '}
+              {w.attackerIds.map((id) => game.players.find((p) => p.id === id)?.nation).join(', ')}
+              <br />
+              Defesa:{' '}
+              {w.defenderIds.map((id) => game.players.find((p) => p.id === id)?.nation).join(', ')}
+            </p>
+          </div>
+        ))
+      )}
+      {war && (
+        <details className="command-details peace-builder" open>
+          <summary>
+            <ScrollText size={16} />
+            Negociar paz
+          </summary>
+          <label>
+            Guerra
+            <select
+              value={war.id}
+              onChange={(e) => {
+                setWarId(e.target.value);
+                setProvinces([]);
+              }}
+            >
+              {mine.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="fine-print">
+            Pontuação disponível: {number(Math.max(0, score))}. Com 100, os termos podem ser
+            impostos. Sem termos, a paz depende de aceite.
+          </p>
+          <fieldset>
+            <legend>Ceder províncias ocupadas</legend>
+            {occupied.length ? (
+              occupied.map((p) => (
+                <label className="check-label" key={p.id}>
                   <input
-                    aria-label="Valor do tributo"
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={tribute}
+                    type="checkbox"
+                    checked={selectedProvinces.includes(p.id)}
                     onChange={(e) =>
-                      setTribute(Math.max(1, Math.min(30, Math.floor(Number(e.target.value) || 1))))
+                      setProvinces((v) =>
+                        e.target.checked ? [...v, p.id] : v.filter((id) => id !== p.id),
+                      )
                     }
                   />
+                  {p.name}
+                  <small>{12 + p.baseTax} pontos</small>
                 </label>
-                <button
-                  className="button outline full"
-                  disabled={locked || pending('tribute') || !owned.length}
-                  onClick={() => act('DEMAND_TRIBUTE', tribute)}
-                  title="O alvo deve aceitar. Dura 5 rodadas e cria uma trégua curta."
-                >
-                  <ArrowDownToLine size={15} />
-                  Exigir tributo · {tribute} ouro/rod.
-                </button>
-                <label>
-                  Ouro para subsídio / rebeldes
-                  <input
-                    aria-label="Ouro para ação diplomática"
-                    type="number"
-                    min={1}
-                    value={money}
-                    onChange={(e) => setMoney(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
-                  />
-                </label>
-                <button
-                  className="button outline full"
-                  disabled={locked || money > free || !owned.length}
-                  onClick={() => act('SEND_SUBSIDY', money)}
-                  title="Transferência imediata de ouro livre; melhora a confiança em 10."
-                >
-                  <Coins size={15} />
-                  Enviar subsídio · {money} ouro
-                </button>
-                <label>
-                  Província do reino alvo
-                  <select value={targetProvince} onChange={(e) => setProvinceId(e.target.value)}>
-                    {owned.map((p) => (
-                      <option value={p.id} key={p.id}>
-                        {p.name} · revolta {p.unrest}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  className="button danger full"
-                  disabled={locked || money < 12 || money > free || !targetProvince}
-                  onClick={() => act('FUND_REBELS', money, targetProvince)}
-                  title="Efeito imediato: +30 de revolta. Custo mínimo 12 ouro. A autoria é ocultada dos demais nos relatórios."
-                >
-                  <Skull size={15} />
-                  Financiar rebeldes · {money} ouro
-                </button>
-                <p className="tiny muted">
-                  Ouro livre: {number(free, 2)}. Embargos, subsídios e financiamento têm efeito
-                  imediato; não entram na fila de ordens.
-                </p>
-              </div>
-              {game.hostId === me.id && !target.online && !target.bot && (
-                <button
-                  className="button ghost full"
-                  disabled={game.phase !== 'planning'}
-                  title="A substituição encerra a sessão desse jogador na campanha."
-                  onClick={() => command({ type: 'REPLACE_WITH_BOT', playerId: target.id })}
-                >
-                  <Bot size={15} />
-                  Substituir ausente por bot
-                </button>
-              )}
-            </>
+              ))
+            ) : (
+              <p className="muted">Nenhuma ocupação disponível para cessão.</p>
+            )}
+          </fieldset>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={reparations}
+              onChange={(e) => setReparations(e.target.checked)}
+            />
+            Reparações de guerra <small>20 pontos</small>
+          </label>
+          {reparations && (
+            <label>
+              Tributo imediato
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={tribute}
+                onChange={(e) =>
+                  setTribute(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
+                }
+              />
+              <small>Mais 25% da renda bruta por cinco rodadas.</small>
+            </label>
           )}
-          {target.id === me.id && (
-            <p className="small muted">
-              Religião estatal: {me.faith}. Estabilidade: {number(me.stability)}%. Seus pactos e
-              acordos aparecem ao selecionar outro reino.
-            </p>
-          )}
-        </section>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={humiliate}
+              onChange={(e) => setHumiliate(e.target.checked)}
+            />
+            Humilhar e desarmar <small>25 pontos</small>
+          </label>
+          <label>
+            Exigência de Estado
+            <select value={force} onChange={(e) => setForce(e.target.value as typeof force)}>
+              <option value="NONE">Nenhuma</option>
+              <option value="EMPIRE">Forçar ingresso na Dieta · 30 pontos</option>
+              <option value="RELIGION">Impor religião estatal · 30 pontos</option>
+            </select>
+          </label>
+          <label className="check-label">
+            <input
+              type="checkbox"
+              checked={subjugate}
+              onChange={(e) => setSubjugate(e.target.checked)}
+            />
+            Subjugar reino <small>70 pontos</small>
+          </label>
+          <p className={cost > score && terms.length ? 'danger' : 'muted'}>
+            Custo do tratado: {cost} / {number(Math.max(0, score))}
+          </p>
+          <button
+            className="primary"
+            disabled={
+              !active ||
+              ![war.attackerLeaderId, war.defenderLeaderId].includes(playerId) ||
+              (terms.length > 0 && cost > score)
+            }
+            onClick={() => command({ type: 'OFFER_PEACE', warId: war.id, terms })}
+          >
+            {score >= 100 && terms.length ? 'Impor tratado' : 'Oferecer paz'}
+            <ArrowRight size={15} />
+          </button>
+          {availableAllies
+            .filter((p) => ![...war.attackerIds, ...war.defenderIds].includes(p.id))
+            .map((p) => (
+              <button
+                key={p.id}
+                disabled={!active}
+                onClick={() => command({ type: 'CALL_TO_ARMS', warId: war.id, allyId: p.id })}
+              >
+                Convocar {p.nation}
+              </button>
+            ))}
+        </details>
       )}
     </div>
   );

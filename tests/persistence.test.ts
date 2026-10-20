@@ -90,14 +90,14 @@ test('salvamento atômico restaura salas, ordens e tokens após reinício, pausa
     a,
     {
       type: 'command',
-      command: { type: 'SUBMIT_ORDER', order: { type: 'TRAIN', provinceId: 'p16' } },
+      command: { type: 'SUBMIT_ORDER', order: { type: 'TRAIN_BATTALION', battalionId: 'army-1' } },
     },
     'state',
     (m) => m.state.plannedOrders.length === 1,
   );
   const savedGold = planned.state.players[0].gold;
   assert.equal(readFileSync(filename, 'utf8').includes(session.token), false);
-  assert.equal(readSnapshot(filename)[0].game.orders[session.playerId][0].type, 'TRAIN');
+  assert.equal(readSnapshot(filename)[0].game.orders[session.playerId][0].type, 'TRAIN_BATTALION');
   await first.close();
   first = null;
   second = await launch(filename);
@@ -113,7 +113,7 @@ test('salvamento atômico restaura salas, ordens e tokens após reinício, pausa
     'joined',
   );
   const state = (await recoveredState).state;
-  assert.equal(state.plannedOrders[0].type, 'TRAIN');
+  assert.equal(state.plannedOrders[0].type, 'TRAIN_BATTALION');
   assert.equal(state.players[0].gold, savedGold);
   assert.equal(state.paused, false);
   assert.ok(state.deadline! > Date.now());
@@ -182,4 +182,104 @@ test('falha de gravação desfaz substituição por bot e preserva a sessão hum
     'joined',
   );
   assert.equal(joined.playerId, session.playerId);
+});
+
+test('snapshot v2 é migrado sem perder tesouro, dono, tropas, ordens locais ou tokens', async (t) => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), 'concordia-v2-')),
+    filename = path.join(directory, 'rooms.json');
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const players = ['A', 'B', 'C'].map((name, i) => ({
+    id: `OLD-p${i + 1}`,
+    name,
+    nation: name,
+    color: '#aabbcc',
+    faith: 'Catolicismo',
+    bot: false,
+    botArchetype: 'Diplomat',
+    online: false,
+    gold: 50 + i,
+    manpower: 10,
+    influence: 8,
+    stability: 90,
+    warExhaustion: 0,
+    wonBattles: 0,
+    conversions: 0,
+    tradeEarned: 0,
+    ready: false,
+  }));
+  const provinces = players.map((p, i) => ({
+    id: `p${i}`,
+    name: `Cidade ${i}`,
+    ownerId: p.id,
+    troops: 6,
+    mercenaries: i === 0 ? 2 : 0,
+    morale: 70,
+    training: 1.2,
+    religion: 'Catolicismo',
+    pacification: 80,
+    unrest: 5,
+    fortLevel: 0,
+    development: 1,
+    capital: true,
+    conversion: 0,
+    neighbors: players.map((_, j) => `p${j}`).filter((id) => id !== `p${i}`),
+    polygon: `${i * 20},0 ${i * 20 + 10},0 ${i * 20 + 5},10`,
+    x: i * 20 + 5,
+    y: 5,
+    terrain: 'coastal',
+    terrainDefenseBonus: 1.05,
+    baseTax: 4,
+    baseSupplyLimit: 16,
+    resource: 'trade',
+  }));
+  const game = {
+    version: 2,
+    code: 'OLD',
+    hostId: players[0].id,
+    phase: 'planning',
+    mode: 'quick',
+    demo: false,
+    seed: 42,
+    turn: 4,
+    maxTurns: 20,
+    players,
+    provinces,
+    relations: [],
+    log: [],
+    chat: [],
+    orders: { 'OLD-p1': [{ type: 'TRAIN', provinceId: 'p0' }], 'OLD-p2': [], 'OLD-p3': [] },
+    stationedArmies: [],
+    displacedArmies: [],
+  };
+  writeFileSync(
+    filename,
+    JSON.stringify({
+      schemaVersion: 2,
+      rooms: [
+        {
+          game,
+          sessions: [{ playerId: 'OLD-p1', tokenHash: 'a'.repeat(64) }],
+          touched: 1,
+          remainingMs: 90000,
+        },
+      ],
+    }),
+  );
+  const room = readSnapshot(filename)[0];
+  assert.equal(room.game.version, 3);
+  assert.equal(room.game.turn, 4);
+  assert.equal(room.game.players[0].gold, 50);
+  assert.equal(room.game.provinces[0].ownerId, 'OLD-p1');
+  assert.equal(
+    room.game.battalions.filter((a) => a.provinceId === 'p0').reduce((n, a) => n + a.infantry, 0),
+    6,
+  );
+  assert.equal(
+    room.game.battalions.find((a) => a.provinceId === 'p0' && a.isMercenary)?.infantry,
+    2,
+  );
+  assert.equal(room.game.orders['OLD-p1'][0].type, 'TRAIN_BATTALION');
+  assert.equal(room.sessions[0].tokenHash, 'a'.repeat(64));
+  assert.equal(room.game.matchConfig.mapId, 'legacy-v2-32-regions');
+  assert.ok(readFileSync(`${filename}.v2-backup`, 'utf8').includes('"version":2'));
 });

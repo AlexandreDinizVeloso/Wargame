@@ -1,274 +1,360 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
   Castle,
-  CheckCheck,
+  Check,
   ChevronDown,
-  Clock3,
   Coins,
-  Compass,
-  Copy,
   Crown,
+  Download,
   Flag,
   Handshake,
-  Layers3,
-  Leaf,
-  Map,
+  Landmark,
   Menu,
-  MessageCircle,
+  MessageSquare,
+  Minus,
+  Play,
+  Plus,
   RotateCcw,
+  ScrollText,
   Shield,
-  Sparkles,
-  Sun,
   Swords,
-  Target,
-  Tent,
-  TriangleAlert,
   Users,
+  Volume2,
+  VolumeX,
   X,
-  ZoomIn,
-  ZoomOut,
 } from 'lucide-react';
+import type { Battalion, GameView, MapMode, Province, TurnResolutionReport } from '../shared/types';
 import { OBJECTIVES } from '../shared/types';
-import type { GameView, MapMode, Objective, Player, Province } from '../shared/types';
-import { realmEconomy, supplyLimit } from '../shared/rules';
+import {
+  chronicle,
+  controller,
+  landProvinces,
+  livingPlayers,
+  realmEconomy,
+  RELIGIONS,
+  supplyLimit,
+  telemetry,
+  unitCount,
+  unitPath,
+} from '../shared/rules';
+import { useGame } from './useGame';
 import Atlas, { MAP_MODES, type CameraHandle } from './Atlas';
 import { Entry, Lobby } from './Entry';
-import { ProvinceDrawer, QuickMarch } from './ProvinceDrawer';
+import ProvinceDrawer from './ProvinceDrawer';
+import BattalionDrawer from './BattalionDrawer';
 import DiplomacyDrawer from './DiplomacyDrawer';
-import TurnPanel, { type TurnTab } from './TurnPanel';
-import { legalDestination } from './orders';
-import { Brand, number, ObjectiveIcon, typing, type Command } from './ui';
-import { useGame } from './useGame';
-
-function Countdown({ game }: { game: GameView }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  const seconds = Math.max(0, Math.ceil(((game.deadline ?? now) - now) / 1000));
-  return (
-    <span className={`countdown ${seconds < 30 && !game.demo && !game.paused ? 'urgent' : ''}`}>
-      <Clock3 size={12} />
-      {game.phase === 'finished'
-        ? 'Encerrada'
-        : game.paused
-          ? 'Campanha pausada'
-          : game.demo
-            ? 'Demonstração · sem prazo'
-            : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`}
-    </span>
-  );
+import ImperialDrawer from './ImperialDrawer';
+import TurnPanel, { type ReportTab } from './TurnPanel';
+import { FloatingWindow } from './FloatingWindow';
+import { audio } from './audio';
+import { CoatOfArms, number, typing } from './ui';
+function download(game: GameView, format: 'json' | 'txt') {
+  const text = format === 'json' ? JSON.stringify(telemetry(game), null, 2) : chronicle(game),
+    blob = new Blob([text], {
+      type: format === 'json' ? 'application/json;charset=utf-8' : 'text/plain;charset=utf-8',
+    }),
+    url = URL.createObjectURL(blob),
+    link = document.createElement('a');
+  link.href = url;
+  link.download = `concordia-${game.code}-rodada-${game.lastReport?.turn ?? 0}.${format}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function Manual({ game, me, close }: { game: GameView; me: Player; close: () => void }) {
+function Manual({ close }: { close: () => void }) {
   return (
-    <div className="modal-scrim">
-      <section className="game-modal manual-modal" role="dialog" aria-label="Manual de campanha">
-        <button className="window-close" aria-label="Fechar manual" onClick={close}>
-          <X size={18} />
-        </button>
-        <div className="eyebrow">MANUAL DO CONSELHO</div>
-        <h2>Quatro caminhos. Um legado.</h2>
+    <div className="modal-backdrop">
+      <section
+        className="game-modal manual-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Manual de campanha"
+      >
+        <header>
+          <span className="eyebrow">A ARTE DE GOVERNAR</span>
+          <button aria-label="Fechar manual" onClick={close}>
+            <X size={18} />
+          </button>
+        </header>
+        <h2>Um mundo. Dois legados.</h2>
+        <div className="manual-grid">
+          <section>
+            <Swords size={25} />
+            <h3>Dominação Total</h3>
+            <p>
+              Elimine ou subjugue todos os demais reinos. Também vence quem controla 75% das terras,
+              sem que outro reino controle mais de 15%.
+            </p>
+          </section>
+          <section>
+            <Crown size={25} />
+            <h3>Pacificação Imperial</h3>
+            <p>
+              Ingresse na Dieta, conquiste votos e torne-se Imperador. Reúna 60% das nações vivas e
+              mantenha cinco rodadas consecutivas sem guerras no mundo.
+            </p>
+          </section>
+        </div>
+        <h3>Cidades constroem. Batalhões se movem.</h3>
         <p>
-          Todos planejam ao mesmo tempo. Uma ordem por província; missões podem visar terras
-          inimigas adjacentes. Mercenários e diplomacia têm efeito imediato.
+          Clique no território para administrar a província. Clique em uma ficha para comandar a
+          formação; ela pode marchar enquanto a cidade constrói. Clique direito em qualquer região
+          para preparar o menor caminho legal. Uma ligação é percorrida por rodada.
         </p>
-        <div className="manual-objectives">
-          {Object.entries(OBJECTIVES).map(([id, o]) => (
-            <article key={id}>
-              <ObjectiveIcon objective={id as Objective} />
-              <h3>{o.name}</h3>
-              <strong>
-                {number(me.scores[id as Objective], 1)} / {game.victoryTargets[id as Objective]}
-              </strong>
-              <p>{o.formula}</p>
-            </article>
-          ))}
+        <h3>Declare antes de invadir</h3>
+        <p>
+          Outro reino só pode ser atravessado com acesso militar ou guerra formal. Os aliados
+          defensivos recebem chamado; recusar custa reputação. Ocupação não transfere propriedade:
+          negocie cessões no tratado.
+        </p>
+        <h3>Componha seus exércitos</h3>
+        <p>
+          Infantaria protege canhões; cavalaria flanqueia em planícies e litoral. Artilharia reduz
+          fortes e destrói moral, mas sofre baixas extras quando supera a infantaria. Treinamento,
+          terreno, moral e suprimento decidem a batalha.
+        </p>
+        <h3>Domine as rotas</h3>
+        <p>
+          Portos constroem navios. Cada transporte leva quatro unidades; embarque em um porto e
+          desembarque em uma costa alcançada pela frota. Navios de guerra bloqueiam a economia e
+          enfraquecem cercos.
+        </p>
+        <h3>Governe o território</h3>
+        <p>
+          Conquistas precisam de pacificação. Mercados ampliam receitas; tropas além do suprimento
+          sofrem atrito. Cidades Sagradas recolhem dízimos de toda a sua fé. Inquisição converte em
+          uma missão e cria tensão; tolerância requer duas missões e reduz impostos em 10%.
+        </p>
+        <h3>O preço da guerra</h3>
+        <p>
+          Desgaste cresce com os combates e reduz renda e recuperação de moral. Tratados podem
+          exigir terras, reparações, desarmamento, religião, ingresso na Dieta ou submissão. Sem
+          alcançar uma das duas vitórias até o limite, a partida termina sem vencedor.
+        </p>
+        <h3>Seu conselho, sua mesa</h3>
+        <p>
+          Desanexe, arraste, redimensione ou minimize as janelas. Suas posições ficam salvas neste
+          navegador. Baixe o relatório JSON ou a crônica TXT para estudar a partida.
+        </p>
+        <div className="keyboard-guide">
+          <span>
+            <kbd>1–5</kbd> mapas
+          </span>
+          <span>
+            <kbd>Scroll</kbd> zoom
+          </span>
+          <span>
+            <kbd>Espaço + arraste</kbd> câmera
+          </span>
+          <span>
+            <kbd>Esc</kbd> fechar
+          </span>
         </div>
-        <div className="manual-rules">
-          <article>
-            <Coins size={19} />
-            <h3>Economia e pacificação</h3>
-            <p>
-              Imposto = base × pacificação/100 × (1,15 mesma religião; 0,85 diferente) × (1 −
-              revolta/200). Guarnição parada de 3 tropas dá +15 pacificação e −10 revolta.
-              Pacificação explícita dá +35/−25. Conquistas começam em 20 de pacificação, ou 0 com
-              outra fé, e +30 revolta.
-            </p>
-          </article>
-          <article>
-            <Tent size={19} />
-            <h3>Suprimento e tropas</h3>
-            <p>
-              Limite = base + 3 por nível de forte + 2 com pacificação ≥ 80. O excesso perde 15%
-              arredondados para cima e custa manutenção progressiva. Mercenários custam o dobro na
-              contratação e 2,2× na manutenção. Treinamento varia de 1,00 a 1,50.
-            </p>
-          </article>
-          <article>
-            <Swords size={19} />
-            <h3>Combate e recuo</h3>
-            <p>
-              Força = tropas × treinamento × (0,5 + 0,5 × moral/100). Terreno e fortes beneficiam a
-              defesa. Derrotados recuam com 55–70% dos sobreviventes, com arredondamento de tropas e
-              moral 15. Aniquilação exige vantagem ≥ 2,5× ou moral zero sem rota de fuga.
-            </p>
-          </article>
-          <article>
-            <Handshake size={19} />
-            <h3>Pactos e hegemonia</h3>
-            <p>
-              Alianças, acesso e tributo exigem aceitação. Romper aliança custa 4 influência, 10
-              moral e gera trégua até a rodada seguinte. A partir de 75% de qualquer legado, o líder
-              vira hegêmona: demais reinos recebem +10% de força contra ele e podem romper pactos
-              com ele sem penalidade ou trégua.
-            </p>
-          </article>
-        </div>
-        <div className="manual-shortcuts">
-          <strong>Atalhos</strong>
-          <span>1–5 · modos do mapa</span>
-          <span>Scroll · zoom</span>
-          <span>Meio/direito ou Espaço + arraste · mover câmera</span>
-          <span>Clique direito numa vizinha · marcha tática</span>
-          <span>Esc · fechar janela</span>
-        </div>
+        <button className="primary" onClick={close}>
+          Convocar o conselho <ArrowIcon />
+        </button>
       </section>
     </div>
   );
 }
-function Hud({
-  game,
-  me,
-  command,
-  leave,
-  status,
-  setError,
-}: {
-  game: GameView;
-  me: Player;
-  command: Command;
-  leave: () => void;
-  status: string;
-  setError: (s: string) => void;
-}) {
-  const camera = useRef<CameraHandle>(null),
+function ArrowIcon() {
+  return <span aria-hidden="true">→</span>;
+}
+type Panel = 'province' | 'battalion' | 'diplomacy' | 'diet' | 'report';
+export default function App() {
+  const { game, playerId, status, error, setError, send, command, leave } = useGame();
+  const camera = useRef<CameraHandle>(null);
+  const [panels, setPanels] = useState<Panel[]>([]),
+    [provinceId, setProvince] = useState(''),
+    [armyId, setArmy] = useState(''),
     [mode, setMode] = useState<MapMode>('POLITICAL'),
-    [selectedId, setSelectedId] = useState(''),
-    [referenceId, setReferenceId] = useState(me.id),
-    [drawer, setDrawer] = useState<'province' | 'diplomacy' | null>(null),
-    [realmId, setRealmId] = useState(me.id),
-    [quick, setQuick] = useState<{ sourceId: string; targetId?: string } | null>(null),
-    [tab, setTab] = useState<TurnTab>('orders'),
-    [expanded, setExpanded] = useState(false),
+    [referenceId, setReference] = useState(''),
+    [reportTab, setReportTab] = useState<ReportTab>('orders'),
     [manual, setManual] = useState(false),
     [menu, setMenu] = useState(false),
-    [copied, setCopied] = useState(false);
-  const selected = game.provinces.find((p) => p.id === selectedId),
-    eco = realmEconomy(game, me.id);
-  const troops =
-      eco.owned.reduce((n, p) => n + p.troops, 0) +
-      [...game.stationedArmies, ...game.displacedArmies]
-        .filter((a) => a.ownerId === me.id)
-        .reduce((n, a) => n + a.troops, 0),
-    supply = eco.owned.reduce((n, p) => n + supplyLimit(p), 0);
-  const threat = [...game.players]
-      .filter((p) => game.provinces.some((q) => q.ownerId === p.id))
-      .sort(
-        (a, b) =>
-          Math.max(...Object.values(b.victoryProgress)) -
-          Math.max(...Object.values(a.victoryProgress)),
-      )[0],
-    leader = game.players.find((p) => p.id === game.hegemonyLeaderId),
-    winner = game.players.find((p) => p.id === game.winnerId),
-    alive = eco.owned.length > 0;
-  const reference = game.players.find((p) => p.id === referenceId),
-    ready = game.players.filter(
-      (p) => p.bot || p.ready || !game.provinces.some((q) => q.ownerId === p.id),
-    ).length;
-  const mySelectedArmy =
-    selected?.ownerId === me.id
-      ? selected
-      : game.stationedArmies.find((a) => a.provinceId === selectedId && a.ownerId === me.id);
-  const act: Command = (cmd) => {
-    command(cmd);
-    if (
-      cmd.type === 'SUBMIT_ORDER' &&
-      cmd.order.type !== 'DIPLOMACY' &&
-      !(cmd.order.type === 'RECRUIT' && cmd.order.isMercenary)
-    ) {
-      setTab('orders');
-      setExpanded(true);
-    }
-  };
+    [endOpen, setEndOpen] = useState(false),
+    [muted, setMuted] = useState(audio.muted),
+    [now, setNow] = useState(Date.now()),
+    [replay, setReplay] = useState<{
+      report: TurnResolutionReport;
+      progress: number;
+      nonce: number;
+    } | null>(null);
+  const seenReport = useRef(''),
+    seenWars = useRef(new Set<string>()),
+    seenWinner = useRef('');
+  const open = (panel: Panel) =>
+    setPanels((v) => (v.at(-1) === panel ? v : [...v.filter((p) => p !== panel), panel]));
+  const close = (panel: Panel) => setPanels((v) => v.filter((p) => p !== panel));
+  const playReplay = useCallback(
+    (report: TurnResolutionReport) => setReplay({ report, progress: 0, nonce: performance.now() }),
+    [],
+  );
   useEffect(() => {
-    const keyboard = (e: KeyboardEvent) => {
+    if (!replay) return;
+    const started = performance.now();
+    audio.play(replay.report.movements.length ? 'march' : 'click');
+    const cannon = setTimeout(() => {
+        if (replay.report.battles.length) audio.play('cannon');
+      }, 1450),
+      peace = setTimeout(() => {
+        if (replay.report.diplomaticChanges.some((c) => c.action === 'PEACE')) audio.play('peace');
+      }, 2900);
+    let frame = 0;
+    const tick = (t: number) => {
+      const progress = Math.min(1, (t - started) / 4000);
+      if (progress === 1) {
+        setReplay(null);
+        return;
+      }
+      setReplay((r) => (r ? { ...r, progress } : null));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(cannon);
+      clearTimeout(peace);
+    };
+  }, [replay?.nonce]);
+  useEffect(() => {
+    if (!game?.lastReport) return;
+    const key = `${game.code}:${game.lastReport.turn}`;
+    if (seenReport.current === key) return;
+    seenReport.current = key;
+    playReplay(game.lastReport);
+  }, [game?.code, game?.lastReport?.turn, playReplay]);
+  useEffect(() => {
+    if (!game) return;
+    for (const w of game.wars.filter((w) => w.active)) {
+      const key = `${game.code}:${w.id}`;
+      if (!seenWars.current.has(key)) {
+        seenWars.current.add(key);
+        audio.play('war');
+      }
+    }
+    if (game.phase === 'finished' && seenWinner.current !== game.code) {
+      seenWinner.current = game.code;
+      setEndOpen(true);
+      audio.play(game.winnerId ? 'victory' : 'peace');
+    }
+  }, [game?.wars.length, game?.phase, game?.code]);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const listener = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (quick) setQuick(null);
-        else if (manual) setManual(false);
+        if (manual) setManual(false);
         else if (menu) setMenu(false);
-        else if (drawer) setDrawer(null);
-        else setExpanded(false);
+        else if (endOpen) setEndOpen(false);
+        else setPanels((v) => v.slice(0, -1));
         return;
       }
       if (typing(e.target)) return;
-      if (!quick && !manual && !menu) {
-        const chosen = MAP_MODES.find((m) => m.key === e.key);
-        if (chosen) {
-          e.preventDefault();
-          setMode(chosen.id);
-        }
-      }
+      const map = MAP_MODES.find((m) => m.key === e.key);
+      if (map) setMode(map.id);
     };
-    window.addEventListener('keydown', keyboard);
-    return () => window.removeEventListener('keydown', keyboard);
-  }, [quick, manual, menu, drawer]);
-  function showProvince(p: Province) {
-    setSelectedId(p.id);
-    setDrawer('province');
-  }
-  function showDiplomacy(id = me.id) {
-    setRealmId(id);
-    setReferenceId(id);
-    setMode('DIPLOMATIC');
-    setDrawer('diplomacy');
-  }
-  function tactical(target: Province) {
-    if (
-      !selected ||
-      !mySelectedArmy ||
-      mySelectedArmy.troops < (selected.ownerId === me.id ? 2 : 1)
-    ) {
-      setError('Selecione uma província com tropas suas antes de dar a ordem tática.');
+    window.addEventListener('keydown', listener);
+    return () => window.removeEventListener('keydown', listener);
+  }, [manual, menu, endOpen]);
+  const currentCode = game?.code;
+  useEffect(() => {
+    setPanels([]);
+    setArmy('');
+    setProvince('');
+    setReference('');
+    setReplay(null);
+  }, [currentCode]);
+  const rootClick = (event: React.MouseEvent) => {
+    if (event.target instanceof Element && event.target.closest('button')) {
+      audio.unlock();
+      audio.play(event.target.closest('[data-sound=coins]') ? 'coins' : 'click');
+    }
+  };
+  if (!game)
+    return (
+      <div className="application" onClickCapture={rootClick}>
+        <Entry send={send} online={status === 'online'} onHelp={() => setManual(true)} />
+        {manual && <Manual close={() => setManual(false)} />}
+        <ConnectionToast error={error} status={status} dismiss={() => setError('')} />
+      </div>
+    );
+  if (game.phase === 'lobby')
+    return (
+      <div className="application" onClickCapture={rootClick}>
+        <Lobby game={game} playerId={playerId} command={command} leave={leave} />
+        <ConnectionToast error={error} status={status} dismiss={() => setError('')} />
+      </div>
+    );
+  const me = game.players.find((p) => p.id === playerId);
+  if (!me) return null;
+  const selected = game.provinces.find((p) => p.id === provinceId),
+    selectedArmy = game.battalions.find((a) => a.id === armyId),
+    eco = realmEconomy(game, playerId),
+    alive = livingPlayers(game),
+    land = landProvinces(game),
+    owned = land.filter((p) => controller(p) === playerId),
+    emperor = game.players.find((p) => p.id === game.diet.emperorId);
+  const troopTotal = game.battalions
+      .filter((a) => a.ownerId === playerId)
+      .reduce((n, a) => n + unitCount(a), 0),
+    maxSupply = game.provinces
+      .filter(
+        (p) =>
+          controller(p) === playerId ||
+          game.battalions.some((a) => a.ownerId === playerId && a.provinceId === p.id),
+      )
+      .reduce((n, p) => n + supplyLimit(p), 0);
+  const remaining = game.deadline ? Math.max(0, Math.ceil((game.deadline - now) / 1000)) : null;
+  const ready = alive.filter((p) => p.ready || p.bot).length;
+  const focus = (id: string) => {
+    const p = game.provinces.find((p) => p.id === id);
+    if (p) camera.current?.focus(p);
+  };
+  const selectArmy = (a: Battalion) => {
+    setArmy(a.id);
+    setProvince(a.provinceId);
+    open('battalion');
+  };
+  const selectProvince = (p: Province) => {
+    setProvince(p.id);
+    open('province');
+  };
+  const tactical = (p: Province) => {
+    if (!selectedArmy || selectedArmy.ownerId !== playerId) {
+      setError('Selecione uma ficha de batalhão ou frota antes de preparar a rota.');
       return;
     }
-    if (!selected.neighbors.includes(target.id)) {
-      setError('A marcha precisa terminar em uma província vizinha.');
+    if (selectedArmy.embarkedOnId) {
+      setError('Desembarque o batalhão pelo comando de transporte.');
       return;
     }
-    if (!legalDestination(game, me.id, target)) {
-      setError('Um tratado impede a marcha. Solicite acesso militar ou encerre o pacto.');
+    const path = unitPath(game, selectedArmy, p.id);
+    if (!path || !path.length) {
+      setError('Sem rota legal: confira guerra formal, acesso militar, portos e tipo de formação.');
       return;
     }
-    if (me.ready) {
-      setError('Reabra suas ordens para editar.');
-      return;
-    }
-    setQuick({ sourceId: selected.id, targetId: target.id });
-  }
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(game.code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setError(`Código da sala: ${game.code}`);
-    }
-  }
+    command({
+      type: 'SUBMIT_ORDER',
+      order: { type: 'MOVE_BATTALION', battalionId: selectedArmy.id, path },
+    });
+  };
+  const showReport = (tab: ReportTab) => {
+    setReportTab(tab);
+    open('report');
+  };
+  const imperialShare =
+    game.diet.memberRealmIds.filter((id) => alive.some((p) => p.id === id)).length /
+    Math.max(1, alive.length);
   return (
     <div
-      className={`game-viewport ${expanded ? 'panel-expanded' : ''} ${leader || game.phase === 'finished' ? 'has-alert' : ''}`}
+      className={`game-viewport ${game.diet.retaliationEdictActive ? 'has-edict' : ''}`}
+      onClickCapture={rootClick}
+      data-audio-muted={muted}
     >
       <Atlas
         ref={camera}
@@ -276,427 +362,587 @@ function Hud({
         players={game.players}
         game={game}
         mode={mode}
-        referenceId={referenceId}
-        selectedId={selectedId}
+        referenceId={referenceId || playerId}
+        selectedId={provinceId}
+        selectedArmyId={armyId}
         orders={game.plannedOrders}
-        onSelect={showProvince}
+        onSelect={selectProvince}
+        onSelectArmy={selectArmy}
         onTactical={tactical}
+        replay={replay}
       />
-      <header className="hud-topbar glass">
-        <button className="hud-nation" onClick={() => setMenu(true)} title="Menu da campanha">
-          <span className="nation-shield" style={{ color: me.color, borderColor: me.color }}>
-            <Crown size={22} />
-          </span>
+      <header className="top-bar framed-panel">
+        <button className="nation-heading" onClick={() => setMenu(true)} title="Conselho da nação">
+          <CoatOfArms nationId={me.nationId} size={32} />
           <span>
             <strong>{me.nation}</strong>
             <small>
-              {me.name}
-              <span className="mobile-realm-meta">
-                {' '}
-                · {me.faith} · Est. {me.stability}%
-              </span>
+              {me.name} · prestígio {number(me.prestige)}
             </small>
           </span>
           <ChevronDown size={12} />
         </button>
-        <div className="hud-economy">
+        <div className="top-resources">
           <div
             className="hud-stat"
-            title={`Receita ${number(eco.income, 2)} · manutenção ${number(eco.upkeep, 2)} por rodada`}
+            title={`Impostos ${number(eco.taxes, 1)}, comércio ${number(eco.trade, 1)}, dízimos ${number(eco.tithes, 1)}; manutenção ${number(eco.upkeep, 1)}.`}
           >
-            <Coins size={17} />
-            <div>
-              <strong data-testid="treasury">{number(me.gold, 1)}</strong>
+            <Coins size={16} />
+            <span>
+              <strong data-testid="treasury">{number(me.gold)}</strong>
               <small>
                 OURO{' '}
-                <span className={eco.net >= 0 ? 'positive' : 'danger-text'}>
+                <b className={eco.net >= 0 ? 'positive' : 'danger'}>
                   {eco.net >= 0 ? '+' : ''}
-                  {number(eco.net, 1)}
-                </span>
+                  {number(eco.net, 1)}/rod.
+                </b>
               </small>
-            </div>
+            </span>
           </div>
-          <div
-            className="hud-stat"
-            title="Total de tropas e soma dos suprimentos próprios. O limite e o atrito são locais, por província."
-          >
-            <Users size={17} />
-            <div>
+          <div className="hud-stat">
+            <Users size={16} />
+            <span>
               <strong>
-                {troops}
-                <em> / {supply}</em>
+                {troopTotal}
+                <em> / {maxSupply}</em>
               </strong>
-              <small>TROPAS / SUPRIMENTO</small>
-            </div>
+              <small>FORÇAS / SUPRIMENTO</small>
+            </span>
           </div>
-          <div
-            className="hud-stat compact-stat"
-            title={`${me.manpower} reservas de população · ${me.influence} influência`}
-          >
-            <Sparkles size={16} />
-            <div>
+          <div className="hud-stat reserves-stat">
+            <Flag size={15} />
+            <span>
               <strong>
-                {me.influence}
-                <em> / {me.manpower}</em>
+                {number(me.manpower)}
+                <em> / {number(me.influence)}</em>
               </strong>
-              <small>INFLUÊNCIA / RESERVAS</small>
-            </div>
+              <small>RESERVAS / INFLUÊNCIA</small>
+            </span>
           </div>
-          <div className="hud-stat faith-stat" title={`Religião estatal: ${me.faith}`}>
-            <Sun size={17} />
-            <div>
-              <strong>{me.faith}</strong>
-              <small>RELIGIÃO ESTATAL</small>
-            </div>
+          <div className="hud-stat faith-stat" title={RELIGIONS[me.faith].tenet}>
+            <Landmark size={16} />
+            <span>
+              <strong>{RELIGIONS[me.faith].name}</strong>
+              <small>
+                {me.religiousPolicy === 'TOLERANCE' ? 'ÉDITO DE TOLERÂNCIA' : 'INQUISIÇÃO'}
+              </small>
+            </span>
           </div>
           <div
-            className="hud-stat stability-stat"
-            title="Média de pacificação menos metade da revolta nas suas províncias."
+            className="hud-stat exhaustion-stat"
+            title="Desgaste reduz receita, recuperação de moral e eleva revolta."
           >
-            <Leaf size={17} />
-            <div>
-              <strong>{me.stability}%</strong>
-              <small>ESTABILIDADE</small>
-            </div>
+            <Swords size={15} />
+            <span>
+              <strong>{number(me.warExhaustion)}%</strong>
+              <small>DESGASTE DE GUERRA</small>
+            </span>
           </div>
         </div>
-        <button
-          className={`threat-tracker ${leader ? 'danger-text' : ''}`}
-          onClick={() => showDiplomacy(threat?.id ?? me.id)}
-          title="Maior progresso em qualquer um dos quatro legados"
-        >
-          <Target size={15} />
+        <div className="turn-status">
+          <strong>
+            Rodada {String(game.turn).padStart(2, '0')} <small>/ {game.maxTurns}</small>
+          </strong>
           <span>
-            <small>MAIOR AMBIÇÃO</small>
-            <strong>
-              {threat?.nation ?? '—'}{' '}
-              <b>{number(Math.max(0, ...Object.values(threat?.victoryProgress ?? {})))}%</b>
-            </strong>
-          </span>
-        </button>
-        <div className="hud-turn">
-          <h2>
-            Rodada {String(game.turn).padStart(2, '0')} <span>/ {game.maxTurns}</span>
-          </h2>
-          <small>
             {1550 + Math.floor((game.turn - 1) / 4)} ·{' '}
             {['Primavera', 'Verão', 'Outono', 'Inverno'][(game.turn - 1) % 4]}
+          </span>
+          <small>
+            {game.phase === 'finished'
+              ? 'Campanha encerrada'
+              : game.paused
+                ? 'Campanha pausada'
+                : remaining === null
+                  ? 'Demonstração · sem prazo'
+                  : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')} para resolver`}
           </small>
-          <Countdown game={game} />
         </div>
         <button
-          className={`button ready-button ${me.ready ? 'outline' : 'primary'}`}
-          disabled={game.phase !== 'planning' || !alive || status !== 'online'}
+          className={`ready-button ${me.ready ? 'confirmed' : ''}`}
+          disabled={game.phase !== 'planning' || status !== 'online'}
           onClick={() => command({ type: 'READY', ready: !me.ready })}
         >
-          <CheckCheck size={17} />
+          <Check size={18} />
           <span>
-            {me.ready ? 'Reabrir ordens' : 'Confirmar ordens'}
+            {me.ready ? 'Ordens confirmadas' : 'Confirmar ordens'}
             <small>
-              {ready}/{game.players.length} reinos prontos
+              {ready}/{alive.length} reinos prontos
             </small>
           </span>
         </button>
-        <button
-          className="icon-button hud-menu"
-          aria-label="Menu da campanha"
-          onClick={() => setMenu(true)}
-        >
-          <Menu size={20} />
-        </button>
-      </header>
-      {game.phase === 'finished' ? (
-        <div className="hegemony-banner victory glass">
-          <Crown size={24} />
-          <div>
-            <strong>
-              {winner ? `${winner.nation} escreveu seu legado.` : 'A campanha terminou.'}
-            </strong>
-            <span>
-              {winner && game.winnerObjective
-                ? `Vitória por ${OBJECTIVES[game.winnerObjective].name}. `
-                : ''}
-              Inspecione o mapa e os relatórios.
-            </span>
-          </div>
+        <div className="top-tools">
           <button
-            className="button outline small-button"
+            aria-label={muted ? 'Ativar som' : 'Silenciar som'}
+            title={muted ? 'Ativar som' : 'Silenciar som'}
             onClick={() => {
-              setTab('reports');
-              setExpanded(true);
+              const next = !muted;
+              setMuted(next);
+              audio.setMuted(next);
+              if (!next) audio.unlock();
             }}
           >
-            Ver resultados
+            {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+          </button>
+          <button aria-label="Abrir menu" onClick={() => setMenu(true)}>
+            <Menu size={19} />
           </button>
         </div>
-      ) : (
-        leader && (
-          <div className="hegemony-banner glass">
-            <TriangleAlert size={23} />
-            <div>
-              <strong>A ascensão de {leader.nation}</strong>
-              <span>
-                75% de um legado: demais reinos têm +10% de força contra a hegemonia e podem romper
-                pactos com ela sem penalidade ou trégua.
-              </span>
-            </div>
-          </div>
-        )
-      )}
-      <div className="hud-navigation">
+      </header>
+      <nav className="hud-navigation">
         <button
-          className={`glass nav-chip ${drawer === 'province' ? 'active' : ''}`}
           onClick={() => {
-            if (selected) setDrawer(drawer === 'province' ? null : 'province');
-            else setError('Clique numa província para inspecioná-la.');
+            const p = selected ?? game.provinces.find((p) => controller(p) === playerId);
+            if (p) selectProvince(p);
           }}
+          className={panels.includes('province') ? 'selected' : ''}
         >
-          <Flag size={16} />
+          <Castle size={15} />
           Província
         </button>
         <button
-          className={`glass nav-chip ${drawer === 'diplomacy' ? 'active' : ''}`}
-          onClick={() => (drawer === 'diplomacy' ? setDrawer(null) : showDiplomacy())}
+          onClick={() => {
+            const a = selectedArmy ?? game.battalions.find((a) => a.ownerId === playerId);
+            if (a) selectArmy(a);
+          }}
+          className={panels.includes('battalion') ? 'selected' : ''}
         >
-          <Handshake size={16} />
-          Diplomacia{game.offers.some((o) => o.to === me.id) && <i className="notification-dot" />}
+          <Swords size={15} />
+          Batalhões
         </button>
         <button
-          className="glass nav-chip"
-          aria-label="Conselho público"
-          onClick={() => {
-            setTab('chat');
-            setExpanded(true);
-          }}
+          onClick={() => open('diplomacy')}
+          className={panels.includes('diplomacy') ? 'selected' : ''}
         >
-          <MessageCircle size={16} />
+          <Handshake size={15} />
+          Diplomacia
         </button>
-        <button className="glass nav-chip" aria-label="Como jogar" onClick={() => setManual(true)}>
+        <button onClick={() => open('diet')} className={panels.includes('diet') ? 'selected' : ''}>
+          <Crown size={15} />
+          Dieta Imperial
+        </button>
+        <button aria-label="Como jogar" onClick={() => setManual(true)}>
           <BookOpen size={16} />
         </button>
-      </div>
-      {drawer && (
-        <aside
-          className="inspector-drawer glass"
-          aria-label={drawer === 'province' ? 'Província selecionada' : 'Diplomacia e reinos'}
+      </nav>
+      <div className="telemetry-tools">
+        <button
+          aria-label="Baixar Relatório (.JSON)"
+          title="Baixar Relatório (.JSON)"
+          onClick={() => download(game, 'json')}
         >
-          <header>
-            <div className="drawer-tabs">
-              <button
-                className={drawer === 'province' ? 'active' : ''}
-                disabled={!selected}
-                onClick={() => setDrawer('province')}
-              >
-                <Flag size={13} />
-                Província
-              </button>
-              <button
-                className={drawer === 'diplomacy' ? 'active' : ''}
-                onClick={() => setDrawer('diplomacy')}
-              >
-                <Handshake size={13} />
-                Reinos
-              </button>
-            </div>
-            <button
-              className="icon-button"
-              aria-label="Fechar gaveta"
-              onClick={() => setDrawer(null)}
-            >
-              <X size={16} />
-            </button>
-          </header>
-          <div className="drawer-scroll">
-            {drawer === 'province' && selected ? (
-              <ProvinceDrawer
-                key={selected.id}
-                game={game}
-                me={me}
-                province={selected}
-                command={act}
-                onMarch={(p) => setQuick({ sourceId: p.id })}
-                onFocus={() => camera.current?.focus(selected)}
-                onDiplomacy={showDiplomacy}
-              />
-            ) : (
-              <DiplomacyDrawer
-                game={game}
-                me={me}
-                selectedId={realmId}
-                onSelect={(id) => {
-                  setRealmId(id);
-                  setReferenceId(id);
-                }}
-                command={act}
-              />
-            )}
-          </div>
-        </aside>
-      )}
-      {!alive && game.phase === 'planning' && (
-        <div className="spectator-badge glass">
-          <Shield size={15} />
-          Seu reino está sem território. Acompanhe a campanha e o conselho.
-        </div>
-      )}
-      <TurnPanel
-        game={game}
-        me={me}
-        command={act}
-        tab={tab}
-        setTab={setTab}
-        expanded={expanded}
-        setExpanded={setExpanded}
-        onProvince={(id) => {
-          const p = game.provinces.find((p) => p.id === id);
-          if (p) showProvince(p);
-        }}
-      />
-      <div className="map-controls">
-        <div className="map-mode-label glass">
-          <Compass size={13} />
+          <Download size={13} />
+          <span>JSON</span>
+        </button>
+        <button
+          aria-label="Baixar Crônica (.TXT)"
+          title="Baixar Crônica (.TXT)"
+          onClick={() => download(game, 'txt')}
+        >
+          <ScrollText size={13} />
+          <span>TXT</span>
+        </button>
+      </div>
+      <div className="victory-tracker">
+        <button onClick={() => setMenu(true)}>
+          <Swords size={14} />
           <span>
-            {mode === 'DIPLOMATIC'
-              ? `Relações de ${reference?.nation ?? me.nation}`
-              : MAP_MODES.find((m) => m.id === mode)?.description}
+            Dominação
+            <strong>
+              {number((owned.length / land.length) * 100)}% <small>/ 75%</small>
+            </strong>
+          </span>
+        </button>
+        <button onClick={() => open('diet')}>
+          <Crown size={14} />
+          <span>
+            {emperor?.nation ?? 'Trono vago'}
+            <strong>
+              {game.diet.peaceTurnsCounter}/5 paz{' '}
+              <small>· {number(imperialShare * 100)}% membros</small>
+            </strong>
+          </span>
+        </button>
+      </div>
+      {game.diet.retaliationEdictActive && (
+        <div className="imperial-banner">
+          <Shield size={17} />
+          <span>
+            Édito de Paz Imperial em vigor
+            <strong>Qualquer agressor enfrentará toda a Dieta.</strong>
           </span>
         </div>
-        <div className="map-control-row">
-          <div className="map-modes glass" aria-label="Modos do mapa">
-            {MAP_MODES.map((m, i) => {
-              const Icon = [Flag, Sun, Coins, Handshake, TriangleAlert][i];
-              return (
-                <button
-                  key={m.id}
-                  className={mode === m.id ? 'active' : ''}
-                  title={`${m.name} [${m.key}] · ${m.description}`}
-                  aria-label={`Mapa ${m.name}`}
-                  aria-pressed={mode === m.id}
-                  onClick={() => setMode(m.id)}
-                >
-                  <Icon size={17} />
-                  <small>{m.key}</small>
-                </button>
-              );
-            })}
-          </div>
-          <div className="camera-controls glass">
-            <button aria-label="Diminuir zoom" onClick={() => camera.current?.zoomOut()}>
-              <ZoomOut size={17} />
+      )}
+      {replay && (
+        <div className="replay-indicator">
+          <Play size={13} />
+          Resolução da rodada {replay.report.turn}
+          <i style={{ width: `${replay.progress * 100}%` }} />
+          <button aria-label="Encerrar animação" onClick={() => setReplay(null)}>
+            <X size={12} />
+          </button>
+        </div>
+      )}
+      {game.phase === 'finished' && !endOpen && (
+        <button className="result-reopen" onClick={() => setEndOpen(true)}>
+          <Crown size={16} />
+          Ver resultado da campanha
+        </button>
+      )}
+      {panels.includes('province') && selected && (
+        <FloatingWindow
+          id="province"
+          active={panels.at(-1) === 'province'}
+          onActivate={() => open('province')}
+          title="Inspeção de Província"
+          icon={<Castle size={15} />}
+          onClose={() => close('province')}
+          width={338}
+          height={610}
+        >
+          <ProvinceDrawer
+            key={selected.id}
+            game={game}
+            playerId={playerId}
+            province={selected}
+            command={command}
+            onSelectArmy={selectArmy}
+            onFocus={() => focus(selected.id)}
+          />
+        </FloatingWindow>
+      )}
+      {panels.includes('battalion') && selectedArmy && (
+        <FloatingWindow
+          id="battalion"
+          active={panels.at(-1) === 'battalion'}
+          onActivate={() => open('battalion')}
+          title="Comando de Batalhão"
+          icon={<Swords size={15} />}
+          anchor="right"
+          width={340}
+          height={610}
+          onClose={() => close('battalion')}
+        >
+          <BattalionDrawer
+            key={selectedArmy.id}
+            game={game}
+            army={selectedArmy}
+            playerId={playerId}
+            command={command}
+            onFocus={() => focus(selectedArmy.provinceId)}
+            onSelect={(id) => {
+              const a = game.battalions.find((a) => a.id === id);
+              if (a) selectArmy(a);
+            }}
+          />
+        </FloatingWindow>
+      )}
+      {panels.includes('diplomacy') && (
+        <FloatingWindow
+          id="diplomacy"
+          active={panels.at(-1) === 'diplomacy'}
+          onActivate={() => open('diplomacy')}
+          title="Diplomacia & Guerras"
+          icon={<Handshake size={15} />}
+          anchor="right"
+          width={414}
+          height={620}
+          onClose={() => close('diplomacy')}
+        >
+          <DiplomacyDrawer game={game} playerId={playerId} command={command} />
+        </FloatingWindow>
+      )}
+      {panels.includes('diet') && (
+        <FloatingWindow
+          id="diet"
+          active={panels.at(-1) === 'diet'}
+          onActivate={() => open('diet')}
+          title="Dieta Imperial"
+          icon={<Crown size={15} />}
+          anchor="right"
+          width={374}
+          height={620}
+          onClose={() => close('diet')}
+        >
+          <ImperialDrawer game={game} playerId={playerId} command={command} />
+        </FloatingWindow>
+      )}
+      {panels.includes('report') && (
+        <FloatingWindow
+          id="report"
+          active={panels.at(-1) === 'report'}
+          onActivate={() => open('report')}
+          title="Relatório do Turno"
+          icon={<ScrollText size={15} />}
+          anchor="bottom"
+          width={640}
+          height={330}
+          onClose={() => close('report')}
+        >
+          <TurnPanel
+            game={game}
+            playerId={playerId}
+            command={command}
+            tab={reportTab}
+            setTab={setReportTab}
+            onReplay={playReplay}
+            onFocus={focus}
+          />
+        </FloatingWindow>
+      )}
+      <footer className="hud-footer">
+        <div className="footer-tabs">
+          <button onClick={() => showReport('orders')}>
+            <ScrollText size={14} />
+            Ordens <b>{game.plannedOrders.length}</b>
+          </button>
+          <button onClick={() => showReport('reports')}>
+            <Swords size={14} />
+            Relatórios <b>{game.lastReport?.battles.length ?? 0}</b>
+          </button>
+          <button aria-label="Conselho público" onClick={() => showReport('chat')}>
+            <MessageSquare size={14} />
+            Conselho <b>{game.chat.length}</b>
+          </button>
+          {game.lastReport && (
+            <button
+              className="replay-shortcut"
+              aria-label="Rever Animação do Turno"
+              onClick={() => playReplay(game.lastReport!)}
+            >
+              <Play size={14} />
             </button>
-            <button aria-label="Resetar câmera" onClick={() => camera.current?.reset()}>
-              <RotateCcw size={16} />
+          )}
+        </div>
+        <span className="connection-indicator">
+          <i className={status === 'online' ? 'status-dot' : 'status-dot offline'} />
+          {status === 'online'
+            ? game.persistenceEnabled
+              ? 'Salvamento automático'
+              : 'Sessão conectada'
+            : 'Reconectando…'}{' '}
+          <b>{game.code}</b>
+        </span>
+      </footer>
+      <div className="map-controls framed-panel">
+        <div className="map-mode-buttons">
+          {MAP_MODES.map((m) => (
+            <button
+              key={m.id}
+              className={mode === m.id ? 'selected' : ''}
+              aria-label={`Mapa ${m.name}`}
+              aria-pressed={mode === m.id}
+              title={`${m.key} · ${m.description}`}
+              onClick={() => setMode(m.id)}
+            >
+              {m.id === 'POLITICAL' ? (
+                <Flag size={16} />
+              ) : m.id === 'RELIGIOUS' ? (
+                <Landmark size={16} />
+              ) : m.id === 'ECONOMIC_SUPPLY' ? (
+                <Coins size={16} />
+              ) : m.id === 'DIPLOMATIC' ? (
+                <Handshake size={16} />
+              ) : (
+                <Shield size={16} />
+              )}
+              <small>{m.key}</small>
             </button>
-            <button aria-label="Aumentar zoom" onClick={() => camera.current?.zoomIn()}>
-              <ZoomIn size={17} />
-            </button>
-          </div>
+          ))}
+        </div>
+        <div className="camera-controls">
+          <button aria-label="Diminuir zoom" onClick={() => camera.current?.zoomOut()}>
+            <Minus size={15} />
+          </button>
+          <button aria-label="Resetar câmera" onClick={() => camera.current?.reset()}>
+            <RotateCcw size={15} />
+          </button>
+          <button aria-label="Aumentar zoom" onClick={() => camera.current?.zoomIn()}>
+            <Plus size={15} />
+          </button>
         </div>
       </div>
-      <div className="connection-badge">
-        <i className={status === 'online' ? 'connected' : ''} />
-        {status === 'online'
-          ? game.persistenceEnabled
-            ? 'Salvamento automático'
-            : 'Conectado · sessão em memória'
-          : 'Reconectando…'}
-        <span>SALA {game.code}</span>
-      </div>
-      {quick && (
-        <QuickMarch
-          key={`${quick.sourceId}-${quick.targetId ?? ''}`}
-          game={game}
-          me={me}
-          source={game.provinces.find((p) => p.id === quick.sourceId)!}
-          targetId={quick.targetId}
-          command={act}
-          close={() => setQuick(null)}
-        />
+      {mode === 'DIPLOMATIC' && (
+        <label className="reference-realm">
+          Referência diplomática
+          <select value={referenceId || playerId} onChange={(e) => setReference(e.target.value)}>
+            {game.players.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nation}
+              </option>
+            ))}
+          </select>
+        </label>
       )}
-      {manual && <Manual game={game} me={me} close={() => setManual(false)} />}
+      <div className="map-hint">
+        {selectedArmy?.ownerId === playerId
+          ? `${selectedArmy.name} · clique direito para traçar rota`
+          : 'Selecione uma cidade ou uma ficha de batalhão'}
+        <span>Espaço + arraste · scroll para zoom</span>
+      </div>
       {menu && (
-        <div className="modal-scrim">
-          <section className="game-modal campaign-menu" role="dialog" aria-label="Menu da campanha">
-            <button
-              className="window-close"
-              aria-label="Fechar menu"
-              onClick={() => setMenu(false)}
-            >
-              <X size={18} />
-            </button>
-            <Brand />
-            <h2>O conselho permanece.</h2>
+        <div className="modal-backdrop">
+          <section
+            className="game-modal council-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Conselho da nação"
+          >
+            <header>
+              <span className="eyebrow">SOB A SUA BANDEIRA</span>
+              <button aria-label="Fechar menu" onClick={() => setMenu(false)}>
+                <X size={18} />
+              </button>
+            </header>
+            <CoatOfArms nationId={me.nationId} size={48} />
+            <h2>{me.nation}</h2>
             <p>
-              {me.nation} · {me.name}
+              {RELIGIONS[me.faith].name} · estabilidade {number(me.stability)}% · prestígio{' '}
+              {number(me.prestige)}
             </p>
-            <div className="menu-code">
-              <small>CÓDIGO DA SALA</small>
-              <strong>{game.code}</strong>
-              <button className="icon-button" aria-label="Copiar código da sala" onClick={copy}>
-                {copied ? <CheckCheck size={17} /> : <Copy size={17} />}
+            <label>
+              Política religiosa
+              <select
+                value={me.religiousPolicy}
+                disabled={game.phase !== 'planning'}
+                onChange={(e) =>
+                  command({
+                    type: 'SET_RELIGIOUS_POLICY',
+                    policy: e.target.value as 'TOLERANCE' | 'INQUISITION',
+                  })
+                }
+              >
+                <option value="TOLERANCE">Édito de Tolerância · −10% imposto</option>
+                <option value="INQUISITION">Inquisição · conversão rápida e tensão</option>
+              </select>
+            </label>
+            <p className="fine-print">{RELIGIONS[me.faith].tenet}</p>
+            <div className="menu-actions">
+              <button
+                onClick={() => {
+                  setMenu(false);
+                  setManual(true);
+                }}
+              >
+                <BookOpen size={15} />
+                Manual de campanha
+              </button>
+              <button onClick={() => download(game, 'json')}>
+                <Download size={15} />
+                Baixar Relatório (.JSON)
+              </button>
+              <button onClick={() => download(game, 'txt')}>
+                <ScrollText size={15} />
+                Baixar Crônica (.TXT)
+              </button>
+              {game.phase === 'finished' && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    setEndOpen(true);
+                  }}
+                >
+                  Resultado da campanha
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setMenu(false);
+                  setPanels([]);
+                  leave();
+                }}
+              >
+                Sair da campanha
               </button>
             </div>
-            <p className="small muted">
-              {game.persistenceEnabled
-                ? 'A campanha e as sessões são salvas automaticamente. Reiniciar o servidor preserva o jogo.'
-                : 'Este servidor não está configurado para salvar campanhas em disco.'}{' '}
-              Guarde esta aba para manter a sua sessão.
+          </section>
+        </div>
+      )}
+      {endOpen && game.phase === 'finished' && (
+        <div className="modal-backdrop">
+          <section
+            className="game-modal result-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Resultado da campanha"
+          >
+            <header>
+              <span className="eyebrow">A CRÔNICA FOI ESCRITA</span>
+              <button aria-label="Fechar resultado" onClick={() => setEndOpen(false)}>
+                <X size={18} />
+              </button>
+            </header>
+            <Crown size={50} />
+            <h2>
+              {game.winnerId
+                ? game.players.find((p) => p.id === game.winnerId)?.nation
+                : 'Nenhum império prevaleceu.'}
+            </h2>
+            <h3>
+              {game.winnerObjective
+                ? OBJECTIVES[game.winnerObjective].name
+                : game.finishReason === 'legacy_finished'
+                  ? 'Resultado preservado da v0.2'
+                  : game.finishReason === 'realm_collapse'
+                    ? 'Os reinos se dissolveram'
+                    : 'Limite de rodadas alcançado'}
+            </h3>
+            <p>
+              {game.winnerObjective
+                ? OBJECTIVES[game.winnerObjective].description
+                : 'As duas condições permaneceram em disputa. A crônica preserva os resultados desta campanha.'}
             </p>
-            <button
-              className="button outline full"
-              onClick={() => {
-                setMenu(false);
-                setManual(true);
-              }}
-            >
-              <BookOpen size={16} />
-              Como jogar
+            <div className="result-stats">
+              <span>
+                {game.history.length}
+                <small>rodadas</small>
+              </span>
+              <span>
+                {game.history.reduce((n, h) => n + h.battles.length, 0)}
+                <small>batalhas</small>
+              </span>
+              <span>
+                {game.wars.length}
+                <small>guerras</small>
+              </span>
+            </div>
+            <button className="primary" onClick={() => download(game, 'json')}>
+              <Download size={16} />
+              Baixar Relatório (.JSON)
             </button>
-            <button className="button outline full" onClick={() => setMenu(false)}>
-              Voltar ao mapa
+            <button onClick={() => download(game, 'txt')}>
+              <ScrollText size={16} />
+              Baixar Crônica (.TXT)
             </button>
-            <button className="button ghost full" onClick={leave}>
-              Sair da sala
+            <button className="text-button" onClick={() => setEndOpen(false)}>
+              Explorar o mapa final
             </button>
           </section>
         </div>
       )}
+      {manual && <Manual close={() => setManual(false)} />}
+      <ConnectionToast error={error} status={status} dismiss={() => setError('')} />
     </div>
   );
 }
-export default function App() {
-  const { game, playerId, status, error, setError, send, command, leave } = useGame();
-  const me = game?.players.find((p) => p.id === playerId);
-  return (
-    <>
-      {game && me ? (
-        game.phase === 'lobby' ? (
-          <Lobby game={game} me={me} command={command} leave={leave} />
-        ) : (
-          <Hud
-            key={game.code}
-            game={game}
-            me={me}
-            command={command}
-            leave={leave}
-            status={status}
-            setError={setError}
-          />
-        )
-      ) : (
-        <Entry send={send} status={status} />
-      )}
-      <div className="toast-region" aria-live="polite">
-        {error && (
-          <div className="toast" role="alert">
-            <TriangleAlert size={18} />
-            <span>{error}</span>
-            <button className="icon-button" aria-label="Fechar aviso" onClick={() => setError('')}>
-              <X size={16} />
-            </button>
-          </div>
-        )}
-      </div>
-    </>
-  );
+function ConnectionToast({
+  error,
+  status,
+  dismiss,
+}: {
+  error: string;
+  status: string;
+  dismiss: () => void;
+}) {
+  return error ? (
+    <div className="toast" role="alert">
+      <span>{error}</span>
+      <button aria-label="Fechar aviso" onClick={dismiss}>
+        <X size={16} />
+      </button>
+    </div>
+  ) : status === 'offline' ? (
+    <div className="toast" role="status">
+      Conexão perdida. Tentando recuperar a sessão…
+    </div>
+  ) : null;
 }

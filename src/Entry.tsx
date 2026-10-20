@@ -1,360 +1,414 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ArrowRight,
-  Bot,
   Check,
-  Clock3,
   Crown,
-  Flag,
-  LogOut,
+  Globe2,
+  Handshake,
   Plus,
-  ScrollText,
-  Shield,
+  Ship,
+  Swords,
   Users,
 } from 'lucide-react';
+import type { ClientMessage, GameMode, GameView, NationId, Theater } from '../shared/types';
+import { CONTINENTS, makeMap, THEATERS } from '../shared/map';
+import { NATIONS, RELIGIONS } from '../shared/rules';
 import Atlas from './Atlas';
-import { makeMap } from '../shared/map';
-import { FACTIONS, OBJECTIVES } from '../shared/types';
-import type { ClientMessage, GameMode, GameView, Objective, Player } from '../shared/types';
-import { Brand, type Command } from './ui';
-
-const preview = makeMap().map((p, i) => ({
-  ...p,
-  ownerId: i % 7 === 0 ? null : FACTIONS[Math.floor(p.col / 2)].nation,
-  troops: 2 + ((i * 7) % 10),
-  pacification: 100,
-  capital: [16, 11, 3, 21].includes(i),
-}));
-const factions = FACTIONS.map((f) => ({ ...f, id: f.nation }));
-export function Entry({ send, status }: { send: (m: ClientMessage) => void; status: string }) {
-  const [intent, setIntent] = useState<'create' | 'join' | null>(null),
+import { Brand, CoatOfArms, type Command } from './ui';
+const world = makeMap();
+export function NationCards({
+  selected,
+  onSelect,
+  taken = [],
+}: {
+  selected: NationId;
+  onSelect: (id: NationId) => void;
+  taken?: NationId[];
+}) {
+  return (
+    <div className="nation-grid">
+      {NATIONS.map((n) => (
+        <button
+          type="button"
+          key={n.id}
+          className={`nation-card ${selected === n.id ? 'selected' : ''}`}
+          disabled={taken.includes(n.id)}
+          aria-pressed={selected === n.id}
+          onClick={() => onSelect(n.id)}
+          title={n.ideas.join(' · ')}
+        >
+          <CoatOfArms nationId={n.id} />
+          <div>
+            <strong>{n.name}</strong>
+            <small>{RELIGIONS[n.religion].name}</small>
+            <span>{n.ideas[0]}</span>
+            <span>{n.ideas[1]}</span>
+          </div>
+          {selected === n.id && <Check size={14} />}
+        </button>
+      ))}
+    </div>
+  );
+}
+export function Entry({
+  send,
+  online,
+  onHelp,
+}: {
+  send: (message: ClientMessage) => void;
+  online: boolean;
+  onHelp: () => void;
+}) {
+  const [form, setForm] = useState<'create' | 'join' | null>(null),
     [name, setName] = useState(''),
     [code, setCode] = useState(''),
-    [objective, setObjective] = useState<Objective>('conquest'),
-    [mode, setMode] = useState<GameMode>('quick');
-  function enter(demo = false) {
-    if (intent === 'join' && !demo)
-      send({ type: 'join', code, name: name.trim() || 'Estrategista', objective });
-    else send({ type: 'create', name: name.trim() || 'Estrategista', objective, mode, demo });
-  }
+    [mode, setMode] = useState<GameMode>('quick'),
+    [theater, setTheater] = useState<Theater>('EUROPE'),
+    [nationId, setNation] = useState<NationId>('PORTUGAL');
   return (
-    <div className="entry-screen">
-      <Atlas provinces={preview} players={factions} mode="POLITICAL" preview />
-      <div className="entry-vignette" />
-      <header className="entry-top">
+    <main className="entry-viewport">
+      <Atlas provinces={world} players={[]} mode="POLITICAL" preview />
+      <div className="entry-shade" />
+      <header className="entry-header">
         <Brand />
-        <span className="version-tag">
-          <i className={status === 'online' ? 'connected' : ''} />
-          {status === 'online' ? 'PROTÓTIPO 0.2' : 'CONECTANDO'}
+        <span className="edition">
+          TERCEIRA EDIÇÃO <i /> 0.3
         </span>
-      </header>
-      <section className="entry-content">
-        <div className="eyebrow">EUROPA · ANNO DOMINI 1550</div>
-        <h1>
-          Governar é<br />
-          <em>escolher o preço.</em>
-        </h1>
-        <p>
-          Conquiste com cautela. Sustente seus exércitos.
-          <br />A fé move fronteiras; os pactos decidem quem fica.
-        </p>
-        <div className="entry-specs">
-          <span>
-            <Users size={15} />
-            3–8 jogadores
-          </span>
-          <span>
-            <Clock3 size={15} />
-            Ordens simultâneas
-          </span>
-          <span>
-            <Shield size={15} />
-            Quatro legados
-          </span>
-        </div>
-        <button
-          className="button primary large"
-          disabled={status !== 'online'}
-          onClick={() => enter(true)}
-        >
-          Jogar demonstração
-          <ArrowRight size={17} />
+        <button className="quiet-button" onClick={onHelp}>
+          Como jogar <ArrowRight size={14} />
         </button>
-        <div className="entry-secondary">
-          <button
-            className="button outline"
-            disabled={status !== 'online'}
-            onClick={() => setIntent('create')}
-          >
-            Criar uma sala
-          </button>
-          <button
-            className="button outline"
-            disabled={status !== 'online'}
-            onClick={() => setIntent('join')}
-          >
-            Entrar na campanha
-          </button>
-        </div>
-        <small>
-          Experimente contra três conselhos controlados por bots.
-          <br />
-          Rápido: até 20 rodadas · Campanha: até 40 rodadas
-        </small>
-      </section>
-      <div className="entry-bottom">
-        <span>UM TABULEIRO. MUITAS FORMAS DE VENCER.</span>
-        <span>Mapa histórico esquemático · regras experimentais</span>
-      </div>
-      {intent && (
-        <div className="modal-scrim">
+      </header>
+      <div className={`entry-content ${form ? 'with-form' : ''}`}>
+        <section className="hero-copy">
+          <span className="eyebrow">GUERRA, COMÉRCIO & PAZ IMPERIAL</span>
+          <h1>
+            O mundo é vasto.
+            <br />
+            <em>Seu legado,</em>
+            <br />
+            uma escolha.
+          </h1>
+          <p>
+            Conduza uma nação entre pólvora e diplomacia. Comande exércitos, cruze oceanos e decida
+            o futuro do conselho.
+          </p>
+          <div className="hero-facts">
+            <span>
+              <Users size={15} />
+              3–8 estrategistas
+            </span>
+            <span>
+              <Globe2 size={15} />
+              Um mundo orgânico
+            </span>
+            <span>
+              <Handshake size={15} />
+              Ordens simultâneas
+            </span>
+          </div>
+          {!form && (
+            <div className="entry-actions">
+              <button className="primary" disabled={!online} onClick={() => setForm('create')}>
+                Criar uma sala <ArrowRight size={17} />
+              </button>
+              <button onClick={() => setForm('join')} disabled={!online}>
+                Entrar na campanha
+              </button>
+              <button
+                className="text-button"
+                disabled={!online}
+                onClick={() =>
+                  send({
+                    type: 'create',
+                    name: 'Estrategista',
+                    mode: 'quick',
+                    theater: 'EUROPE',
+                    nationId: 'PORTUGAL',
+                    demo: true,
+                  })
+                }
+              >
+                Jogar demonstração <span>VOCÊ + 3 BOTS</span>
+              </button>
+            </div>
+          )}
+          <div className="hero-victories">
+            <div>
+              <Swords size={19} />
+              <span>
+                Dominação Total<small>Subjugue os rivais ou governe 75% das terras.</small>
+              </span>
+            </div>
+            <div>
+              <Crown size={19} />
+              <span>
+                Pacificação Imperial<small>Una a Dieta e sustente cinco rodadas de paz.</small>
+              </span>
+            </div>
+          </div>
+        </section>
+        {form && (
           <form
-            className="game-modal entry-modal"
-            onSubmit={(e) => {
-              e.preventDefault();
-              enter();
+            className="entry-form framed-panel"
+            onSubmit={(event) => {
+              event.preventDefault();
+              send(
+                form === 'create'
+                  ? { type: 'create', name: name.trim() || 'Estrategista', mode, theater, nationId }
+                  : {
+                      type: 'join',
+                      name: name.trim() || 'Convidado',
+                      code: code.trim().toUpperCase(),
+                    },
+              );
             }}
           >
-            <button
-              type="button"
-              className="window-close"
-              aria-label="Fechar"
-              onClick={() => setIntent(null)}
-            >
-              ×
-            </button>
-            <div className="eyebrow">O CONSELHO AGUARDA</div>
-            <h2>{intent === 'join' ? 'Entre na campanha' : 'Uma nova era'}</h2>
+            <div className="section-heading">
+              <span className="eyebrow">
+                {form === 'create' ? 'FUNDE SEU CONSELHO' : 'O CONSELHO AGUARDA'}
+              </span>
+              <button type="button" className="text-button" onClick={() => setForm(null)}>
+                Voltar
+              </button>
+            </div>
+            <h2>{form === 'create' ? 'Uma nova campanha.' : 'Reivindique seu lugar.'}</h2>
             <label>
               Como devemos chamar você?
               <input
-                autoFocus
                 value={name}
+                maxLength={30}
                 onChange={(e) => setName(e.target.value)}
-                maxLength={24}
                 placeholder="Seu nome"
-                required
+                autoComplete="nickname"
               />
             </label>
-            {intent === 'join' ? (
-              <label>
-                Código da sala
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  maxLength={6}
-                  placeholder="A3F021"
-                  required
-                />
-              </label>
+            {form === 'join' ? (
+              <>
+                <label>
+                  Código da sala
+                  <input
+                    required
+                    value={code}
+                    maxLength={6}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    placeholder="A3F021"
+                    className="code-input"
+                  />
+                </label>
+                <p className="muted">
+                  A nação poderá ser escolhida no conselho, antes do início da campanha.
+                </p>
+              </>
             ) : (
-              <div className="mode-choice">
-                <button
-                  className={mode === 'quick' ? 'active' : ''}
-                  type="button"
-                  onClick={() => setMode('quick')}
-                >
-                  <Clock3 />
-                  <strong>Rápido</strong>
-                  <small>20 rodadas · 3 min/rodada</small>
-                </button>
-                <button
-                  className={mode === 'campaign' ? 'active' : ''}
-                  type="button"
-                  onClick={() => setMode('campaign')}
-                >
-                  <ScrollText />
-                  <strong>Campanha</strong>
-                  <small>40 rodadas · 7,5 min/rodada</small>
-                </button>
-              </div>
+              <>
+                <div className="mode-choices">
+                  <button
+                    type="button"
+                    aria-pressed={mode === 'quick'}
+                    onClick={() => setMode('quick')}
+                    className={mode === 'quick' ? 'selected' : ''}
+                  >
+                    <Swords size={18} />
+                    <strong>Teatro continental</strong>
+                    <small>16 terras · até 60 minutos</small>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={mode === 'campaign'}
+                    onClick={() => setMode('campaign')}
+                    className={mode === 'campaign' ? 'selected' : ''}
+                  >
+                    <Globe2 size={18} />
+                    <strong>Campanha mundial</strong>
+                    <small>56 terras · até 5 horas</small>
+                  </button>
+                </div>
+                {mode === 'quick' && (
+                  <label>
+                    Teatro da partida
+                    <select value={theater} onChange={(e) => setTheater(e.target.value as Theater)}>
+                      {THEATERS.map((t) => (
+                        <option key={t} value={t}>
+                          {CONTINENTS[t]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div className="field-heading">
+                  Sua nação <span>8 histórias, 2 ideias cada</span>
+                </div>
+                <NationCards selected={nationId} onSelect={setNation} />
+              </>
             )}
-            <label>
-              Legado de preferência
-              <select value={objective} onChange={(e) => setObjective(e.target.value as Objective)}>
-                {Object.entries(OBJECTIVES).map(([id, o]) => (
-                  <option key={id} value={id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="muted small">
-              {OBJECTIVES[objective].description} Você pode vencer por qualquer um dos quatro
-              caminhos.
-            </p>
-            <button className="button primary full" disabled={status !== 'online'}>
-              {intent === 'join' ? 'Entrar na sala' : 'Reunir o conselho'}
+            <button type="submit" className="primary" disabled={!online}>
+              {form === 'create' ? 'Reunir o conselho' : 'Entrar na sala'}
               <ArrowRight size={16} />
             </button>
           </form>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+      <footer className="entry-footer">
+        <span>
+          <i className={online ? 'status-dot' : 'status-dot offline'} />
+          {online ? 'Conselho disponível' : 'Conectando ao conselho…'}
+        </span>
+        <span>1550 · O ALVORECER DE UMA NOVA ORDEM</span>
+        <span>Natural Earth · cartografia de domínio público</span>
+      </footer>
+    </main>
   );
 }
 export function Lobby({
   game,
-  me,
+  playerId,
   command,
   leave,
 }: {
   game: GameView;
-  me: Player;
+  playerId: string;
   command: Command;
   leave: () => void;
 }) {
-  const host = game.hostId === me.id;
+  const me = game.players.find((p) => p.id === playerId)!,
+    host = game.hostId === playerId;
+  const taken = game.players.filter((p) => p.id !== playerId).map((p) => p.nationId);
+  const map = useMemo(() => game.provinces, [game.matchConfig.mapId]);
   return (
-    <div className="lobby-screen">
-      <Atlas provinces={preview} players={factions} mode="POLITICAL" preview />
-      <div className="lobby-vignette" />
-      <header className="entry-top">
+    <main className="lobby-viewport">
+      <Atlas provinces={map} players={game.players} mode="POLITICAL" preview />
+      <div className="entry-shade" />
+      <header className="entry-header">
         <Brand />
-        <button className="button ghost" onClick={leave}>
-          <LogOut size={15} />
-          Voltar
+        <button className="quiet-button" onClick={leave}>
+          Sair do conselho
         </button>
       </header>
-      <main className="lobby-window glass">
-        <header>
-          <div>
-            <div className="eyebrow">CONSELHO DE GUERRA</div>
-            <h1>Reúna o conselho.</h1>
-            <p>Todos acessam o mesmo servidor. Compartilhe o código da sala.</p>
-          </div>
+      <div className="lobby-panel framed-panel">
+        <section className="lobby-council">
+          <span className="eyebrow">SALA DE GUERRA</span>
+          <h1>Reúna o conselho.</h1>
           <div className="room-invite">
             <small>CÓDIGO DA SALA</small>
             <strong>{game.code}</strong>
-            <span>{game.players.length} / 8 participantes</span>
+            <span>{game.players.length} / 8 lugares ocupados</span>
           </div>
-        </header>
-        <div className="lobby-body">
-          <section>
-            <h2>
-              <Crown size={18} />
-              Assentos do conselho
-            </h2>
-            <div className="lobby-players">
-              {game.players.map((p) => (
-                <div className="lobby-player" key={p.id}>
-                  <span className="nation-shield" style={{ color: p.color, borderColor: p.color }}>
-                    <Flag size={18} />
-                  </span>
-                  <div>
-                    <strong>
-                      {p.name}
-                      {p.id === me.id && <small> VOCÊ</small>}
-                    </strong>
-                    <span>
-                      {p.nation} · {OBJECTIVES[p.objective].name}
-                    </span>
-                  </div>
-                  <small className="player-status">
-                    {p.bot ? (
-                      <Bot size={15} />
-                    ) : p.online ? (
-                      <Check size={15} />
-                    ) : (
-                      <Clock3 size={15} />
-                    )}{' '}
-                    {p.id === game.hostId
-                      ? 'Anfitrião'
-                      : p.bot
-                        ? 'Bot'
-                        : p.online
-                          ? 'Pronto para entrar'
-                          : 'Ausente'}
+          <div className="council-list">
+            {game.players.map((p) => (
+              <div className="council-seat" key={p.id}>
+                <CoatOfArms nationId={p.nationId} size={26} />
+                <div>
+                  <strong>
+                    {p.name}
+                    {p.id === game.hostId && <Crown size={12} />}
+                  </strong>
+                  <small>
+                    {p.nation} · {p.bot ? 'Conselho autônomo' : p.online ? 'Presente' : 'Ausente'}
                   </small>
-                  {host && !p.bot && !p.online && (
-                    <button
-                      className="icon-button"
-                      aria-label={`Substituir ${p.name} por bot`}
-                      onClick={() => command({ type: 'REPLACE_WITH_BOT', playerId: p.id })}
-                    >
-                      <Bot size={16} />
-                    </button>
-                  )}
                 </div>
-              ))}
+                {host && !p.online && !p.bot && (
+                  <button
+                    title="Substituir ausente por bot"
+                    onClick={() => command({ type: 'REPLACE_WITH_BOT', playerId: p.id })}
+                  >
+                    Bot
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {host && (
+            <button
+              disabled={game.players.length >= 8}
+              onClick={() => command({ type: 'ADD_BOT' })}
+            >
+              <Plus size={15} />
+              Adicionar bot
+            </button>
+          )}
+          <p className="muted">
+            Todos usam o mesmo servidor. Compartilhe o código com os demais estrategistas.
+          </p>
+        </section>
+        <section className="lobby-selection">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">UM LUGAR NA HISTÓRIA</span>
+              <h2>Escolha sua nação.</h2>
             </div>
-            {host && game.players.length < 8 && (
-              <button className="button outline full" onClick={() => command({ type: 'ADD_BOT' })}>
-                <Plus size={16} />
-                Adicionar bot
-              </button>
-            )}
-            <p className="lobby-help">
-              <Users size={16} />
-              São necessários pelo menos 3 participantes. Bots completam os assentos livres.
-            </p>
-          </section>
-          <aside>
+            <span className="tag">{host ? 'ANFITRIÃO' : 'CONVIDADO'}</span>
+          </div>
+          <NationCards
+            selected={me.nationId}
+            taken={taken}
+            onSelect={(nationId) => command({ type: 'SET_IDENTITY', nationId })}
+          />
+          <div className="lobby-settings">
             <label>
-              Formato
+              Cenário
               <select
                 disabled={!host}
                 value={game.mode}
                 onChange={(e) => command({ type: 'SET_MODE', mode: e.target.value as GameMode })}
               >
-                <option value="quick">Rápido · até 60 minutos</option>
-                <option value="campaign">Campanha · alvo de 3–5 horas</option>
+                <option value="quick">Rápido · 20 rodadas de 3 minutos</option>
+                <option value="campaign">Mundial · 40 rodadas de 7,5 minutos</option>
               </select>
             </label>
-            <p className="small muted">
-              {game.maxTurns} rodadas de até {game.turnSeconds / 60} minutos. O tempo de jogo
-              depende das decisões do grupo.
-            </p>
-            <label>
-              Legado de preferência
-              <select
-                value={me.objective}
-                onChange={(e) =>
-                  command({
-                    type: 'SET_IDENTITY',
-                    objective: e.target.value as Objective,
-                    doctrine: me.doctrine,
-                  })
-                }
-              >
-                {Object.entries(OBJECTIVES).map(([id, o]) => (
-                  <option value={id} key={id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {game.mode === 'quick' && (
+              <label>
+                Continente
+                <select
+                  disabled={!host}
+                  value={game.theater}
+                  onChange={(e) =>
+                    command({ type: 'SET_MODE', mode: 'quick', theater: e.target.value as Theater })
+                  }
+                >
+                  {THEATERS.map((t) => (
+                    <option key={t} value={t}>
+                      {CONTINENTS[t]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               Política religiosa
               <select
-                value={me.doctrine}
+                value={me.religiousPolicy}
                 onChange={(e) =>
                   command({
                     type: 'SET_IDENTITY',
-                    objective: me.objective,
-                    doctrine: e.target.value as Player['doctrine'],
+                    nationId: me.nationId,
+                    religiousPolicy: e.target.value as 'TOLERANCE' | 'INQUISITION',
                   })
                 }
               >
-                <option value="tolerant">Tolerante</option>
-                <option value="devout">Confessional</option>
+                <option value="TOLERANCE">Édito de Tolerância · −10% imposto</option>
+                <option value="INQUISITION">Inquisição · conversão rápida</option>
               </select>
             </label>
-            <p className="small muted">
-              Religião estatal: {me.faith}. Política confessional gera influência adicional nas
-              províncias da sua fé.
-            </p>
-            <button
-              className="button primary full"
-              disabled={!host || game.players.length < 3}
-              onClick={() => command({ type: 'START_GAME' })}
-            >
-              <Flag size={16} />
-              {host ? 'Iniciar campanha' : 'Aguardando anfitrião'}
-            </button>
-          </aside>
-        </div>
-      </main>
-    </div>
+          </div>
+          <div className="lobby-bottom">
+            <span>
+              <Ship size={16} />
+              {game.provinces.filter((p) => p.kind === 'LAND').length} terras e rotas marítimas
+            </span>
+            {host ? (
+              <button
+                className="primary"
+                disabled={game.players.length < 3}
+                onClick={() => command({ type: 'START_GAME' })}
+              >
+                Iniciar campanha <ArrowRight size={16} />
+              </button>
+            ) : (
+              <p className="muted">Aguardando o anfitrião iniciar a campanha.</p>
+            )}
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }

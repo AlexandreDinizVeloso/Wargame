@@ -1,45 +1,46 @@
-# Concórdia: conceito e evolução
+# Concórdia — direção de jogo na v0.3
 
-## Direção escolhida
+## Da conquista à governança
 
-Uma sessão de estratégia entre 3–8 pessoas, com decisões de guerra, economia, religião e negociação. O mapa deve permitir compreender a situação rapidamente; cada conquista cria despesas e trabalho de integração.
+A sessão continua voltada a 3–8 pessoas, entre a leitura rápida de Risk/War e decisões selecionadas de Grand Strategy. Ordens são simultâneas; alianças ajudam, mas podem ser rompidas. A ambientação usa a Terra e nações por volta de 1550, com territórios e instituições simplificados.
 
-As preferências confirmadas são cenário histórico, Europa entre 1450 e 1650, equilíbrio entre guerra e diplomacia, ordens simultâneas e alianças rompíveis com custo e trégua. O primeiro tabuleiro usa regiões por volta de 1550.
+A v0.3 troca os quatro legados percentuais por dois resultados explícitos: **Dominação Total** e **Pacificação Imperial**. Economia, religião e comércio deixam de pontuar vitórias isoladas; passam a sustentar guerra, negociação e formação de um conselho imperial.
 
-Rápido tem até 20 rodadas de 3 minutos. Campanha tem até 40 de 7,5 minutos. Metas de vitória, confirmação antecipada e escolhas do grupo alteram a duração; ainda é necessário medir sessões humanas de 60 minutos e 3–5 horas.
+## Escolhas que podem ser experimentadas
 
-## Decisões que já podem ser experimentadas
+- **Governar ou ocupar:** tomar uma cidade inimiga gera ocupação. O tratado decide se a propriedade muda; integração e revolta continuam importando.
+- **Compor e posicionar:** infantaria protege canhões, cavalaria procura terreno aberto e frotas levam exércitos a outras costas. Moral, treinamento e suprimento limitam a força bruta.
+- **Construir e mobilizar:** cidade e batalhão possuem ordens próprias. Um mercado pode ser construído enquanto seu exército marcha.
+- **Declarar ou negociar:** guerra formal convoca aliados e causa desgaste. Termos de paz produzem efeitos duradouros, incluindo submissão e religião estatal.
+- **Dissuadir ou conquistar:** o Imperador pode ameaçar uma retaliação coletiva. O contador de paz considera o mundo inteiro, incluindo guerras fora da Dieta.
+- **Converter ou tolerar:** as quatro doutrinas afetam exércitos, infraestrutura e receitas. Cidades Sagradas recolhem dízimos globais; conversão rápida cria tensão.
 
-- **Conquistar ou integrar:** província recém-tomada rende pouco; uma guarnição ou uma ordem de pacificação precisa torná-la sustentável.
-- **Concentrar ou distribuir tropas:** treinamento, moral, terreno e fortificações ajudam; excesso de soldados sofre atrito e manutenção progressiva.
-- **Recrutar ou contratar:** recrutas consomem população; mercenários são imediatos e mais caros de manter.
-- **Acordo ou pressão:** alianças, acesso militar, tributos, subsídios, embargos e financiamento de rebeldes produzem consequências reais.
-- **Conversão ou coexistência:** missões podem alterar uma província vizinha e preparar uma pretensão religiosa; diferenças reduzem a eficiência fiscal.
-- **Quatro legados:** supremacia, prosperidade, concórdia e influência espiritual podem vencer a partida. A hegemonia aos 75% dá aos adversários uma chance de reagir.
+As crenças Sol Invictus, Conclave Mercante, Sínodo Reformado e Tradição Ancestral são abstrações fictícias de jogo. Não representam atributos inerentes de povos ou religiões reais. Os nomes históricos das nações e a cartografia atual agrupada não tornam o cenário uma simulação histórica precisa.
 
-Todas as crenças usam as mesmas fórmulas. O sistema abstrai instituições e integração política, sem atribuir superioridade cultural a religiões reais. Estados, fronteiras e crenças do mapa são simplificados.
+## Escopo e duração
 
-## Interface e tecnologia
+Rápido usa um teatro de 16 terras: Europa, Américas ou Ásia/Pacífico. Campanha usa os três mais MENA/África, com 56 terras e 13 zonas marítimas. Escolher um teatro desloca nações cuja sede histórica não pertence ao tabuleiro.
 
-O mapa ocupa o viewport. A câmera permite movimento e zoom; dados aparecem em camadas política, religiosa, econômica/logística, diplomática e de estabilidade. HUD, gavetas, conselho, ordens e relatórios ficam sobrepostos ao tabuleiro.
+Os limites de planejamento são 60 minutos no Rápido e cinco horas na Campanha. Confirmação antecipada e vitória antes do limite encurtam a sessão. Essas durações precisam ser medidas com pessoas; bots não negociam em tempo real.
 
-React/TypeScript/SVG oferece acesso pelo navegador e rapidez para iterar essa interface. O motor não depende dessa escolha: `shared/` mantém contratos e fórmulas, `server/` resolve comandos e `src/` apenas apresenta o estado e envia intenções. Um cliente Godot pode consumir o mesmo WebSocket; esse cliente ainda não foi implementado.
+## Mesa de comando
 
-O servidor faz salvamento em JSON local, com escrita atômica e backup. A separação permite migrar a persistência para SQLite ou outro banco quando a operação precisar disso, preservando regras e protocolo.
+A HUD ocupa a janela inteira. Cidades e formações têm alvos de clique distintos. Janelas desanexáveis permitem montar uma mesa com administração, exército, diplomacia, Dieta e relatórios abertos ao mesmo tempo. O replay e o som apresentam os eventos já resolvidos pelo servidor; não influenciam a matemática.
 
-## Balanceamento
+Os relatórios JSON e TXT permitem examinar todas as rodadas, guerras, baixas, economia e eleições. O objetivo é usar evidência de partidas para orientar próximos ajustes. Os bots têm prioridades diferentes e não substituem um playtest humano.
 
-Os seis bots da simulação usam quatro arquétipos: Militarist, Merchant, Theocrat e Diplomat. Composição e posições são rotacionadas entre partidas para reduzir a associação entre uma nação e um estilo.
+## Arquitetura
 
-A verificação automática exige 10–45% de vitórias para cada condição em 200 partidas. Os resultados, parâmetros e comandos reprodutíveis estão em [BALANCE.md](BALANCE.md). Isso mede o comportamento dos bots e é uma base para testes humanos.
+O cliente web oferece acesso simples por navegador, incluindo celulares. O servidor recebe comandos JSON e mantém o estado autoritativo. Nenhuma regra exige React, SVG ou DOM; uma interface Godot futura pode consumir os mesmos dados e eventos.
 
-## Próximas decisões de design
+As campanhas são salvas em disco e podem ser retomadas após queda. Arquivos v0.2 são preservados e migrados; o mapa antigo permanece nessas campanhas para evitar redistribuir territórios já conquistados.
 
-1. **Derrota:** eliminação ou vassalagem com possibilidade de libertação? A implementação atual mantém o derrotado como espectador; vassalagem ajudaria a manter todos envolvidos em sessões longas.
-2. **Informação:** o mapa atual é público, com ordens privadas. Espionagem e inteligência limitada podem aumentar a incerteza depois de testar a negociação básica.
-3. **Mapa:** substituir a grade esquemática por províncias geográficas e conexões marítimas explícitas.
-4. **Vitória:** testar legados públicos com contratos pessoais secundários, em vez de depender apenas de barras de progresso visíveis.
-5. **Comércio:** acrescentar rotas e acordos bilaterais além da renda local, embargo e subsídio já implementados.
-6. **Combate:** avaliar posturas de marcha/defesa/cerco antes de introduzir muitos tipos de unidade.
+## Evoluções que ainda não fazem parte desta versão
 
-As fórmulas e decisões de arredondamento em uso estão em [REGRAS_V2.md](REGRAS_V2.md). O contrato de integração está em [PROTOCOL.md](PROTOCOL.md).
+- Névoa de guerra e inteligência com informação parcial.
+- Mapas e fronteiras verdadeiramente históricos por data.
+- Cliente nativo Godot com apresentação própria.
+- Transporte de múltiplos batalhões por frota e rotas comerciais marítimas explícitas.
+- Ferramentas de modificação de cenários e geração de nações pelo usuário.
+
+Essas ideias não são requisitos funcionais pendentes da v0.3 entregue; definem expansões além do escopo atual.

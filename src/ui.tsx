@@ -1,18 +1,37 @@
-import { Crown, Handshake, Landmark, Sun, Swords } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import type { GameCommand, Objective } from '../shared/types';
+import { Crown } from 'lucide-react';
+import type { GameCommand, NationId } from '../shared/types';
+import { EMBLEMS, nationOf } from '../shared/rules';
 export type Command = (command: GameCommand) => void;
 export const number = (value: number, digits = 0) =>
   new Intl.NumberFormat('pt-BR', { maximumFractionDigits: digits }).format(value);
-export const objectives: Record<Objective, LucideIcon> = {
-  conquest: Swords,
-  prosperity: Landmark,
-  concord: Handshake,
-  faith: Sun,
-};
-export function ObjectiveIcon({ objective, size = 16 }: { objective: Objective; size?: number }) {
-  const Icon = objectives[objective];
-  return <Icon size={size} />;
+export function CoatOfArms({ nationId, size = 36 }: { nationId: NationId; size?: number }) {
+  const n = nationOf(nationId);
+  return (
+    <svg
+      width={size}
+      height={size * 1.15}
+      viewBox="0 0 32 38"
+      role="img"
+      aria-label={`Brasão de ${n.name}`}
+    >
+      <path
+        d="M2 2H30V22Q30 31 16 36Q2 31 2 22Z"
+        fill={n.color}
+        fillOpacity=".15"
+        stroke={n.color}
+      />
+      <g
+        transform="translate(5 6) scale(.92)"
+        fill="none"
+        stroke={n.color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      >
+        <path d={EMBLEMS[n.emblem]} />
+      </g>
+    </svg>
+  );
 }
 export function Brand() {
   return (
@@ -55,4 +74,7 @@ export function typing(target: EventTarget | null) {
     target instanceof HTMLElement &&
     !!target.closest('input,textarea,select,[contenteditable=true]')
   );
+}
+export function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="empty-state">{children}</p>;
 }

@@ -1,66 +1,60 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Castle, Church, Crown, Mountain, Trees, TriangleAlert, Waves, Wheat } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import type { Terrain } from '../shared/map';
-import type { GameView, MapMode, Player, PlayerOrder, Province, ReligionId } from '../shared/types';
-import { clamp, effectiveTax, supplyLimit } from '../shared/rules';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import type {
+  Battalion,
+  GameView,
+  MapMode,
+  Player,
+  PlayerOrder,
+  Province,
+  ReligionId,
+  TurnResolutionReport,
+} from '../shared/types';
+import {
+  atWar,
+  clamp,
+  controller,
+  effectiveTax,
+  getRelation,
+  RELIGIONS,
+  supplyLimit,
+  unitCount,
+} from '../shared/rules';
 import { typing } from './ui';
-
 export const MAP_MODES: { id: MapMode; name: string; key: string; description: string }[] = [
   {
     id: 'POLITICAL',
     name: 'Político',
     key: '1',
-    description: 'Reinos e fronteiras. Hachura: pacificação abaixo de 50.',
+    description: 'Cores dos reinos; hachura: integração baixa ou ocupação.',
   },
   {
     id: 'RELIGIOUS',
     name: 'Religião',
     key: '2',
-    description: 'Crença local. Losango: divergência com a religião estatal.',
+    description: 'Crenças e divergência com a fé estatal.',
   },
   {
     id: 'ECONOMIC_SUPPLY',
     name: 'Economia',
     key: '3',
-    description:
-      'Verde: maior imposto e folga de suprimento. Vermelho: baixa renda ou exército excessivo.',
+    description: 'Imposto, mercados e pressão sobre o suprimento.',
   },
   {
     id: 'DIPLOMATIC',
     name: 'Diplomacia',
     key: '4',
-    description:
-      'Verde: próprio. Azul: aliado. Amarelo: trégua. Laranja: embargo/tributo. Vermelho: guerra.',
+    description: 'Próprio, aliados, tréguas, bloqueios e guerras formais.',
   },
   {
     id: 'UNREST',
     name: 'Estabilidade',
     key: '5',
-    description: 'Verde: pacificação alta e pouca revolta. Alerta a partir de 70 de revolta.',
+    description: 'Pacificacão, revolta e tensão local.',
   },
 ];
-export const FAITH_COLORS: Record<ReligionId, string> = {
-  Catolicismo: '#d7b779',
-  Anglicanismo: '#b48fc8',
-  Protestantismo: '#75a9d1',
-  Ortodoxia: '#a9b97b',
-  'Islã sunita': '#63b79f',
-};
-const TERRAIN_ICONS: Record<Terrain, LucideIcon> = {
-  plains: Wheat,
-  coastal: Waves,
-  forest: Trees,
-  hills: Mountain,
-  mountains: Mountain,
-};
-const heat = (value: number) => {
-  const t = clamp(value, 0, 1),
-    a = t < 0.5 ? [63, 151, 118] : [211, 174, 80],
-    b = t < 0.5 ? [211, 174, 80] : [192, 70, 68],
-    u = t < 0.5 ? t * 2 : (t - 0.5) * 2;
-  return `rgb(${a.map((n, i) => Math.round(n + (b[i] - n) * u)).join(',')})`;
-};
+export const FAITH_COLORS: Record<ReligionId, string> = Object.fromEntries(
+  Object.entries(RELIGIONS).map(([id, r]) => [id, r.color]),
+) as Record<ReligionId, string>;
 export interface CameraHandle {
   zoomIn: () => void;
   zoomOut: () => void;
@@ -69,17 +63,20 @@ export interface CameraHandle {
 }
 interface Props {
   provinces: Province[];
-  players: Pick<Player, 'id' | 'color' | 'nation' | 'faith'>[];
+  players: Player[];
   mode: MapMode;
   referenceId?: string;
   selectedId?: string;
+  selectedArmyId?: string;
   game?: GameView;
   orders?: PlayerOrder[];
   onSelect?: (p: Province) => void;
+  onSelectArmy?: (a: Battalion) => void;
   onTactical?: (p: Province) => void;
   preview?: boolean;
+  replay?: { report: TurnResolutionReport; progress: number } | null;
 }
-const DEFAULT_CAMERA = { x: 440, y: 285, zoom: 1 };
+const heat = (n: number) => `hsl(${145 - clamp(n, 0, 1) * 140} 36% ${38 + clamp(n, 0, 1) * 8}%)`;
 const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   {
     provinces,
@@ -87,98 +84,120 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     mode,
     referenceId,
     selectedId,
+    selectedArmyId,
     game,
     orders = [],
     onSelect,
+    onSelectArmy,
     onTactical,
     preview = false,
+    replay,
   },
-  handle,
+  ref,
 ) {
   const root = useRef<HTMLDivElement>(null),
-    [bounds, setBounds] = useState({ width: 1440, height: 900 }),
-    [camera, setCamera] = useState(DEFAULT_CAMERA),
-    [grabbing, setGrabbing] = useState(false),
-    [spaceHeld, setSpaceHeld] = useState(false);
-  const space = useRef(false),
-    dragged = useRef(false),
-    pan = useRef<{
+    [bounds, setBounds] = useState({ width: 1440, height: 900 });
+  const extent = useMemo(() => {
+    const points = provinces.filter((p) => p.kind === 'LAND').flatMap((p) => p.rings.flat());
+    const xs = points.map((p) => p[0]),
+      ys = points.map((p) => p[1]);
+    const minX = Math.min(...xs),
+      maxX = Math.max(...xs),
+      minY = Math.min(...ys),
+      maxY = Math.max(...ys);
+    return {
+      x: (minX + maxX) / 2,
+      y: (minY + maxY) / 2,
+      width: maxX - minX + 80,
+      height: maxY - minY + 80,
+    };
+  }, [provinces.length, game?.matchConfig.mapId]);
+  const [camera, setCamera] = useState({ x: extent.x, y: extent.y, zoom: 1 }),
+    [grabbing, setGrabbing] = useState(false);
+  const pan = useRef<{
       x: number;
       y: number;
-      camera: typeof camera;
+      start: typeof camera;
       provinceId: string | null;
+      armyId: string | null;
       button: number;
       touch: boolean;
-    } | null>(null);
-  const fit = Math.max(
-    0.1,
-    Math.min(bounds.width / 1030, Math.max(240, bounds.height - 170) / 610),
-  );
-  const scale = fit * camera.zoom,
-    viewWidth = bounds.width / scale,
-    viewHeight = bounds.height / scale;
-  const left = camera.x - viewWidth / 2,
-    top = camera.y - viewHeight / 2;
-  const latest = useRef({ bounds, fit, camera });
-  latest.current = { bounds, fit, camera };
+    } | null>(null),
+    space = useRef(false),
+    dragged = useRef(false);
+  const fit = Math.min(
+      bounds.width / extent.width,
+      Math.max(200, bounds.height - 150) / extent.height,
+    ),
+    scale = fit * camera.zoom;
+  const latest = useRef({ camera, bounds, fit, extent });
+  latest.current = { camera, bounds, fit, extent };
   function changeZoom(factor: number, point?: { x: number; y: number }) {
     const { bounds, fit } = latest.current;
     setCamera((old) => {
       const zoom = clamp(old.zoom * factor, 0.8, 3.5),
         px = point?.x ?? bounds.width / 2,
         py = point?.y ?? bounds.height / 2;
-      const worldX = old.x + (px - bounds.width / 2) / (fit * old.zoom),
-        worldY = old.y + (py - bounds.height / 2) / (fit * old.zoom);
+      const wx = old.x + (px - bounds.width / 2) / (fit * old.zoom),
+        wy = old.y + (py - bounds.height / 2) / (fit * old.zoom);
       return {
-        x: worldX - (px - bounds.width / 2) / (fit * zoom),
-        y: worldY - (py - bounds.height / 2) / (fit * zoom),
+        x: wx - (px - bounds.width / 2) / (fit * zoom),
+        y: wy - (py - bounds.height / 2) / (fit * zoom),
         zoom,
       };
     });
   }
   useImperativeHandle(
-    handle,
+    ref,
     () => ({
       zoomIn: () => changeZoom(1.2),
       zoomOut: () => changeZoom(1 / 1.2),
-      reset: () => setCamera(DEFAULT_CAMERA),
-      focus: (p) => setCamera((old) => ({ ...old, x: p.x, y: p.y })),
+      reset: () => setCamera({ x: latest.current.extent.x, y: latest.current.extent.y, zoom: 1 }),
+      focus: (p) => setCamera((old) => ({ ...old, x: p.x, y: p.y, zoom: Math.max(old.zoom, 1.8) })),
     }),
     [],
   );
   useEffect(() => {
+    setCamera({ x: extent.x, y: extent.y, zoom: 1 });
+  }, [extent.x, extent.y]);
+  useEffect(() => {
     if (!root.current) return;
-    const observer = new ResizeObserver((entries) => {
-      const r = entries[0].contentRect;
-      setBounds({ width: r.width, height: r.height });
-    });
+    const observer = new ResizeObserver((entries) =>
+      setBounds({ width: entries[0].contentRect.width, height: entries[0].contentRect.height }),
+    );
     observer.observe(root.current);
     return () => observer.disconnect();
   }, []);
+  useEffect(() => {
+    const element = root.current;
+    if (!element || preview) return;
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = element.getBoundingClientRect();
+      changeZoom(Math.exp(-e.deltaY * 0.0016), { x: e.clientX - r.left, y: e.clientY - r.top });
+    };
+    element.addEventListener('wheel', wheel, { passive: false });
+    return () => element.removeEventListener('wheel', wheel);
+  }, [preview]);
   useEffect(() => {
     if (preview) return;
     const down = (e: KeyboardEvent) => {
         if (
           e.code === 'Space' &&
           !typing(e.target) &&
-          !(e.target instanceof HTMLElement && e.target.closest('button,.game-modal'))
+          !(e.target instanceof Element && e.target.closest('button,[role=dialog]'))
         ) {
           e.preventDefault();
           space.current = true;
-          setSpaceHeld(true);
         }
       },
       up = (e: KeyboardEvent) => {
-        if (e.code === 'Space') {
-          space.current = false;
-          setSpaceHeld(false);
-        }
+        if (e.code === 'Space') space.current = false;
       },
       blur = () => {
         space.current = false;
-        setSpaceHeld(false);
-        setGrabbing(false);
         pan.current = null;
+        setGrabbing(false);
       };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
@@ -189,67 +208,84 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
       window.removeEventListener('blur', blur);
     };
   }, [preview]);
-  useEffect(() => {
-    const element = root.current;
-    if (!element || preview) return;
-    const wheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const r = element.getBoundingClientRect();
-      changeZoom(Math.exp(-e.deltaY * 0.0015), { x: e.clientX - r.left, y: e.clientY - r.top });
-    };
-    element.addEventListener('wheel', wheel, { passive: false });
-    return () => element.removeEventListener('wheel', wheel);
-  }, [preview]);
-  const relationTo = (owner: string | null) =>
-    game?.relations.find(
-      (r) => (r.a === referenceId && r.b === owner) || (r.b === referenceId && r.a === owner),
-    );
-  function color(p: Province) {
-    const owner = players.find((x) => x.id === p.ownerId);
+  const color = (p: Province) => {
+    const owner = players.find((a) => a.id === controller(p));
+    if (preview)
+      return {
+        EUROPE: '#a7af8b',
+        AMERICAS: '#619c8d',
+        MENA_AFRICA: '#b69b6a',
+        ASIA: '#8b91aa',
+        SEA_ZONE: '#253d51',
+      }[p.continent];
+    if (p.kind === 'SEA_ZONE') return '#19394c';
     if (mode === 'RELIGIOUS') return FAITH_COLORS[p.religion];
     if (mode === 'UNREST') return heat(Math.max(p.unrest / 100, 1 - p.pacification / 100));
     if (mode === 'ECONOMIC_SUPPLY') {
-      const utilization =
-        (p.troops +
-          (game?.stationedArmies
-            .filter((a) => a.provinceId === p.id)
-            .reduce((s, a) => s + a.troops, 0) ?? 0)) /
-        supplyLimit(p);
+      const troops =
+        game?.battalions
+          .filter((a) => a.provinceId === p.id && !a.embarkedOnId)
+          .reduce((n, a) => n + unitCount(a), 0) ?? 0;
       return heat(
-        0.6 * (1 - Math.min(1, effectiveTax(p, owner?.faith ?? p.religion) / 7)) +
-          0.4 * Math.min(1, utilization / 1.5),
+        0.55 * (1 - Math.min(1, effectiveTax(p, owner?.faith ?? p.religion) / 8)) +
+          0.45 * Math.min(1, troops / supplyLimit(p)),
       );
     }
-    if (mode === 'DIPLOMATIC') {
-      const r = relationTo(p.ownerId);
-      return p.ownerId === referenceId
-        ? '#55ae87'
+    if (mode === 'DIPLOMATIC' && game && referenceId) {
+      const id = controller(p),
+        r = id ? getRelation(game, referenceId, id) : null;
+      return id === referenceId
+        ? '#4b9c76'
         : r?.allied
-          ? '#629bd1'
-          : r && r.truceUntil >= (game?.turn ?? 1)
-            ? '#d5bb62'
+          ? '#548cbf'
+          : r && r.truceUntil >= game.turn
+            ? '#c4ab58'
             : r && (r.embargoes.length || r.tribute)
-              ? '#d69255'
-              : r?.atWar
-                ? '#d05a59'
-                : owner
-                  ? '#849aa1'
-                  : '#3c5159';
+              ? '#bb804b'
+              : id && atWar(game, referenceId, id)
+                ? '#bd5655'
+                : '#546c71';
     }
-    return owner?.color ?? '#52716e';
-  }
-  function targetProvince(event: React.PointerEvent) {
-    const target = event.target instanceof Element ? event.target.closest('[data-province]') : null;
-    return target?.getAttribute('data-province') ?? null;
-  }
+    return owner?.color ?? '#536c67';
+  };
+  const armies = game?.battalions.filter((a) => !a.embarkedOnId) ?? [];
+  const routes = armies
+    .filter((a) => a.ownerId === referenceId)
+    .map((a) => {
+      const order = orders.find((o) => o.type === 'MOVE_BATTALION' && o.battalionId === a.id);
+      const path =
+        order?.type === 'MOVE_BATTALION'
+          ? (order.path ?? (order.targetProvinceId ? [order.targetProvinceId] : []))
+          : a.pathQueue;
+      return { army: a, path };
+    })
+    .filter((r) => r.path.length);
+  const pathFor = (ids: string[]) => {
+    const points = ids
+      .map((id) => provinces.find((p) => p.id === id))
+      .filter((p): p is Province => !!p);
+    return points
+      .map((p, i) => {
+        if (i === 0) return `M${p.x},${p.y}`;
+        const from = points[i - 1],
+          dx = p.x - from.x,
+          dy = p.y - from.y;
+        return `Q${(p.x + from.x) / 2 - dy * 0.14},${(p.y + from.y) / 2 + dx * 0.14} ${p.x},${p.y}`;
+      })
+      .join(' ');
+  };
+  const target = (event: React.PointerEvent) =>
+    event.target instanceof Element
+      ? (event.target.closest('[data-province]')?.getAttribute('data-province') ?? null)
+      : null;
   return (
     <div
       ref={root}
-      className={`map-stage ${preview ? 'preview-map' : ''} ${grabbing ? 'grabbing' : spaceHeld ? 'grab-ready' : ''}`}
+      className={`map-stage ${grabbing ? 'grabbing' : ''} ${preview ? 'preview-map' : ''}`}
+      data-mode={mode}
       data-zoom={camera.zoom.toFixed(3)}
       data-camera-x={camera.x.toFixed(2)}
       data-camera-y={camera.y.toFixed(2)}
-      data-mode={mode}
       onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         dragged.current = false;
@@ -260,8 +296,12 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           pan.current = {
             x: e.clientX,
             y: e.clientY,
-            camera: { ...camera },
-            provinceId: targetProvince(e),
+            start: { ...camera },
+            provinceId: target(e),
+            armyId:
+              e.target instanceof Element
+                ? (e.target.closest('[data-battalion]')?.getAttribute('data-battalion') ?? null)
+                : null,
             button: e.button,
             touch,
           };
@@ -270,30 +310,32 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         }
       }}
       onPointerMove={(e) => {
-        const start = pan.current;
-        if (!start) return;
-        const dx = e.clientX - start.x,
-          dy = e.clientY - start.y;
+        const p = pan.current;
+        if (!p) return;
+        const dx = e.clientX - p.x,
+          dy = e.clientY - p.y;
         if (Math.hypot(dx, dy) > 4) dragged.current = true;
         if (dragged.current)
           setCamera({
-            ...start.camera,
-            x: start.camera.x - dx / (fit * start.camera.zoom),
-            y: start.camera.y - dy / (fit * start.camera.zoom),
+            ...p.start,
+            x: p.start.x - dx / (fit * p.start.zoom),
+            y: p.start.y - dy / (fit * p.start.zoom),
           });
       }}
       onPointerUp={(e) => {
-        const start = pan.current;
-        if (!start) return;
+        const p = pan.current;
+        if (!p) return;
         pan.current = null;
         setGrabbing(false);
         if (e.currentTarget.hasPointerCapture(e.pointerId))
           e.currentTarget.releasePointerCapture(e.pointerId);
-        if (!dragged.current && start.provinceId) {
-          const p = provinces.find((p) => p.id === start.provinceId);
-          if (p && start.button === 2) onTactical?.(p);
-          else if (p && start.touch) {
-            onSelect?.(p);
+        if (!dragged.current && p.provinceId) {
+          const province = provinces.find((q) => q.id === p.provinceId)!;
+          if (p.button === 2) onTactical?.(province);
+          else if (p.touch) {
+            const army = p.armyId ? armies.find((a) => a.id === p.armyId) : undefined;
+            if (army) onSelectArmy?.(army);
+            else onSelect?.(province);
             dragged.current = true;
           }
         }
@@ -305,279 +347,263 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     >
       <svg
         className="world-map"
-        viewBox={`${left} ${top} ${viewWidth} ${viewHeight}`}
-        aria-label="Mapa estratégico da Europa, com câmera livre"
+        viewBox={`${camera.x - bounds.width / scale / 2} ${camera.y - bounds.height / scale / 2} ${bounds.width / scale} ${bounds.height / scale}`}
         role="group"
+        aria-label="Mapa-múndi estratégico com províncias orgânicas"
       >
         <defs>
           <pattern id="ocean-grid" width="80" height="80" patternUnits="userSpaceOnUse">
-            <path d="M80 0H0V80" fill="none" stroke="#7897a2" strokeWidth=".6" opacity=".11" />
-            <path
-              d="M35 40q5-3 10 0t10 0"
-              fill="none"
-              stroke="#7897a2"
-              strokeWidth=".5"
-              opacity=".15"
-            />
-          </pattern>
-          <pattern id="land-texture" width="7" height="7" patternUnits="userSpaceOnUse">
-            <circle cx="2" cy="2" r=".6" fill="#e0d3ac" opacity=".13" />
+            <path d="M80 0H0V80" fill="none" stroke="#a8c9cb" strokeWidth=".35" opacity=".13" />
           </pattern>
           <pattern
-            id="occupation-hatch"
-            width="8"
-            height="8"
+            id="occupation"
+            width="5"
+            height="5"
             patternUnits="userSpaceOnUse"
             patternTransform="rotate(35)"
           >
-            <path d="M0 0V8" stroke="#efcd89" strokeWidth="2" opacity=".29" />
+            <path d="M0 0V5" stroke="#f3d598" strokeWidth="1.5" opacity=".3" />
           </pattern>
-          <filter id="map-shadow" x="-15%" y="-15%" width="130%" height="140%">
-            <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#000" floodOpacity=".4" />
-          </filter>
+          <pattern id="map-texture" width="6" height="6" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r=".5" fill="#f6e3bd" opacity=".13" />
+          </pattern>
           <marker
             id="march-arrow"
             viewBox="0 0 10 10"
-            refX="9"
+            refX="8"
             refY="5"
             markerWidth="5"
             markerHeight="5"
             orient="auto"
           >
-            <path d="M0 0L10 5L0 10Z" fill="#f3d48b" />
-          </marker>
-          <marker
-            id="retreat-arrow"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="4"
-            markerHeight="4"
-            orient="auto"
-          >
-            <path d="M0 0L10 5L0 10Z" fill="#9cb9da" />
+            <path d="M0 0L10 5L0 10Z" fill="#e0c47c" />
           </marker>
         </defs>
-        <rect
-          x={left - 500}
-          y={top - 500}
-          width={viewWidth + 1000}
-          height={viewHeight + 1000}
-          fill="#111e30"
-        />
-        <rect
-          x={left - 500}
-          y={top - 500}
-          width={viewWidth + 1000}
-          height={viewHeight + 1000}
-          fill="url(#ocean-grid)"
-        />
-        <g className="ocean-labels">
-          <text x="-70" y="300" transform="rotate(-90 -70 300)">
-            OCEANUS ATLANTICUS
-          </text>
-          <text x="385" y="610">
-            MARE MEDITERRANEUM
-          </text>
-          <text x="160" y="-40">
-            EUROPA · ANNO DOMINI MDL
-          </text>
-        </g>
-        <g transform="translate(900 65)" className="compass-rose">
-          <path d="M0-35L7 0 0 35-7 0Z" />
-          <path d="M-26 0L0-5 26 0 0 5Z" />
-          <circle r="19" />
-          <text y="-45">N</text>
-          <text y="55">S</text>
-          <text x="-40" y="4">
-            W
-          </text>
-          <text x="40" y="4">
-            E
-          </text>
-        </g>
-        {provinces.map((p) => {
-          const owner = players.find((x) => x.id === p.ownerId),
-            c = color(p),
-            selected = p.id === selectedId,
-            divergent = owner && p.religion !== owner.faith,
-            TerrainIcon = TERRAIN_ICONS[p.terrain];
-          const camps = game?.stationedArmies.filter((a) => a.provinceId === p.id) ?? [];
-          const moraleColor = p.morale >= 65 ? '#83c298' : p.morale >= 35 ? '#d9b365' : '#d9766a';
+        <rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#ocean-grid)" />
+        {[
+          ...provinces.filter((p) => p.kind === 'SEA_ZONE'),
+          ...provinces.filter((p) => p.kind === 'LAND'),
+        ].map((p) => {
+          const owner = players.find((a) => a.id === controller(p));
+          const selected = p.id === selectedId;
           return (
-            <g
-              key={p.id}
-              data-province={p.id}
-              className={`province ${selected ? 'selected' : ''} ${p.unrest >= 70 ? 'unstable' : ''}`}
-              role={onSelect ? 'button' : undefined}
-              tabIndex={onSelect ? 0 : undefined}
-              aria-label={`${p.name}, ${owner?.nation ?? 'forças locais'}, ${p.troops} tropas`}
-              onClick={() => {
-                if (!dragged.current && !space.current) onSelect?.(p);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  onSelect?.(p);
-                }
-              }}
-            >
-              <title>{`${p.name} · ${owner?.nation ?? 'Forças locais'}\n${p.religion} · ${p.terrain}\n${p.troops} tropas · Moral ${p.morale} · Treinamento ${p.training.toFixed(2)}\nPacificação ${p.pacification} · Revolta ${p.unrest}`}</title>
-              <polygon
-                points={p.polygon}
-                fill={c}
-                fillOpacity={mode === 'POLITICAL' ? (owner?.id ? 0.46 : 0.22) : 0.65}
-                stroke={selected ? '#f5d797' : (owner?.color ?? '#788a80')}
-                strokeOpacity={selected ? 1 : 0.7}
-                strokeWidth={selected ? 2.7 : 1.2}
-                filter="url(#map-shadow)"
+            <g key={p.id}>
+              <path
+                className="province-shape"
+                d={p.path}
+                data-province={p.id}
+                data-kind={p.kind}
+                tabIndex={preview ? -1 : 0}
+                role="button"
+                aria-label={`${p.name}, ${p.kind === 'SEA_ZONE' ? 'zona marítima' : (owner?.nation ?? 'terra independente')}`}
+                fill={color(p)}
+                fillOpacity={p.kind === 'SEA_ZONE' ? 0.3 : 0.78}
+                stroke={selected ? '#f3d291' : p.kind === 'SEA_ZONE' ? '#49717e' : '#b6bdab'}
+                strokeOpacity={selected ? 1 : p.kind === 'SEA_ZONE' ? 0.35 : 0.55}
+                strokeWidth={selected ? 2 / scale : 0.6 / scale}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!dragged.current && !preview) onSelect?.(p);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onSelect?.(p);
+                }}
               />
-              <polygon className="province-texture" points={p.polygon} fill="url(#land-texture)" />
-              {mode === 'POLITICAL' && p.pacification < 50 && (
-                <polygon
-                  className="province-texture"
-                  points={p.polygon}
-                  fill="url(#occupation-hatch)"
-                />
+              {p.kind === 'LAND' && (
+                <path d={p.path} fill="url(#map-texture)" pointerEvents="none" />
               )}
-              <TerrainIcon
-                className="terrain-symbol"
-                x={p.x - 39}
-                y={p.y - 31}
-                width="13"
-                height="13"
-                strokeWidth="1.3"
-              />
-              {p.capital && (
-                <Crown
-                  x={p.x - 7}
-                  y={p.y - 31}
-                  width="14"
-                  height="13"
-                  strokeWidth="1.4"
-                  color={owner?.color ?? '#c6b780'}
-                />
+              {p.kind === 'LAND' && !preview && (p.pacification < 50 || p.occupierId) && (
+                <path d={p.path} fill="url(#occupation)" pointerEvents="none" />
               )}
-              {mode === 'RELIGIOUS' && divergent && (
-                <path className="faith-divergence" d={`M${p.x + 32} ${p.y - 32}l5 5-5 5-5-5z`} />
-              )}
-              <text x={p.x} y={p.y - 7} className="province-name">
-                {p.name}
-              </text>
-              <g className="army-piece" transform={`translate(${p.x - 22} ${p.y + 2})`}>
-                <rect width="44" height="28" rx="4" />
-                <path d="M7 8l3-3 3 3v8H7z" fill={owner?.color ?? '#80958c'} stroke="none" />
-                <text x="28" y="18">
-                  {p.troops}
-                </text>
-                <rect className="morale-track" x="4" y="23" width="36" height="2" rx="1" />
-                <rect
-                  x="4"
-                  y="23"
-                  width={(36 * p.morale) / 100}
-                  height="2"
-                  rx="1"
-                  fill={moraleColor}
-                  stroke="none"
-                />
-              </g>
-              {p.fortLevel > 0 && (
-                <g className="fort-piece">
-                  <Castle x={p.x + 29} y={p.y + 6} width="13" height="14" />
-                  <text x={p.x + 36} y={p.y + 31}>
-                    {p.fortLevel}
+              {p.kind === 'LAND' &&
+                (preview ||
+                  camera.zoom > 1.2 ||
+                  provinces.filter((p) => p.kind === 'LAND').length <= 16) && (
+                  <text
+                    className="province-label"
+                    x={p.x}
+                    y={p.y - 12 / scale}
+                    fontSize={Math.max(4, Math.min(11, 10 / scale))}
+                    textAnchor="middle"
+                    pointerEvents="none"
+                  >
+                    {p.name}
                   </text>
-                </g>
-              )}
-              {camps.length > 0 && (
-                <g className="foreign-army">
-                  <circle
-                    cx={p.x - 33}
-                    cy={p.y + 16}
-                    r="8"
-                    fill={players.find((x) => x.id === camps[0].ownerId)?.color ?? '#9bb7c6'}
-                  />
-                  <text x={p.x - 33} y={p.y + 19}>
-                    {camps.reduce((n, a) => n + a.troops, 0)}
-                  </text>
-                </g>
-              )}
-              {mode === 'ECONOMIC_SUPPLY' && (
-                <text className="map-number" x={p.x} y={p.y + 43}>
-                  {effectiveTax(p, owner?.faith ?? p.religion).toFixed(1)} ouro · {p.troops}/
-                  {supplyLimit(p)}
+                )}
+              {p.kind === 'SEA_ZONE' && (
+                <text
+                  className="sea-label"
+                  x={p.x}
+                  y={p.y + 24 / scale}
+                  fontSize={9 / scale}
+                  textAnchor="middle"
+                  pointerEvents="none"
+                >
+                  {p.name.toUpperCase()}
                 </text>
               )}
-              {mode === 'UNREST' && (
-                <text className="map-number" x={p.x} y={p.y + 43}>
-                  P {p.pacification} · R {p.unrest}
+              {mode === 'UNREST' && p.unrest >= 70 && p.kind === 'LAND' && (
+                <text
+                  className="unrest-warning"
+                  x={p.x + 12 / scale}
+                  y={p.y - 10 / scale}
+                  fontSize={12 / scale}
+                  pointerEvents="none"
+                >
+                  !
                 </text>
               )}
-              {mode === 'RELIGIOUS' && (
-                <text className="map-number" x={p.x} y={p.y + 43}>
-                  {p.religion}
+              {mode === 'RELIGIOUS' && owner && owner.faith !== p.religion && p.kind === 'LAND' && (
+                <text
+                  x={p.x}
+                  y={p.y + 22 / scale}
+                  fill="#fff1c7"
+                  fontSize={9 / scale}
+                  textAnchor="middle"
+                  pointerEvents="none"
+                >
+                  ◇
                 </text>
-              )}
-              {p.unrest >= 70 && (
-                <TriangleAlert
-                  className="unrest-alert"
-                  x={p.x + 28}
-                  y={p.y - 33}
-                  width="14"
-                  height="14"
-                />
               )}
             </g>
           );
         })}
-        <g pointerEvents="none">
-          {orders
-            .filter((o) => o.type === 'MOVE_ATTACK')
-            .map((o) => {
-              const from = provinces.find((p) => p.id === o.fromProvinceId),
-                to = provinces.find((p) => p.id === o.toProvinceId);
+        {routes.map(({ army, path }) => (
+          <path
+            key={army.id}
+            className={`planned-route ${army.id === selectedArmyId ? 'selected-route' : ''}`}
+            d={pathFor([army.provinceId, ...path])}
+            fill="none"
+            stroke="#e0c47c"
+            strokeWidth={1.6 / scale}
+            strokeDasharray={`${5 / scale} ${4 / scale}`}
+            markerEnd="url(#march-arrow)"
+            pointerEvents="none"
+          />
+        ))}
+        {!preview &&
+          armies.map((a) => {
+            const p = provinces.find((p) => p.id === a.provinceId);
+            if (!p) return null;
+            const local = armies.filter((b) => b.provinceId === p.id),
+              index = local.findIndex((b) => b.id === a.id),
+              offset = ((index - (local.length - 1) / 2) * 27) / scale;
+            const owner = players.find((p) => p.id === a.ownerId),
+              selected = a.id === selectedArmyId;
+            return (
+              <g
+                key={a.id}
+                className={`army-token ${selected ? 'selected' : ''} ${a.stranded ? 'stranded' : ''}`}
+                data-battalion={a.id}
+                data-province={p.id}
+                transform={`translate(${p.x + offset} ${p.y + 3 / scale}) scale(${1 / scale})`}
+                tabIndex={0}
+                role="button"
+                aria-label={`${a.name}, ${unitCount(a)} ${a.isFleet ? 'navios' : 'tropas'}, ${owner?.nation ?? 'milícia local'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!dragged.current) onSelectArmy?.(a);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onSelectArmy?.(a);
+                }}
+              >
+                <rect
+                  x="-12"
+                  y="-10"
+                  width="24"
+                  height="26"
+                  rx={a.isFleet ? 9 : 3}
+                  fill="#111e2d"
+                  fillOpacity=".97"
+                  stroke={selected ? '#ffde92' : (owner?.color ?? '#9da8a4')}
+                  strokeWidth={selected ? 2 : 1}
+                />
+                <path
+                  d={
+                    a.isFleet
+                      ? 'M-6 0H6L3 5H-3ZM0-6V0M0-5L5-1H0'
+                      : 'M-6-5H-1V5H-6ZM-5-8L-2-5M2-4L7 3M7-4L2 3'
+                  }
+                  stroke={owner?.color ?? '#abb9ad'}
+                  fill={a.isFleet ? 'none' : (owner?.color ?? '#abb9ad')}
+                  strokeWidth="1"
+                />
+                <text y="12" textAnchor="middle" fill="#f4e5c7" fontSize="9" fontWeight="700">
+                  {unitCount(a)}
+                </text>
+                <rect
+                  x="-9"
+                  y="14"
+                  width={(18 * a.morale) / 100}
+                  height="2"
+                  fill={a.morale > 50 ? '#82bd98' : a.morale > 25 ? '#d7b35b' : '#de7770'}
+                />
+                {a.entrenched && <path d="M-14 17V21H14V17" fill="none" stroke="#e6c984" />}
+              </g>
+            );
+          })}
+        {replay && (
+          <g className="turn-replay" pointerEvents="none">
+            {replay.report.movements.map((m, i) => {
+              const from = provinces.find((p) => p.id === m.fromProvinceId),
+                to = provinces.find((p) => p.id === m.toProvinceId);
               if (!from || !to) return null;
-              const dx = to.x - from.x,
-                dy = to.y - from.y,
-                length = Math.hypot(dx, dy) || 1;
-              const midX = (from.x + to.x) / 2 - (dy / length) * 20,
-                midY = (from.y + to.y) / 2 + (dx / length) * 20;
+              const t = Math.min(1, replay.progress / 0.48),
+                ease = t * t * (3 - 2 * t);
               return (
-                <g key={o.fromProvinceId}>
-                  <path
-                    className="planned-route"
-                    d={`M${from.x} ${from.y + 9}Q${midX} ${midY} ${to.x} ${to.y + 9}`}
-                    markerEnd="url(#march-arrow)"
-                  />
-                  <text className="route-count" x={midX} y={midY - 4}>
-                    {o.troops}
+                <g
+                  key={`${m.battalionId}-${i}`}
+                  transform={`translate(${from.x + (to.x - from.x) * ease} ${from.y + (to.y - from.y) * ease}) scale(${1 / scale})`}
+                  opacity={replay.progress < 0.6 ? 1 : Math.max(0, 1 - (replay.progress - 0.6) * 5)}
+                >
+                  <circle r="13" fill="#efcf83" fillOpacity=".3" stroke="#f9dea0" />
+                  <text textAnchor="middle" y="4" fontSize="13" fill="#f3dfb5">
+                    {m.isFleet ? '⚓' : '➤'}
                   </text>
                 </g>
               );
             })}
-          {game?.lastReport?.retreats
-            .filter((r) => r.toProvinceId)
-            .map((r, i) => {
-              const from = provinces.find((p) => p.id === r.fromProvinceId)!,
-                to = provinces.find((p) => p.id === r.toProvinceId)!;
-              return (
-                <path
-                  key={`${r.armyId}-${i}`}
-                  className="retreat-route"
-                  d={`M${from.x} ${from.y}Q${(from.x + to.x) / 2 + 20} ${(from.y + to.y) / 2} ${to.x} ${to.y}`}
-                  markerEnd="url(#retreat-arrow)"
-                />
-              );
-            })}
-        </g>
+            {replay.progress > 0.3 &&
+              replay.report.battles.map((b) => {
+                const p = provinces.find((p) => p.id === b.provinceId);
+                if (!p) return null;
+                const opacity = Math.min(1, (1 - replay.progress) * 4);
+                return (
+                  <g
+                    key={b.id}
+                    className="battle-burst"
+                    transform={`translate(${p.x} ${p.y}) scale(${1 / scale})`}
+                    opacity={opacity}
+                  >
+                    <circle
+                      r="24"
+                      fill="#d8794b"
+                      fillOpacity=".25"
+                      stroke="#e9b770"
+                      strokeDasharray="3 4"
+                    />
+                    <text textAnchor="middle" y="5" fontSize="23" fill="#f6d0a0">
+                      ⚔
+                    </text>
+                    <text
+                      className="casualty-badge"
+                      textAnchor="middle"
+                      y={-24 - (replay.progress - 0.3) * 30}
+                      fontSize="13"
+                      fill="#ffd6bd"
+                    >
+                      −{b.attackerCasualties + b.defenderCasualties} tropas
+                    </text>
+                  </g>
+                );
+              })}
+          </g>
+        )}
       </svg>
       {!preview && (
-        <div className="camera-hint">
-          <span>Arraste com botão direito/meio ou Espaço + clique</span>
-          <i />
-          Scroll para zoom
-          <i />
-          Clique direito numa vizinha para marchar
+        <div className="map-attribution">
+          Natural Earth · domínio público · fronteiras de jogo simplificadas
         </div>
       )}
     </div>

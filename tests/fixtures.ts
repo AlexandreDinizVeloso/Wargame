@@ -1,0 +1,43 @@
+import { addPlayer, createGame, startGame } from '../server/game';
+import { createBattalion } from '../server/state';
+import { compositionOf } from '../shared/rules';
+import type { Composition, GameState } from '../shared/types';
+export function setup(seed = 42) {
+  const g = createGame('RULES', 'campaign', true, seed);
+  const players = [
+    addPlayer(g, 'A', false, 'PORTUGAL'),
+    addPlayer(g, 'B', false, 'CASTILE'),
+    addPlayer(g, 'C', false, 'FRANCE'),
+  ];
+  startGame(g);
+  g.battalions = [];
+  for (const p of g.provinces) {
+    p.ownerId = null;
+    p.occupierId = null;
+    p.capitalOf = null;
+    p.pacification = 70;
+    p.unrest = 10;
+    p.portLevel = 0;
+  }
+  for (const [i, id] of ['portugal', 'castile', 'france'].entries()) {
+    const p = g.provinces.find((p) => p.id === id)!;
+    p.ownerId = players[i].id;
+    p.religion = players[i].faith;
+    p.capitalOf = players[i].id;
+    p.pacification = 100;
+    p.unrest = 5;
+    p.portLevel = p.isCoastal ? 1 : 0;
+  }
+  return { g, players };
+}
+export function army(
+  g: GameState,
+  ownerId: string,
+  provinceId: string,
+  composition: Partial<Composition> = { infantry: 5 },
+) {
+  return createBattalion(g, ownerId, provinceId, compositionOf(composition), {
+    training: 1.2,
+    morale: 80,
+  });
+}

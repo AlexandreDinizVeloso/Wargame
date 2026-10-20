@@ -1,349 +1,298 @@
 import { useEffect, useState } from 'react';
-import {
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
-  Coins,
-  Handshake,
-  MessageCircle,
-  ScrollText,
-  Send,
-  Shield,
-  Swords,
-  Tent,
-  X,
-} from 'lucide-react';
-import type { BattleReport, GameView, Player } from '../shared/types';
-import { orderCost, orderKey, orderProvinceId } from '../shared/rules';
+import { ArrowRight, Coins, MessageSquare, Play, ScrollText, Swords, X } from 'lucide-react';
+import type { GameView, TurnResolutionReport } from '../shared/types';
+import { RETREAT_LABELS, orderCost, orderKey, orderProvinceId } from '../shared/rules';
 import { orderName } from './orders';
-import { number, type Command } from './ui';
-export type TurnTab = 'orders' | 'reports' | 'chat';
-
-function Battle({ battle: b, game }: { battle: BattleReport; game: GameView }) {
-  const realm = (id: string | null) =>
-      game.players.find((p) => p.id === id)?.nation ?? 'Forças locais',
-    province = (id: string | null) => game.provinces.find((p) => p.id === id)?.name ?? 'sem rota';
-  return (
-    <details className="battle-report">
-      <summary>
-        <Swords size={15} />
-        <span>
-          <strong>{province(b.provinceId)}</strong>
-          <small>
-            {b.outcome === 'siege_blocked'
-              ? 'Cerco sem tropas suficientes'
-              : `${realm(b.winnerId)} venceu`}
-          </small>
-        </span>
-        <span className={`badge ${b.stackwipe ? 'red' : ''}`}>
-          {b.stackwipe ? 'ANIQUILAÇÃO' : b.outcome === 'attacker_victory' ? 'OCUPAÇÃO' : 'DEFESA'}
-        </span>
-        <ChevronDown size={14} />
-      </summary>
-      <div className="battle-report-body">
-        <div className="battle-sides">
-          <div>
-            <small>ATACANTE</small>
-            <strong>{realm(b.attackerId)}</strong>
-            <span>
-              {b.attackerTroops} tropas · −{b.attackerCasualties} baixas
-            </span>
-            <span>
-              Moral {b.attackerMoraleBefore} → {b.attackerMoraleAfter}
-            </span>
-            <span>Treinamento {number(b.attackerTraining, 2)}×</span>
-          </div>
-          <div>
-            <small>DEFENSOR</small>
-            <strong>{realm(b.defenderId)}</strong>
-            <span>
-              {b.defenderTroops} tropas · −{b.defenderCasualties} baixas
-            </span>
-            <span>
-              Moral {b.defenderMoraleBefore} → {b.defenderMoraleAfter}
-            </span>
-            <span>Treinamento {number(b.defenderTraining, 2)}×</span>
-          </div>
-        </div>
-        <div className="battle-modifiers">
-          <span>
-            Força {number(b.attackPower, 2)} × {number(b.defensePower, 2)}
-          </span>
-          <span>Razão ataque/defesa: {number(b.ratio, 2)}</span>
-          <span>
-            Terreno {number(b.terrainDefenseBonus, 2)}× · Forte {b.fortLevel} (
-            {number(b.fortDefenseMultiplier, 2)}×)
-          </span>
-          <span>
-            Fé {number(b.holyWarBonus, 2)}× · Coalizão A/D: {number(b.coalitionAttackBonus, 2)}× /{' '}
-            {number(b.coalitionDefenseBonus, 2)}×
-          </span>
-          <span>Destino de recuo: {province(b.retreatDestinationId)}</span>
-        </div>
-      </div>
-    </details>
-  );
-}
+import { Empty, number, type Command } from './ui';
+export type ReportTab = 'orders' | 'reports' | 'chat';
 export default function TurnPanel({
   game,
-  me,
+  playerId,
   command,
   tab,
   setTab,
-  expanded,
-  setExpanded,
-  onProvince,
+  onReplay,
+  onFocus,
 }: {
   game: GameView;
-  me: Player;
+  playerId: string;
   command: Command;
-  tab: TurnTab;
-  setTab: (tab: TurnTab) => void;
-  expanded: boolean;
-  setExpanded: (v: boolean) => void;
-  onProvince: (id: string) => void;
+  tab: ReportTab;
+  setTab: (tab: ReportTab) => void;
+  onReplay: (r: TurnResolutionReport) => void;
+  onFocus: (id: string) => void;
 }) {
-  const [message, setMessage] = useState(''),
-    [reportTurn, setReportTurn] = useState(game.lastReport?.turn ?? 0);
-  useEffect(() => {
-    setReportTurn(game.lastReport?.turn ?? 0);
-  }, [game.lastReport?.turn]);
-  const report = game.reports.find((r) => r.turn === reportTurn) ?? game.lastReport;
-  const reserved = game.plannedOrders.reduce(
-    (n, o) =>
-      n +
-      orderCost(
-        o,
-        game.provinces.find((p) => p.id === orderProvinceId(o)),
-      ).gold,
-    0,
-  );
-  const realm = (id: string | null) =>
-      game.players.find((p) => p.id === id)?.nation ?? 'Forças locais',
-    province = (id: string | null) => game.provinces.find((p) => p.id === id)?.name ?? 'sem rota';
+  const [turn, setTurn] = useState(game.lastReport?.turn ?? 0),
+    [message, setMessage] = useState('');
+  useEffect(() => setTurn(game.lastReport?.turn ?? 0), [game.lastReport?.turn]);
+  const report = game.history.find((r) => r.turn === turn) ?? game.lastReport;
+  const me = game.players.find((p) => p.id === playerId)!;
   return (
-    <section
-      className={`turn-panel glass ${expanded ? 'expanded' : ''}`}
-      aria-label="Ordens e relatórios"
-    >
-      <header>
-        <div className="turn-panel-tabs">
-          {(
-            [
-              { id: 'orders', label: 'Ordens', Icon: ScrollText, count: game.plannedOrders.length },
-              {
-                id: 'reports',
-                label: 'Relatórios',
-                Icon: Swords,
-                count: game.lastReport?.battles.length ?? 0,
-              },
-              { id: 'chat', label: 'Conselho', Icon: MessageCircle, count: game.chat.length },
-            ] as const
-          ).map(({ id, label, Icon, count }) => (
-            <button
-              key={id}
-              className={tab === id ? 'active' : ''}
-              onClick={() => {
-                setTab(id);
-                setExpanded(tab === id ? !expanded : true);
-              }}
-            >
-              <Icon size={14} />
-              {label}
-              <span>{count}</span>
-            </button>
-          ))}
-        </div>
-        <button
-          className="icon-button"
-          aria-label={expanded ? 'Recolher painel' : 'Expandir painel'}
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+    <div className="turn-panel">
+      <div className="panel-tabs">
+        <button className={tab === 'orders' ? 'selected' : ''} onClick={() => setTab('orders')}>
+          <ScrollText size={14} />
+          Ordens <b>{game.plannedOrders.length}</b>
         </button>
-      </header>
-      {expanded && (
-        <div className={`turn-panel-body ${tab === 'chat' ? 'chat-body' : ''}`}>
-          {tab === 'orders' ? (
-            <>
-              <div className="orders-summary">
-                <span>{game.plannedOrders.length} ordens planejadas</span>
+        <button className={tab === 'reports' ? 'selected' : ''} onClick={() => setTab('reports')}>
+          <Swords size={14} />
+          Relatórios <b>{game.lastReport?.battles.length ?? 0}</b>
+        </button>
+        <button className={tab === 'chat' ? 'selected' : ''} onClick={() => setTab('chat')}>
+          <MessageSquare size={14} />
+          Conselho <b>{game.chat.length}</b>
+        </button>
+      </div>
+      {tab === 'orders' && (
+        <div className="orders-content">
+          <div className="section-heading">
+            <h3>Ordens da rodada {game.turn}</h3>
+            <span className="tag">{me.ready ? 'PRONTO' : 'EM PLANEJAMENTO'}</span>
+          </div>
+          {game.plannedOrders.length === 0 && (
+            <Empty>Nenhuma ordem preparada. Cidades e batalhões têm filas independentes.</Empty>
+          )}
+          {game.plannedOrders.map((o) => {
+            const key = orderKey(o),
+              p = game.provinces.find((p) => p.id === orderProvinceId(o, game)),
+              cost = orderCost(o, p, me),
+              a = 'battalionId' in o ? game.battalions.find((a) => a.id === o.battalionId) : null;
+            return (
+              <div className="order-row" key={key}>
+                <ScrollText size={15} />
                 <span>
-                  <Coins size={12} />
-                  {number(reserved, 2)} ouro reservado
+                  <strong>{a?.name ?? p?.name ?? 'Diplomacia'}</strong>
+                  <small>
+                    {orderName(o)}
+                    {o.type === 'MOVE_BATTALION' ? ` · ${o.path?.length ?? 1} ligação(ões)` : ''}
+                  </small>
                 </span>
+                <b>{cost.gold > 0 ? `${number(cost.gold)} ouro` : '—'}</b>
+                <button
+                  aria-label={`Cancelar ${orderName(o)} em ${a?.name ?? p?.name}`}
+                  disabled={game.phase !== 'planning'}
+                  title="Cancelar e liberar recursos reservados"
+                  onClick={() => command({ type: 'CANCEL_ORDER', key })}
+                >
+                  <X size={14} />
+                </button>
               </div>
-              {game.plannedOrders.length === 0 ? (
-                <div className="panel-empty">
-                  <ScrollText size={25} />
-                  <p>
-                    Selecione uma província e prepare suas ordens.
-                    <br />A resolução acontece quando todos confirmam ou o tempo acaba.
-                  </p>
-                </div>
-              ) : (
-                game.plannedOrders.map((o) => {
-                  const id = orderProvinceId(o),
-                    cost = orderCost(
-                      o,
-                      game.provinces.find((p) => p.id === id),
-                    );
-                  return (
-                    <div className="planned-order" key={orderKey(o)}>
-                      <ScrollText size={15} />
-                      <button className="order-link" onClick={() => id && onProvince(id)}>
-                        <strong>{id ? province(id) : 'Diplomacia'}</strong>
-                        <small>
-                          {orderName(o)}
-                          {o.type === 'MOVE_ATTACK'
-                            ? ` · ${o.troops} → ${province(o.toProvinceId)}`
-                            : ''}
-                        </small>
-                      </button>
-                      <span>{cost.gold > 0 ? `${cost.gold} ouro` : '—'}</span>
-                      <button
-                        className="icon-button"
-                        disabled={me.ready || game.phase !== 'planning'}
-                        aria-label={`Cancelar ordem em ${province(id)}`}
-                        title="Cancelar e liberar a reserva de recursos."
-                        onClick={() => command({ type: 'CANCEL_ORDER', key: orderKey(o) })}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </>
-          ) : tab === 'reports' ? (
-            <>
-              {report ? (
-                <>
-                  <div className="report-top">
-                    <strong>Resolução da rodada {report.turn}</strong>
-                    <select
-                      aria-label="Rodada do relatório"
-                      value={reportTurn}
-                      onChange={(e) => setReportTurn(Number(e.target.value))}
-                    >
-                      {[...game.reports].reverse().map((r) => (
-                        <option key={r.turn} value={r.turn}>
-                          Rodada {r.turn}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {report.battles.map((b) => (
-                    <Battle key={b.id} battle={b} game={game} />
-                  ))}
-                  {report.retreats.map((r, i) => (
-                    <p className="report-event" key={`${r.armyId}-${i}`}>
-                      <ArrowRight size={13} />
-                      {realm(r.ownerId)}: {r.regrouped} tropas{' '}
-                      {r.stranded ? 'isoladas em' : 'recuaram de'} {province(r.fromProvinceId)}
-                      {r.toProvinceId ? ` para ${province(r.toProvinceId)}` : ''}. Moral {r.morale};{' '}
-                      {r.dispersed} dispersas.
-                    </p>
-                  ))}
-                  {report.stackwipes.map((s, i) => (
-                    <p className="report-event danger-text" key={`${s.armyId}-${i}`}>
-                      <Swords size={13} />
-                      {realm(s.ownerId)} perdeu {s.troops} tropas por aniquilação em{' '}
-                      {province(s.provinceId)} (
-                      {s.reason === 'overwhelming_force' ? 'força ≥ 2,5×' : 'moral zero e sem fuga'}
-                      ).
-                    </p>
-                  ))}
-                  {report.attritionLosses.map((a, i) => (
-                    <p className="report-event" key={`${a.armyId}-${i}`}>
-                      <Tent size={13} />
-                      {province(a.provinceId)}: −{a.losses} tropas de {realm(a.ownerId)} por
-                      suprimento.
-                    </p>
-                  ))}
-                  {report.conversions.map((c, i) => (
-                    <p className="report-event" key={i}>
-                      <Shield size={13} />
-                      {province(c.provinceId)}: {c.from} → {c.to}
-                      {c.crossBorder ? ' · missão transfronteiriça' : ''}.
-                    </p>
-                  ))}
-                  {report.rebellions.map((r) => (
-                    <p className="report-event danger-text" key={r.provinceId}>
-                      <Shield size={13} />
-                      {province(r.provinceId)} se rebelou com {r.rebelTroops} tropas locais.
-                    </p>
-                  ))}
-                  {report.diplomaticChanges.map((d, i) => (
-                    <p className="report-event" key={i}>
-                      <Handshake size={13} />
-                      {d.text}
-                    </p>
-                  ))}
-                  {report.battles.length === 0 &&
-                    report.retreats.length === 0 &&
-                    report.attritionLosses.length === 0 && (
-                      <p className="small muted">
-                        Nenhuma batalha, recuo ou perda de suprimento nesta rodada.
-                      </p>
-                    )}
-                </>
-              ) : (
-                <div className="panel-empty">
-                  <Swords size={26} />
-                  <p>Os resultados aparecerão após a primeira resolução.</p>
-                </div>
-              )}
-            </>
+            );
+          })}
+          {game.battalions
+            .filter(
+              (a) =>
+                a.ownerId === playerId &&
+                a.pathQueue.length &&
+                !game.plannedOrders.some(
+                  (o) => o.type === 'MOVE_BATTALION' && o.battalionId === a.id,
+                ),
+            )
+            .map((a) => (
+              <div className="order-row" key={a.id}>
+                <ArrowRight size={15} />
+                <span>
+                  <strong>{a.name}</strong>
+                  <small>Rota contínua · {a.pathQueue.length} rodada(s) restante(s)</small>
+                </span>
+                <button
+                  disabled={game.phase !== 'planning'}
+                  onClick={() => command({ type: 'CANCEL_ORDER', key: `army:${a.id}` })}
+                >
+                  Parar
+                </button>
+              </div>
+            ))}
+          <p className="fine-print">
+            Ouro reservado é liberado ao cancelar. Mercenários e diplomacia são imediatos.
+          </p>
+        </div>
+      )}
+      {tab === 'reports' && (
+        <div className="reports-content">
+          {!report ? (
+            <Empty>O primeiro relatório chegará após a resolução da rodada.</Empty>
           ) : (
             <>
-              <div className="chat-messages">
-                {game.chat.length === 0 ? (
-                  <p className="small muted">
-                    Conselho público: todos leem as mensagens. Bots respondem a propostas formais,
-                    mas não ao chat.
-                  </p>
-                ) : (
-                  game.chat.map((m) => (
-                    <div className="chat-message" key={m.id}>
-                      <strong
-                        style={{ color: game.players.find((p) => p.id === m.playerId)?.color }}
-                      >
-                        {game.players.find((p) => p.id === m.playerId)?.name}
-                      </strong>
-                      <p>{m.text}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-              <form
-                className="chat-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!message.trim()) return;
-                  command({ type: 'CHAT', text: message });
-                  setMessage('');
-                }}
-              >
-                <input
-                  aria-label="Mensagem ao conselho"
-                  placeholder="Uma proposta ao conselho…"
-                  value={message}
-                  maxLength={280}
-                  onChange={(e) => setMessage(e.target.value)}
-                />
-                <button
-                  className="icon-button"
-                  aria-label="Enviar mensagem"
-                  disabled={!message.trim()}
-                >
-                  <Send size={16} />
+              <div className="report-toolbar">
+                <label>
+                  Rodada
+                  <select value={report.turn} onChange={(e) => setTurn(Number(e.target.value))}>
+                    {game.history.map((h) => (
+                      <option key={h.turn} value={h.turn}>
+                        Rodada {h.turn} · {h.battles.length} batalha(s)
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button onClick={() => onReplay(report)}>
+                  <Play size={14} />
+                  Rever Animação do Turno
                 </button>
-              </form>
+              </div>
+              <div className="report-counts">
+                <span>{report.movements.length} movimentos</span>
+                <span>{report.retreats.length} recuos</span>
+                <span>{report.stackwipes.length} aniquilações</span>
+                <span>{report.rebellions.length} revoltas</span>
+              </div>
+              {report.battles.map((b) => (
+                <details className="battle-report" key={b.id}>
+                  <summary>
+                    <Swords size={15} />
+                    <span>
+                      {game.provinces.find((p) => p.id === b.provinceId)?.name}
+                      <small>
+                        {game.players.find((p) => p.id === b.winnerId)?.nation ?? 'Forças locais'} ·{' '}
+                        {b.outcome === 'siege_blocked'
+                          ? 'cerco interrompido'
+                          : b.stackwipe
+                            ? 'aniquilação'
+                            : b.outcome === 'attacker_victory'
+                              ? 'vitória ofensiva'
+                              : 'defesa preservada'}
+                      </small>
+                    </span>
+                    <b>−{b.attackerCasualties + b.defenderCasualties}</b>
+                  </summary>
+                  <div className="battle-detail">
+                    <div className="ledger-grid">
+                      <div>
+                        <small>PODER OFENSIVO</small>
+                        <strong>{number(b.attackPower, 2)}</strong>
+                      </div>
+                      <div>
+                        <small>PODER DEFENSIVO</small>
+                        <strong>{number(b.defensePower, 2)}</strong>
+                      </div>
+                    </div>
+                    <p>
+                      Baixas: {b.attackerCasualties} no ataque / {b.defenderCasualties} na defesa.
+                    </p>
+                    <p>
+                      Moral: {number(b.attackerMoraleBefore)} → {number(b.attackerMoraleAfter)} /{' '}
+                      {number(b.defenderMoraleBefore)} → {number(b.defenderMoraleAfter)}.
+                    </p>
+                    <p>
+                      Terreno {number(b.terrainDefenseBonus, 2)}× · fortes {b.fortLevel},
+                      neutralizados {b.neutralizedFortLevels} · bloqueio{' '}
+                      {number(b.blockadeModifier, 2)}×.
+                    </p>
+                    <p>
+                      Treinamento {number(b.attackerTraining, 2)}× / {number(b.defenderTraining, 2)}
+                      ×. Cavalaria {number(b.cavalryModifier, 2)}×; artilharia{' '}
+                      {number(b.artilleryModifier, 2)}×.
+                    </p>
+                    {b.retreatDestinationId && (
+                      <p>
+                        Recuo para{' '}
+                        {game.provinces.find((p) => p.id === b.retreatDestinationId)?.name}.
+                      </p>
+                    )}
+                    <button onClick={() => onFocus(b.provinceId)}>Ver região no mapa</button>
+                  </div>
+                </details>
+              ))}
+              {report.battles.length === 0 && (
+                <p className="muted">Nenhuma batalha nesta rodada.</p>
+              )}
+              {report.retreats.length > 0 && (
+                <details className="command-details">
+                  <summary>Recuos e repatriações</summary>
+                  {report.retreats.map((r, i) => (
+                    <p key={`${r.armyId}-${i}`} className="fine-print">
+                      {game.players.find((p) => p.id === r.ownerId)?.nation ?? 'Milícia local'}:{' '}
+                      {r.regrouped}/{r.survivors} tropas para{' '}
+                      {game.provinces.find((p) => p.id === r.toProvinceId)?.name ??
+                        'posição isolada'}{' '}
+                      · {RETREAT_LABELS[r.reason]}.
+                    </p>
+                  ))}
+                </details>
+              )}
+              <details className="command-details">
+                <summary>
+                  <Coins size={15} />
+                  Economia e Dieta
+                </summary>
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Nação</th>
+                        <th>Renda bruta</th>
+                        <th>Manutenção</th>
+                        <th>Ouro final</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.economy.map((e) => (
+                        <tr key={e.playerId}>
+                          <td>{game.players.find((p) => p.id === e.playerId)?.nation}</td>
+                          <td>{number(e.grossIncome, 1)}</td>
+                          <td>{number(e.upkeep, 1)}</td>
+                          <td>{number(e.gold, 1)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="fine-print">
+                  Paz mundial {report.diet.peaceTurnsCounter}/5 · autoridade{' '}
+                  {number(report.diet.imperialAuthority)}.
+                </p>
+              </details>
+              <details className="command-details">
+                <summary>Crônica da rodada</summary>
+                {[
+                  ...new Set([...report.events, ...report.diplomaticChanges.map((c) => c.text)]),
+                ].map((text, i) => (
+                  <p className="chronicle-line" key={i}>
+                    {text}
+                  </p>
+                ))}
+              </details>
             </>
           )}
         </div>
       )}
-    </section>
+      {tab === 'chat' && (
+        <div className="chat-content">
+          <div className="chat-messages">
+            {game.chat.length === 0 && (
+              <Empty>Uma proposta pode mudar o destino de uma guerra.</Empty>
+            )}
+            {game.chat.map((m) => (
+              <p key={m.id}>
+                <strong style={{ color: game.players.find((p) => p.id === m.playerId)?.color }}>
+                  {game.players.find((p) => p.id === m.playerId)?.name}
+                </strong>
+                {m.text}
+              </p>
+            ))}
+          </div>
+          <form
+            className="chat-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!message.trim()) return;
+              command({ type: 'CHAT', text: message.trim() });
+              setMessage('');
+            }}
+          >
+            <input
+              aria-label="Mensagem ao conselho"
+              maxLength={280}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Uma proposta ao conselho…"
+            />
+            <button type="submit" aria-label="Enviar mensagem" disabled={!message.trim()}>
+              <ArrowRight size={17} />
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,14 +1,14 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { GameCommand, GameState, Objective, ServerMessage } from '../shared/types';
-import { FACTIONS, OBJECTIVES } from '../shared/types';
+import type { GameCommand, GameState, NationId, ServerMessage, Theater } from '../shared/types';
+import { NATIONS } from '../shared/rules';
+import { parseCommand } from './commands';
 import {
   addPlayer,
   assert,
   createGame,
   executeCommand,
-  parseOrder,
   refreshScores,
   resolveTurn,
   startGame,
@@ -35,93 +35,18 @@ const hashToken = (token: string) => createHash('sha256').update(token).digest('
 const send = (ws: WebSocket, message: ServerMessage) => {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
 };
-const objectiveOf = (value: unknown): Objective =>
-  typeof value === 'string' && Object.hasOwn(OBJECTIVES, value) ? (value as Objective) : 'conquest';
 function readCommand(msg: Record<string, unknown>): GameCommand {
-  const raw = msg.type === 'command' ? msg.command : msg;
-  assert(raw && typeof raw === 'object' && !Array.isArray(raw), 'Comando inválido.');
-  const c = raw as Record<string, unknown>;
-  if (msg.type === 'command') {
-    assert(typeof c.type === 'string', 'Comando inválido.');
-    if (c.type === 'SUBMIT_ORDER') return { type: c.type, order: parseOrder(c.order) };
-    if (c.type === 'CANCEL_ORDER') {
-      assert(typeof c.key === 'string', 'Chave de ordem inválida.');
-      return { type: c.type, key: c.key };
-    }
-    if (c.type === 'READY') {
-      assert(typeof c.ready === 'boolean', 'Estado pronto inválido.');
-      return { type: c.type, ready: c.ready };
-    }
-    if (c.type === 'ANSWER_OFFER') {
-      assert(typeof c.offerId === 'string' && typeof c.accept === 'boolean', 'Resposta inválida.');
-      return { type: c.type, offerId: c.offerId, accept: c.accept };
-    }
-    if (c.type === 'START_GAME' || c.type === 'ADD_BOT') return { type: c.type };
-    if (c.type === 'SET_MODE') {
-      assert(c.mode === 'quick' || c.mode === 'campaign', 'Modo inválido.');
-      return { type: c.type, mode: c.mode };
-    }
-    if (c.type === 'SET_IDENTITY') {
-      assert(
-        typeof c.objective === 'string' &&
-          Object.hasOwn(OBJECTIVES, c.objective) &&
-          (c.doctrine === 'devout' || c.doctrine === 'tolerant'),
-        'Identidade inválida.',
-      );
-      return { type: c.type, objective: c.objective as Objective, doctrine: c.doctrine };
-    }
-    if (c.type === 'REPLACE_WITH_BOT') {
-      assert(typeof c.playerId === 'string', 'Jogador inválido.');
-      return { type: c.type, playerId: c.playerId };
-    }
-    if (c.type === 'CHAT') {
-      assert(typeof c.text === 'string', 'Mensagem inválida.');
-      return { type: c.type, text: c.text };
-    }
-    throw new Error('Comando desconhecido.');
-  }
-  // Version 1 envelopes are translated at the transport boundary; the engine uses version 2 only.
-  switch (msg.type) {
-    case 'order':
-      return { type: 'SUBMIT_ORDER', order: parseOrder(msg.order) };
-    case 'cancel':
-      return { type: 'CANCEL_ORDER', key: String(msg.provinceId) };
-    case 'ready':
-      return { type: 'READY', ready: msg.ready === true };
-    case 'answer':
-      return { type: 'ANSWER_OFFER', offerId: String(msg.offerId), accept: msg.accept === true };
-    case 'start':
-      return { type: 'START_GAME' };
-    case 'addBot':
-      return { type: 'ADD_BOT' };
-    case 'mode':
-      assert(msg.mode === 'quick' || msg.mode === 'campaign', 'Modo inválido.');
-      return { type: 'SET_MODE', mode: msg.mode };
-    case 'identity':
-      return {
-        type: 'SET_IDENTITY',
-        objective: objectiveOf(msg.objective),
-        doctrine: msg.doctrine === 'devout' ? 'devout' : 'tolerant',
-      };
-    case 'replaceBot':
-      return { type: 'REPLACE_WITH_BOT', playerId: String(msg.playerId) };
-    case 'chat':
-      assert(typeof msg.text === 'string', 'Mensagem inválida.');
-      return { type: 'CHAT', text: msg.text };
-    case 'offer':
-    case 'break':
-      return {
-        type: 'SUBMIT_ORDER',
-        order: {
-          type: 'DIPLOMACY',
-          action: msg.type === 'offer' ? 'PROPOSE_ALLIANCE' : 'BREAK_ALLIANCE',
-          targetRealmId: String(msg.to),
-        },
-      };
-    default:
-      throw new Error('Ação desconhecida.');
-  }
+  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 3.');
+  return parseCommand(msg.command);
 }
+const nationOfMessage = (value: unknown): NationId | undefined => {
+  if (value === undefined) return undefined;
+  assert(
+    NATIONS.some((n) => n.id === value),
+    'Nação inválida.',
+  );
+  return value as NationId;
+};
 export function attachRooms(server: Server, options: Options = {}) {
   const clock = options.now ?? Date.now,
     rooms = new Map<string, Room>();
@@ -268,13 +193,16 @@ export function attachRooms(server: Server, options: Options = {}) {
             msg.mode === 'campaign' ? 'campaign' : 'quick',
             msg.demo === true,
             randomBytes(4).readUInt32LE(),
+            ['EUROPE', 'AMERICAS', 'ASIA'].includes(String(msg.theater))
+              ? (msg.theater as Theater)
+              : 'EUROPE',
           );
           g.persistenceEnabled = !!options.stateFile;
           const p = addPlayer(
             g,
             typeof msg.name === 'string' ? msg.name : 'Estrategista',
             false,
-            objectiveOf(msg.objective),
+            nationOfMessage(msg.nationId),
           );
           const room: Room = {
             game: g,
@@ -284,13 +212,7 @@ export function attachRooms(server: Server, options: Options = {}) {
           };
           rooms.set(code, room);
           if (g.demo) {
-            for (let i = 0; i < 3; i++)
-              addPlayer(
-                g,
-                `Conselho de ${FACTIONS[i + 1].nation}`,
-                true,
-                (['conquest', 'prosperity', 'faith'] as Objective[])[i],
-              );
+            for (let i = 0; i < 3; i++) addPlayer(g, `Conselho ${i + 1}`, true);
             startGame(g, clock());
           }
           bind(room, p.id, randomBytes(24).toString('hex'));
@@ -303,7 +225,7 @@ export function attachRooms(server: Server, options: Options = {}) {
             room.game,
             typeof msg.name === 'string' ? msg.name : 'Estrategista',
             false,
-            objectiveOf(msg.objective),
+            nationOfMessage(msg.nationId),
           );
           bind(room, p.id, randomBytes(24).toString('hex'));
           return;

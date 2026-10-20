@@ -1,19 +1,21 @@
-import type { Province } from './types';
-
+import geometry from './world-geometry.json';
+import type { Continent, GameMode, Province, Theater } from './types';
 export type Terrain = 'plains' | 'forest' | 'hills' | 'mountains' | 'coastal';
 export interface ProvinceStaticData {
   id: string;
   name: string;
+  kind: 'LAND' | 'SEA_ZONE';
+  continent: Continent | 'SEA_ZONE';
   terrain: Terrain;
   terrainDefenseBonus: number;
   baseTax: number;
   baseSupplyLimit: number;
   neighbors: string[];
-  polygon: string;
+  rings: number[][][];
+  path: string;
   x: number;
   y: number;
-  col: number;
-  row: number;
+  isCoastal: boolean;
   resource: 'grain' | 'trade' | 'iron' | 'shrine';
 }
 export const TERRAIN_DEFENSE: Record<Terrain, number> = {
@@ -30,153 +32,211 @@ export const TERRAIN_LABELS: Record<Terrain, string> = {
   hills: 'Colinas',
   mountains: 'Montanhas',
 };
-
-const NAMES = [
-  'Irlanda',
-  'Gales',
-  'Escócia',
-  'Londres',
-  'Flandres',
-  'Holanda',
-  'Dinamarca',
-  'Prússia',
-  'Galícia',
-  'Leão',
-  'Bretanha',
-  'Paris',
-  'Renânia',
-  'Boêmia',
-  'Saxônia',
-  'Polônia',
-  'Porto',
-  'Castela',
-  'Bordéus',
-  'Provença',
-  'Suíça',
-  'Veneza',
-  'Hungria',
-  'Moldávia',
-  'Lisboa',
-  'Andaluzia',
-  'Aragão',
-  'Gênova',
-  'Roma',
-  'Ragusa',
-  'Grécia',
-  'Trácia',
+export const CONTINENTS: Record<Continent, string> = {
+  EUROPE: 'Europa',
+  AMERICAS: 'Américas',
+  MENA_AFRICA: 'MENA e África',
+  ASIA: 'Ásia e Pacífico',
+};
+export const THEATERS: Theater[] = ['EUROPE', 'AMERICAS', 'ASIA'];
+const SEAS: [string, string, number[], string[], string[]][] = [
+  [
+    'north-atlantic',
+    'Atlântico Norte',
+    [-65, 30, -15, 65],
+    ['portugal', 'castile', 'france', 'britain', 'scandinavia', 'canada-east', 'usa-east'],
+    ['south-atlantic', 'caribbean-sea', 'western-med', 'arctic'],
+  ],
+  [
+    'south-atlantic',
+    'Atlântico Sul',
+    [-38, -40, -5, 5],
+    ['brazil', 'amazon', 'rioplata', 'guianas', 'west-africa', 'central-africa', 'south-africa'],
+    ['north-atlantic', 'caribbean-sea', 'indian-west', 'south-pacific'],
+  ],
+  [
+    'caribbean-sea',
+    'Mar do Caribe',
+    [-90, 8, -60, 28],
+    ['usa-east', 'mexico', 'central-america', 'caribbean', 'colombia', 'guianas', 'amazon'],
+    ['north-atlantic', 'south-atlantic', 'north-pacific'],
+  ],
+  [
+    'north-pacific',
+    'Pacífico Norte',
+    [-165, 10, -130, 50],
+    ['alaska', 'canada-west', 'usa-west', 'mexico', 'japan', 'siberia'],
+    ['south-pacific', 'east-asian-sea', 'arctic', 'caribbean-sea'],
+  ],
+  [
+    'south-pacific',
+    'Pacífico Sul',
+    [-150, -45, -90, 0],
+    ['andes', 'chile', 'rioplata', 'archipelago'],
+    ['north-pacific', 'south-atlantic', 'south-china-sea', 'indian-east'],
+  ],
+  [
+    'western-med',
+    'Mediterrâneo Ocidental',
+    [-2, 33, 14, 41],
+    ['castile', 'france', 'italy', 'maghreb'],
+    ['north-atlantic', 'eastern-med'],
+  ],
+  [
+    'eastern-med',
+    'Mediterrâneo Oriental',
+    [18, 31, 35, 38],
+    ['italy', 'balkans', 'greece', 'anatolia', 'nile', 'arabia'],
+    ['western-med', 'indian-west'],
+  ],
+  [
+    'baltic',
+    'Mar Báltico',
+    [12, 54, 28, 61],
+    ['germany', 'lowlands', 'scandinavia', 'poland', 'muscovy'],
+    ['north-atlantic', 'arctic'],
+  ],
+  [
+    'arctic',
+    'Oceano Ártico',
+    [-15, 74, 110, 82],
+    ['scandinavia', 'muscovy', 'siberia', 'alaska', 'canada-west', 'canada-east'],
+    ['north-atlantic', 'north-pacific', 'baltic'],
+  ],
+  [
+    'indian-west',
+    'Índico Ocidental',
+    [45, -20, 70, 16],
+    ['south-africa', 'east-africa', 'horn', 'arabia', 'persia', 'afghan', 'india-south'],
+    ['indian-east', 'south-atlantic', 'eastern-med'],
+  ],
+  [
+    'indian-east',
+    'Índico Oriental',
+    [80, -20, 100, 15],
+    ['india-south', 'bengal', 'indochina', 'malaya', 'archipelago'],
+    ['indian-west', 'south-china-sea', 'south-pacific'],
+  ],
+  [
+    'south-china-sea',
+    'Mar da China Meridional',
+    [110, 0, 120, 20],
+    ['china-east', 'indochina', 'malaya', 'archipelago'],
+    ['indian-east', 'east-asian-sea', 'south-pacific'],
+  ],
+  [
+    'east-asian-sea',
+    'Mar do Japão',
+    [130, 28, 145, 45],
+    ['china-east', 'korea', 'japan', 'siberia'],
+    ['south-china-sea', 'north-pacific'],
+  ],
 ];
-export function makeMap(): Province[] {
-  return NAMES.map((name, index) => {
-    const col = index % 8,
-      row = Math.floor(index / 8);
-    const offsets =
-      col % 2 === 0
-        ? [
-            [0, -1],
-            [0, 1],
-            [-1, -1],
-            [-1, 0],
-            [1, -1],
-            [1, 0],
-          ]
-        : [
-            [0, -1],
-            [0, 1],
-            [-1, 0],
-            [-1, 1],
-            [1, 0],
-            [1, 1],
-          ];
-    const neighbors = offsets
-      .map(([dc, dr]) => [col + dc, row + dr])
-      .filter(([c, r]) => c >= 0 && c < 8 && r >= 0 && r < 4)
-      .map(([c, r]) => `p${r * 8 + c}`);
-    const terrain: Terrain =
-      index === 20
-        ? 'mountains'
-        : [8, 10, 12, 14, 15].includes(index)
-          ? 'forest'
-          : [9, 13, 17, 22, 23, 26].includes(index)
-            ? 'hills'
-            : index === 11
-              ? 'plains'
-              : 'coastal';
-    const resource = (['grain', 'trade', 'iron', 'shrine'] as const)[
-      (index * 7 + Math.floor(index / 8)) % 4
-    ];
-    const center = { x: 94 + col * 93, y: 85 + row * 107.387 + (col % 2) * 53.694 };
+const pathOf = (rings: number[][][]) =>
+  rings.map((r) => `M${r.map((p) => p.join(',')).join('L')}Z`).join('');
+export function makeStaticMap(
+  mode: GameMode = 'campaign',
+  theater: Theater = 'EUROPE',
+): ProvinceStaticData[] {
+  const land: ProvinceStaticData[] = geometry.map((g, i) => {
+    const isCoastal = SEAS.some((s) => s[3].includes(g.id));
+    const terrain: Terrain = [
+      'alps',
+      'andes',
+      'chile',
+      'afghan',
+      'china-west',
+      'anatolia',
+    ].includes(g.id)
+      ? 'mountains'
+      : ['amazon', 'canada-east', 'canada-west', 'siberia', 'central-africa', 'guianas'].includes(
+            g.id,
+          )
+        ? 'forest'
+        : ['bohemia', 'castile', 'inland', 'bolivia', 'mongolia'].includes(g.id)
+          ? 'hills'
+          : isCoastal
+            ? 'coastal'
+            : 'plains';
+    const resource = (['grain', 'trade', 'iron', 'shrine'] as const)[i % 4];
     return {
-      id: `p${index}`,
-      name,
-      col,
-      row,
-      ...center,
+      ...g,
+      kind: 'LAND',
+      continent: g.continent as Continent,
+      rings: g.rings,
+      path: pathOf(g.rings),
+      isCoastal,
       terrain,
       terrainDefenseBonus: TERRAIN_DEFENSE[terrain],
-      baseTax: { grain: 4, trade: 6, iron: 3, shrine: 3 }[resource],
-      baseSupplyLimit: { plains: 18, coastal: 16, forest: 12, hills: 10, mountains: 8 }[terrain],
-      polygon: hexPoints(center),
-      neighbors,
+      baseTax: [4, 5, 3, 4][i % 4],
+      baseSupplyLimit: terrain === 'mountains' ? 10 : terrain === 'forest' ? 12 : 18,
       resource,
-      ownerId: null,
-      troops: 2,
-      morale: 55,
-      training: 1.05,
-      mercenaries: 0,
-      pacification: 70,
-      fortLevel: 0,
-      conversionReligion: null,
-      conversionInstigatorId: null,
-      unrest: 10,
-      development: 0,
-      religion: [6, 7, 14].includes(index)
-        ? 'Protestantismo'
-        : [22, 23, 29, 30].includes(index)
-          ? 'Ortodoxia'
-          : index === 31
-            ? 'Islã sunita'
-            : 'Catolicismo',
-      conversion: 0,
-      capital: false,
     };
   });
-}
-export function makeStaticMap(): ProvinceStaticData[] {
-  return makeMap().map(
-    ({
-      id,
-      name,
-      terrain,
-      terrainDefenseBonus,
-      baseTax,
-      baseSupplyLimit,
-      neighbors,
-      polygon,
-      x,
-      y,
-      col,
-      row,
-      resource,
-    }) => ({
-      id,
-      name,
-      terrain,
-      terrainDefenseBonus,
-      baseTax,
-      baseSupplyLimit,
-      neighbors,
-      polygon,
-      x,
-      y,
-      col,
-      row,
-      resource,
-    }),
+  const ids = new Set(
+    land.filter((p) => mode === 'campaign' || p.continent === theater).map((p) => p.id),
   );
+  const seas: ProvinceStaticData[] = SEAS.filter((s) => s[3].some((id) => ids.has(id))).map(
+    ([id, name, bounds, ports, links]) => {
+      const [w, s, e, n] = bounds;
+      const project = (lon: number, lat: number) => [(lon + 180) * 4, (85 - lat) * 4];
+      const rings = [
+        [
+          project(w, n),
+          project(e - 1, n + 0.5),
+          project(e, s),
+          project(w + 1, s - 0.5),
+          project(w, n),
+        ],
+      ];
+      return {
+        id,
+        name,
+        kind: 'SEA_ZONE',
+        continent: 'SEA_ZONE',
+        terrain: 'coastal',
+        terrainDefenseBonus: 1,
+        baseTax: 0,
+        baseSupplyLimit: 30,
+        isCoastal: false,
+        neighbors: [...ports.filter((id) => ids.has(id)), ...links],
+        rings,
+        path: pathOf(rings),
+        x: (w + e + 360) * 2,
+        y: (170 - n - s) * 2,
+        resource: 'trade',
+      };
+    },
+  );
+  const all = [...land.filter((p) => ids.has(p.id)), ...seas];
+  const active = new Set(all.map((p) => p.id));
+  for (const p of all) {
+    p.neighbors = p.neighbors.filter((id) => active.has(id));
+    if (p.kind === 'LAND')
+      for (const s of seas) if (s.neighbors.includes(p.id)) p.neighbors.push(s.id);
+    p.neighbors = [...new Set(p.neighbors)];
+  }
+  for (const p of all)
+    for (const id of p.neighbors) {
+      const other = all.find((q) => q.id === id)!;
+      if (!other.neighbors.includes(p.id)) other.neighbors.push(p.id);
+    }
+  return all;
 }
-export function hexPoints(p: Pick<Province, 'x' | 'y'>, radius = 60.5) {
-  return Array.from({ length: 6 }, (_, i) => {
-    const a = (Math.PI / 3) * i;
-    return `${p.x + radius * Math.cos(a)},${p.y + radius * Math.sin(a)}`;
-  }).join(' ');
+export function makeMap(mode: GameMode = 'campaign', theater: Theater = 'EUROPE'): Province[] {
+  return makeStaticMap(mode, theater).map((p, i) => ({
+    ...p,
+    ownerId: null,
+    occupierId: null,
+    religion: (['SOLAR', 'MERCHANT', 'REFORMED', 'ANCESTRAL'] as const)[i % 4],
+    pacification: 70,
+    unrest: 10,
+    fortLevel: 0,
+    portLevel: 0,
+    marketLevel: 0,
+    conversion: 0,
+    conversionReligion: null,
+    conversionInstigatorId: null,
+    capitalOf: null,
+  }));
 }

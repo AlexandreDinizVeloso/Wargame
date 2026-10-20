@@ -1,67 +1,83 @@
-import type { ProvinceStaticData, Terrain } from './map';
-export type Objective = 'conquest' | 'prosperity' | 'concord' | 'faith';
-export type Doctrine = 'tolerant' | 'devout';
+import type { ProvinceStaticData } from './map';
 export type GameMode = 'quick' | 'campaign';
-export type ReligionId =
-  'Catolicismo' | 'Anglicanismo' | 'Protestantismo' | 'Ortodoxia' | 'Islã sunita';
+export type Continent = 'EUROPE' | 'AMERICAS' | 'MENA_AFRICA' | 'ASIA';
+export type Theater = Exclude<Continent, 'MENA_AFRICA'>;
+export type ReligionId = 'SOLAR' | 'MERCHANT' | 'REFORMED' | 'ANCESTRAL';
+export type ReligiousPolicy = 'INQUISITION' | 'TOLERANCE';
+export type Objective = 'DOMINATION' | 'IMPERIAL_PACIFICATION';
 export type BotArchetype = 'Militarist' | 'Merchant' | 'Theocrat' | 'Diplomat';
 export type MapMode = 'POLITICAL' | 'RELIGIOUS' | 'ECONOMIC_SUPPLY' | 'DIPLOMATIC' | 'UNREST';
-export interface ProvinceRuntimeState {
-  ownerId: string | null;
-  troops: number;
-  mercenaries: number;
+export type NationId =
+  'PORTUGAL' | 'CASTILE' | 'FRANCE' | 'AUSTRIA' | 'OTTOMANS' | 'MING' | 'JAPAN' | 'INCA';
+export interface Composition {
+  infantry: number;
+  cavalry: number;
+  artillery: number;
+  warships: number;
+  transports: number;
+}
+export interface Battalion extends Composition {
+  id: string;
+  ownerId: string;
+  name: string;
+  provinceId: string;
+  isFleet: boolean;
+  embarkedArmyId?: string;
+  embarkedOnId?: string;
   morale: number;
   training: number;
+  entrenched: boolean;
+  pathQueue: string[];
+  isMercenary: boolean;
+  stranded: boolean;
+}
+export type ArmyUnit = Battalion;
+export interface ProvinceRuntimeState {
+  ownerId: string | null;
+  occupierId: string | null;
   religion: ReligionId;
   pacification: number;
   unrest: number;
   fortLevel: number;
-  development: number;
-  capital: boolean;
+  portLevel: number;
+  marketLevel: number;
   conversion: number;
   conversionReligion: ReligionId | null;
   conversionInstigatorId: string | null;
+  capitalOf: string | null;
 }
+export interface Province extends ProvinceStaticData, ProvinceRuntimeState {}
+export interface RecruitBattalionOrder extends Partial<Composition> {
+  type: 'RECRUIT_BATTALION';
+  provinceId: string;
+  battalionId?: string;
+  isFleet?: boolean;
+  isMercenary?: boolean;
+  name?: string;
+}
+export type CityOrder =
+  | RecruitBattalionOrder
+  | { type: 'BUILD_FORT' | 'BUILD_PORT' | 'BUILD_MARKET' | 'PACIFY'; provinceId: string }
+  | { type: 'CONVERT'; targetProvinceId: string };
+export type BattalionOrder =
+  | { type: 'MOVE_BATTALION'; battalionId: string; targetProvinceId?: string; path?: string[] }
+  | { type: 'ENTRENCH_BATTALION' | 'TRAIN_BATTALION'; battalionId: string }
+  | { type: 'MERGE_BATTALIONS'; battalionId: string; targetBattalionId: string }
+  | { type: 'SPLIT_BATTALION'; battalionId: string; composition: Composition; name?: string }
+  | {
+      type: 'EMBARK_BATTALION';
+      battalionId: string;
+      fleetId?: string;
+      disembarkProvinceId?: string;
+    };
 export type DiplomacyAction =
   | 'PROPOSE_ALLIANCE'
   | 'BREAK_ALLIANCE'
+  | 'MILITARY_ACCESS'
   | 'DEMAND_TRIBUTE'
   | 'EMBARGO'
   | 'FUND_REBELS'
-  | 'MILITARY_ACCESS'
   | 'SEND_SUBSIDY';
-export interface MoveAttackOrder {
-  type: 'MOVE_ATTACK';
-  fromProvinceId: string;
-  toProvinceId: string;
-  troops: number;
-}
-export interface RecruitOrder {
-  type: 'RECRUIT';
-  provinceId: string;
-  amount: number;
-  isMercenary?: boolean;
-}
-export interface TrainOrder {
-  type: 'TRAIN';
-  provinceId: string;
-}
-export interface PacifyOrder {
-  type: 'PACIFY';
-  provinceId: string;
-}
-export interface ConvertOrder {
-  type: 'CONVERT';
-  targetProvinceId: string;
-}
-export interface BuildFortOrder {
-  type: 'BUILD_FORT';
-  provinceId: string;
-}
-export interface DevelopOrder {
-  type: 'DEVELOP';
-  provinceId: string;
-}
 export interface DiplomaticOrder {
   type: 'DIPLOMACY';
   action: DiplomacyAction;
@@ -69,177 +85,90 @@ export interface DiplomaticOrder {
   amount?: number;
   targetProvinceId?: string;
 }
-export type PlayerOrder =
-  | MoveAttackOrder
-  | RecruitOrder
-  | TrainOrder
-  | PacifyOrder
-  | ConvertOrder
-  | BuildFortOrder
-  | DevelopOrder
-  | DiplomaticOrder;
-export interface BattleReport {
+export type PlayerOrder = CityOrder | BattalionOrder | DiplomaticOrder;
+export type CasusBelli = 'CONQUEST' | 'IMPERIAL_BAN' | 'HOLY_WAR' | 'HUMILIATION';
+export type PeaceTerm =
+  | { type: 'CEDE_PROVINCES'; provinceIds: string[] }
+  | { type: 'WAR_REPARATIONS'; immediateTribute: number }
+  | { type: 'HUMILIATE_DISARM' }
+  | { type: 'FORCE_EMPIRE_OR_RELIGION'; choice: 'EMPIRE' | 'RELIGION' }
+  | { type: 'SUBJUGATE' };
+export interface War {
   id: string;
-  turn: number;
-  provinceId: string;
-  attackerId: string;
-  defenderId: string | null;
-  winnerId: string | null;
-  attackerTroops: number;
-  defenderTroops: number;
-  attackPower: number;
-  defensePower: number;
-  ratio: number;
-  attackerTraining: number;
-  defenderTraining: number;
-  terrain: Terrain;
-  terrainDefenseBonus: number;
-  fortLevel: number;
-  fortDefenseMultiplier: number;
-  holyWarBonus: number;
-  coalitionAttackBonus: number;
-  coalitionDefenseBonus: number;
-  attackerCasualties: number;
-  defenderCasualties: number;
-  attackerMoraleBefore: number;
-  attackerMoraleAfter: number;
-  defenderMoraleBefore: number;
-  defenderMoraleAfter: number;
-  retreatDestinationId: string | null;
-  stackwipe: boolean;
-  outcome: 'attacker_victory' | 'defender_victory' | 'siege_blocked';
+  name: string;
+  attackerLeaderId: string;
+  defenderLeaderId: string;
+  attackerIds: string[];
+  defenderIds: string[];
+  casusBelli: CasusBelli;
+  warScore: number;
+  battleScore: number;
+  blockadeScore: number;
+  startedTurn: number;
+  endedTurn: number | null;
+  active: boolean;
+  imperialBanAgainstId: string | null;
+  peaceTerms: PeaceTerm[];
 }
-export interface RetreatReport {
-  reason?: 'battle' | 'repatriation' | 'regrouping';
-  armyId: string;
-  ownerId: string | null;
-  fromProvinceId: string;
-  toProvinceId: string | null;
-  survivors: number;
-  regrouped: number;
-  dispersed: number;
-  morale: number;
-  stranded: boolean;
+export interface ImperialDiet {
+  emperorId: string | null;
+  imperialAuthority: number;
+  memberRealmIds: string[];
+  peaceTurnsCounter: number;
+  retaliationEdictActive: boolean;
+  votes: Record<string, string>;
+  bannedRealmIds: string[];
 }
-export interface StackwipeReport {
-  armyId: string;
-  ownerId: string | null;
-  provinceId: string;
-  troops: number;
-  reason: 'overwhelming_force' | 'zero_morale_no_escape';
-}
-export interface ConversionReport {
-  provinceId: string;
-  actorId: string;
-  ownerId: string | null;
-  from: ReligionId;
-  to: ReligionId;
-  crossBorder: boolean;
-}
-export interface RebellionReport {
-  provinceId: string;
-  previousOwnerId: string;
-  rebelTroops: number;
-}
-export interface DiplomaticChangeReport {
-  action: string;
-  actorId: string | null;
-  targetId: string;
-  amount: number;
-  provinceId: string | null;
-  covert: boolean;
-  text: string;
-}
-export interface AttritionReport {
-  armyId: string;
-  provinceId: string;
-  ownerId: string | null;
-  troopsBefore: number;
-  supplyLimit: number;
-  losses: number;
-}
-export interface HegemonyAlert {
-  playerId: string;
-  objective: Objective;
-  progress: number;
-}
-export interface TurnResolutionReport {
-  turn: number;
-  battles: BattleReport[];
-  retreats: RetreatReport[];
-  stackwipes: StackwipeReport[];
-  conversions: ConversionReport[];
-  rebellions: RebellionReport[];
-  diplomaticChanges: DiplomaticChangeReport[];
-  attritionLosses: AttritionReport[];
-  hegemonyAlerts: HegemonyAlert[];
-}
-export function emptyTurnReport(turn: number): TurnResolutionReport {
-  return {
-    turn,
-    battles: [],
-    retreats: [],
-    stackwipes: [],
-    conversions: [],
-    rebellions: [],
-    diplomaticChanges: [],
-    attritionLosses: [],
-    hegemonyAlerts: [],
-  };
-}
-export type GameCommand =
-  | { type: 'SUBMIT_ORDER'; order: PlayerOrder }
-  | { type: 'CANCEL_ORDER'; key: string }
-  | { type: 'READY'; ready: boolean }
-  | { type: 'ANSWER_OFFER'; offerId: string; accept: boolean }
-  | { type: 'START_GAME' }
-  | { type: 'SET_MODE'; mode: GameMode }
-  | { type: 'SET_IDENTITY'; objective: Objective; doctrine: Doctrine }
-  | { type: 'ADD_BOT' }
-  | { type: 'REPLACE_WITH_BOT'; playerId: string }
-  | { type: 'CHAT'; text: string };
-export type Action = 'move' | 'recruit' | 'train' | 'develop' | 'pacify' | 'convert';
-export interface Order {
-  provinceId: string;
-  action: Action;
-  targetId?: string;
-  amount?: number;
+export interface NationDefinition {
+  id: NationId;
+  name: string;
+  color: string;
+  emblem: string;
+  religion: ReligionId;
+  ideas: [string, string];
+  homeProvinceId: string;
+  modifiers: Partial<
+    Record<
+      | 'navalAttack'
+      | 'artillery'
+      | 'cavalry'
+      | 'infantry'
+      | 'trade'
+      | 'authority'
+      | 'recruitCost'
+      | 'fleetCost'
+      | 'pacification'
+      | 'manpower',
+      number
+    >
+  >;
+  initial: Composition;
 }
 export interface Player {
   id: string;
   name: string;
-  color: string;
+  nationId: NationId;
   nation: string;
+  color: string;
   faith: ReligionId;
-  objective: Objective;
-  doctrine: Doctrine;
+  religiousPolicy: ReligiousPolicy;
   bot: boolean;
   botArchetype: BotArchetype;
   online: boolean;
+  ready: boolean;
   gold: number;
   manpower: number;
   influence: number;
-  ready: boolean;
-  peaceTurns: number;
+  prestige: number;
+  stability: number;
+  warExhaustion: number;
   wonBattles: number;
   conversions: number;
-  score: number;
-  warExhaustion: number;
   tradeEarned: number;
-  stability: number;
-  scores: Record<Objective, number>;
-  victoryProgress: Record<Objective, number>;
-}
-export interface Province extends ProvinceStaticData, ProvinceRuntimeState {}
-export interface StationedArmy {
-  id: string;
-  ownerId: string | null;
-  provinceId: string;
-  troops: number;
-  mercenaries: number;
-  morale: number;
-  training: number;
-  stranded: boolean;
+  subjectOfId: string | null;
+  moraleBonusUntil: number;
+  disarmUntil: number;
+  armyCap: number;
 }
 export interface Relation {
   a: string;
@@ -256,8 +185,145 @@ export interface Offer {
   id: string;
   from: string;
   to: string;
-  kind: 'alliance' | 'military_access' | 'tribute';
+  kind: 'alliance' | 'military_access' | 'tribute' | 'call_to_arms' | 'peace';
   amount: number;
+  warId?: string;
+  defensive?: boolean;
+  terms?: PeaceTerm[];
+  expiresTurn: number;
+}
+export interface Reparation {
+  payerId: string;
+  recipientId: string;
+  untilTurn: number;
+  rate: number;
+}
+export interface BattleReport {
+  id: string;
+  turn: number;
+  provinceId: string;
+  attackerId: string;
+  defenderId: string | null;
+  attackerBattalionIds: string[];
+  defenderBattalionIds: string[];
+  winnerId: string | null;
+  attackerTroops: number;
+  defenderTroops: number;
+  attackPower: number;
+  defensePower: number;
+  ratio: number;
+  attackerTraining: number;
+  defenderTraining: number;
+  terrainDefenseBonus: number;
+  fortLevel: number;
+  neutralizedFortLevels: number;
+  blockadeModifier: number;
+  infantryModifier: number;
+  cavalryModifier: number;
+  artilleryModifier: number;
+  attackerCasualties: number;
+  defenderCasualties: number;
+  attackerCompositionLosses: Composition;
+  defenderCompositionLosses: Composition;
+  casualtiesByRealm: Record<string, number>;
+  attackerMoraleBefore: number;
+  attackerMoraleAfter: number;
+  defenderMoraleBefore: number;
+  defenderMoraleAfter: number;
+  retreatDestinationId: string | null;
+  stackwipe: boolean;
+  outcome: 'attacker_victory' | 'defender_victory' | 'siege_blocked';
+  naval: boolean;
+}
+export interface RetreatReport {
+  armyId: string;
+  ownerId: string;
+  fromProvinceId: string;
+  toProvinceId: string | null;
+  survivors: number;
+  regrouped: number;
+  dispersed: number;
+  morale: number;
+  stranded: boolean;
+  reason: 'battle' | 'repatriation' | 'regrouping';
+}
+export interface DiplomaticChangeReport {
+  action: string;
+  actorId: string | null;
+  targetId: string;
+  text: string;
+  covert: boolean;
+  amount: number;
+  provinceId: string | null;
+}
+export interface MovementReport {
+  battalionId: string;
+  ownerId: string;
+  fromProvinceId: string;
+  toProvinceId: string;
+  isFleet: boolean;
+  troops: number;
+}
+export interface EconomyMetric {
+  playerId: string;
+  turn: number;
+  taxes: number;
+  trade: number;
+  tithes: number;
+  grossIncome: number;
+  income: number;
+  upkeep: number;
+  net: number;
+  gold: number;
+  warExhaustion: number;
+}
+export interface DietEvent {
+  turn: number;
+  emperorId: string | null;
+  imperialAuthority: number;
+  memberRealmIds: string[];
+  peaceTurnsCounter: number;
+  retaliationEdictActive: boolean;
+  votes: Record<string, string>;
+}
+export interface TurnResolutionReport {
+  turn: number;
+  battles: BattleReport[];
+  movements: MovementReport[];
+  retreats: RetreatReport[];
+  stackwipes: {
+    armyId: string;
+    ownerId: string;
+    provinceId: string;
+    troops: number;
+    reason: 'overwhelming_force' | 'zero_morale_no_escape';
+  }[];
+  conversions: {
+    provinceId: string;
+    actorId: string;
+    ownerId: string | null;
+    from: ReligionId;
+    to: ReligionId;
+    crossBorder: boolean;
+  }[];
+  rebellions: { provinceId: string; previousOwnerId: string; rebelTroops: number }[];
+  diplomaticChanges: DiplomaticChangeReport[];
+  attritionLosses: {
+    armyId: string;
+    provinceId: string;
+    ownerId: string;
+    troopsBefore: number;
+    supplyLimit: number;
+    losses: number;
+  }[];
+  economy: EconomyMetric[];
+  diet: DietEvent;
+  events: string[];
+}
+export interface TurnHistory extends TurnResolutionReport {
+  nations: Player[];
+  wars: War[];
+  control: { provinceId: string; ownerId: string | null; occupierId: string | null }[];
 }
 export interface LogEntry {
   id: number;
@@ -270,8 +336,17 @@ export interface ChatEntry {
   playerId: string;
   text: string;
 }
+export interface MatchConfig {
+  mode: GameMode;
+  theater: Theater;
+  mapId: string;
+  maxTurns: number;
+  turnSeconds: number;
+  createdVersion: '0.3.0';
+  legacyResult?: { winnerId: string | null; objective: string | null; version: '0.2.0' };
+}
 export interface GameState {
-  version: 2;
+  version: 3;
   code: string;
   hostId: string;
   phase: 'lobby' | 'planning' | 'finished';
@@ -279,37 +354,71 @@ export interface GameState {
   maxTurns: number;
   seed: number;
   nextId: number;
+  mode: GameMode;
+  theater: Theater;
+  matchConfig: MatchConfig;
   players: Player[];
   provinces: Province[];
+  battalions: Battalion[];
   relations: Relation[];
   offers: Offer[];
+  wars: War[];
+  diet: ImperialDiet;
+  reparations: Reparation[];
   orders: Record<string, PlayerOrder[]>;
   log: LogEntry[];
   chat: ChatEntry[];
   winnerId: string | null;
   winnerObjective: Objective | null;
-  hegemonyLeaderId: string | null;
-  mode: GameMode;
+  finishReason: 'victory' | 'turn_limit' | 'realm_collapse' | 'legacy_finished' | null;
   turnSeconds: number;
   deadline: number | null;
   demo: boolean;
   paused: boolean;
   persistenceEnabled: boolean;
   baseUpkeep: number;
-  victoryTargets: Record<Objective, number>;
-  stationedArmies: StationedArmy[];
-  displacedArmies: StationedArmy[];
   lastReport: TurnResolutionReport | null;
   reports: TurnResolutionReport[];
+  history: TurnHistory[];
   pendingDiplomacy: DiplomaticChangeReport[];
 }
 export type GameView = Omit<GameState, 'orders' | 'seed' | 'nextId' | 'pendingDiplomacy'> & {
-  myOrders: Order[];
   plannedOrders: PlayerOrder[];
 };
+export type GameCommand =
+  | { type: 'SUBMIT_ORDER'; order: PlayerOrder }
+  | { type: 'CANCEL_ORDER'; key: string }
+  | { type: 'READY'; ready: boolean }
+  | { type: 'ANSWER_OFFER'; offerId: string; accept: boolean }
+  | { type: 'START_GAME' }
+  | { type: 'SET_MODE'; mode: GameMode; theater?: Theater }
+  | { type: 'SET_IDENTITY'; nationId: NationId; religiousPolicy?: ReligiousPolicy }
+  | { type: 'SET_RELIGIOUS_POLICY'; policy: ReligiousPolicy }
+  | { type: 'ADD_BOT' }
+  | { type: 'REPLACE_WITH_BOT'; playerId: string }
+  | { type: 'CHAT'; text: string }
+  | {
+      type: 'DECLARE_WAR';
+      targetRealmId: string;
+      casusBelli: CasusBelli;
+      offensiveAllyIds?: string[];
+    }
+  | { type: 'OFFER_PEACE'; warId: string; terms: PeaceTerm[] }
+  | { type: 'JOIN_DIET' }
+  | { type: 'LEAVE_DIET' }
+  | { type: 'VOTE_EMPEROR'; candidateId: string }
+  | { type: 'ISSUE_IMPERIAL_EDICT' }
+  | { type: 'CALL_TO_ARMS'; warId: string; allyId: string };
 export type ClientMessage =
-  | { type: 'create'; name: string; mode?: GameMode; objective?: Objective; demo?: boolean }
-  | { type: 'join'; code: string; name: string; objective?: Objective }
+  | {
+      type: 'create';
+      name: string;
+      mode?: GameMode;
+      theater?: Theater;
+      nationId?: NationId;
+      demo?: boolean;
+    }
+  | { type: 'join'; code: string; name: string; nationId?: NationId }
   | { type: 'resume'; code: string; playerId: string; token: string }
   | { type: 'leave' }
   | { type: 'command'; command: GameCommand };
@@ -318,86 +427,41 @@ export type ServerMessage =
   | { type: 'state'; state: GameView }
   | { type: 'error'; message: string }
   | { type: 'left' };
-export const OBJECTIVES: Record<Objective, { name: string; description: string; formula: string }> =
-  {
-    conquest: {
-      name: 'Supremacia',
-      description: 'Expanda suas fronteiras e vença batalhas.',
-      formula: '1 por província + 0,35 por batalha vencida.',
-    },
-    prosperity: {
-      name: 'Prosperidade',
-      description: 'Construa uma economia que sustente seu império.',
-      formula: '2 por nível comercial + ouro/30 + comércio acumulado/18.',
-    },
-    concord: {
-      name: 'Concórdia',
-      description: 'Estabilize províncias e cultive alianças.',
-      formula: '1 por província estável + 0,6 por rodada de paz (até 8) + 1,5 por aliança.',
-    },
-    faith: {
-      name: 'Legado espiritual',
-      description: 'Espalhe sua crença e integre as novas comunidades.',
-      formula: '1,5 por província estável da sua crença + 1,2 por conversão concluída.',
-    },
-  };
-export const ACTIONS: Record<
-  Action,
-  { name: string; description: string; gold: number; manpower: number; influence: number }
-> = {
-  move: {
-    name: 'Marchar',
-    description: 'Mova tropas para uma vizinha. Entrar em território inimigo inicia combate.',
-    gold: 0,
-    manpower: 0,
-    influence: 0,
+export interface MatchTelemetry {
+  schemaVersion: 3;
+  matchConfig: MatchConfig;
+  nations: Player[];
+  turnByTurnHistory: TurnHistory[];
+  wars: War[];
+  battles: BattleReport[];
+  dietHistory: DietEvent[];
+  economyMetrics: EconomyMetric[];
+  finalState: Omit<GameView, 'history'>;
+}
+export const OBJECTIVES: Record<Objective, { name: string; description: string }> = {
+  DOMINATION: {
+    name: 'Dominação Total',
+    description: 'Subjugue os demais reinos ou controle 75% das terras, sem rival acima de 15%.',
   },
-  recruit: {
-    name: 'Recrutar',
-    description: 'Adicione 3 recrutas. Eles começam com treinamento 1,00 e moral 60.',
-    gold: 9,
-    manpower: 3,
-    influence: 0,
-  },
-  train: {
-    name: 'Treinar',
-    description: '+0,10 de treinamento (máximo 1,50) e +8 de moral.',
-    gold: 6,
-    manpower: 0,
-    influence: 0,
-  },
-  develop: {
-    name: 'Desenvolver',
-    description: '+1 nível (máximo 3). Cada nível acrescenta 1,5 à renda comercial.',
-    gold: 16,
-    manpower: 0,
-    influence: 0,
-  },
-  pacify: {
-    name: 'Pacificar',
+  IMPERIAL_PACIFICATION: {
+    name: 'Pacificação Imperial',
     description:
-      '+35 pacificação e −25 revolta; estabilidade exige pacificação ≥ 80 e revolta ≤ 25.',
-    gold: 8,
-    manpower: 0,
-    influence: 0,
-  },
-  convert: {
-    name: 'Enviar missão',
-    description:
-      'Avance 50% na conversão. Duas missões mudam a crença; conversão estrangeira gera 20 de revolta.',
-    gold: 8,
-    manpower: 0,
-    influence: 2,
+      'Como Imperador, reúna 60% das nações vivas e preserve cinco rodadas sem guerras no mundo.',
   },
 };
-export const FACTIONS = [
-  { nation: 'Portugal', color: '#d5ac68', faith: 'Catolicismo' },
-  { nation: 'Coroa de Castela', color: '#ce7c83', faith: 'Catolicismo' },
-  { nation: 'França', color: '#8bb8d4', faith: 'Catolicismo' },
-  { nation: 'Inglaterra', color: '#c995bc', faith: 'Anglicanismo' },
-  { nation: 'Sacro Império', color: '#a6b978', faith: 'Catolicismo' },
-  { nation: 'República de Veneza', color: '#72b7a5', faith: 'Catolicismo' },
-  { nation: 'Império Otomano', color: '#e5a075', faith: 'Islã sunita' },
-  { nation: 'Polônia', color: '#9197d1', faith: 'Catolicismo' },
-] as const;
-export { orderCost, incomeOf, economyOf } from './rules';
+export function emptyTurnReport(turn: number, diet: ImperialDiet): TurnResolutionReport {
+  return {
+    turn,
+    battles: [],
+    movements: [],
+    retreats: [],
+    stackwipes: [],
+    conversions: [],
+    rebellions: [],
+    diplomaticChanges: [],
+    attritionLosses: [],
+    economy: [],
+    diet: { turn, ...structuredClone(diet) },
+    events: [],
+  };
+}

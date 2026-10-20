@@ -104,10 +104,10 @@ test('servidor headless responde sem frontend e recupera a campanha após SIGKIL
   children.push(initial.child);
   const schema = (await fetch(`http://127.0.0.1:${initial.port}/api/schema`).then((r) =>
     r.json(),
-  )) as { protocolVersion: number; map: { terrain: string; polygon: string }[] };
-  assert.equal(schema.protocolVersion, 2);
-  assert.equal(schema.map.length, 32);
-  assert.ok(schema.map.every((p) => p.terrain && p.polygon));
+  )) as { protocolVersion: number; map: { terrain: string; path: string }[] };
+  assert.equal(schema.protocolVersion, 3);
+  assert.equal(schema.map.filter((p) => p.terrain).length, 69);
+  assert.ok(schema.map.every((p) => p.terrain && p.path));
   assert.equal((await fetch(`http://127.0.0.1:${initial.port}/`)).status, 404);
   const socket = await connect(initial.port);
   sockets.push(socket);
@@ -129,7 +129,7 @@ test('servidor headless responde sem frontend e recupera a campanha após SIGKIL
     socket,
     {
       type: 'command',
-      command: { type: 'SUBMIT_ORDER', order: { type: 'TRAIN', provinceId: 'p16' } },
+      command: { type: 'SUBMIT_ORDER', order: { type: 'TRAIN_BATTALION', battalionId: 'army-1' } },
     },
     'state',
     (m) => m.state.plannedOrders.length === 1,
