@@ -1,3 +1,4 @@
+import { hegemonicThreat } from '../shared/strategy';
 import type { CasusBelli, DiplomaticOrder, GameState, PeaceTerm, War } from '../shared/types';
 import {
   CASUS_LABELS,
@@ -6,7 +7,6 @@ import {
   clamp,
   controller,
   getRelation,
-  livingPlayers,
   reservedResources,
   roundMoney,
   unitCount,
@@ -34,55 +34,6 @@ export function diplomaticEvent(
 ) {
   g.pendingDiplomacy.push({ action, actorId, targetId, text, amount, provinceId, covert });
   log(g, text, 'diplomacy');
-}
-export function electEmperor(g: GameState) {
-  const living = new Set(livingPlayers(g).map((p) => p.id)),
-    d = g.diet;
-  d.memberRealmIds = d.memberRealmIds.filter(
-    (id) => living.has(id) && !d.bannedRealmIds.includes(id),
-  );
-  for (const id of Object.keys(d.votes))
-    if (!d.memberRealmIds.includes(id) || !d.memberRealmIds.includes(d.votes[id]))
-      delete d.votes[id];
-  const old = d.emperorId;
-  d.emperorId =
-    [...d.memberRealmIds].sort(
-      (a, b) =>
-        Object.values(d.votes).filter((v) => v === b).length -
-          Object.values(d.votes).filter((v) => v === a).length ||
-        playerOf(g, b).prestige - playerOf(g, a).prestige ||
-        a.localeCompare(b),
-    )[0] ?? null;
-  if (old !== d.emperorId) {
-    d.retaliationEdictActive = false;
-    if (d.emperorId)
-      diplomaticEvent(
-        g,
-        'EMPEROR_ELECTED',
-        d.emperorId,
-        d.emperorId,
-        `${playerOf(g, d.emperorId).nation} preside a Dieta Imperial.`,
-      );
-  }
-}
-export function joinDiet(g: GameState, id: string, forced = false) {
-  assert(
-    g.provinces.some((p) => p.ownerId === id),
-    'Reino sem território não pode ingressar.',
-  );
-  assert(!g.diet.bannedRealmIds.includes(id) || forced, 'O banimento imperial impede o ingresso.');
-  if (!g.diet.memberRealmIds.includes(id)) {
-    g.diet.memberRealmIds.push(id);
-    g.diet.votes[id] = id;
-    diplomaticEvent(g, 'JOIN_DIET', id, id, `${playerOf(g, id).nation} ingressou na Dieta.`);
-  }
-  if (forced) g.diet.bannedRealmIds = g.diet.bannedRealmIds.filter((x) => x !== id);
-  electEmperor(g);
-}
-export function leaveDiet(g: GameState, id: string) {
-  g.diet.memberRealmIds = g.diet.memberRealmIds.filter((x) => x !== id);
-  delete g.diet.votes[id];
-  electEmperor(g);
 }
 export function syncWars(g: GameState) {
   for (const r of g.relations) {
@@ -158,16 +109,20 @@ export function declareWar(
   assert(!r?.allied, 'Rompa a aliança antes de declarar guerra.');
   assert((r?.truceUntil ?? 0) < g.turn, 'Existe uma trégua ativa.');
   assert(
-    ['CONQUEST', 'IMPERIAL_BAN', 'HOLY_WAR', 'HUMILIATION'].includes(casusBelli),
+    ['CONQUEST', 'HOLY_WAR', 'HUMILIATION', 'COALITION'].includes(casusBelli),
     'Casus belli inválido.',
   );
   if (casusBelli === 'HOLY_WAR')
     assert(actor.faith !== target.faith, 'Guerra Santa exige outra religião.');
-  if (casusBelli === 'IMPERIAL_BAN')
-    assert(g.diet.bannedRealmIds.includes(targetId), 'Esse reino não está sob banimento.');
+  if (casusBelli === 'COALITION')
+    assert(
+      hegemonicThreat(g, targetId) &&
+        g.coalitions.some((c) => c.targetId === targetId && c.memberIds.includes(id) && !c.warId),
+      'Ingresse em uma coalizão válida primeiro.',
+    );
   for (const ally of offensiveAllies)
     assert(getRelation(g, id, ally)?.allied && ally !== targetId, 'Aliado ofensivo inválido.');
-  if (!(casusBelli === 'HOLY_WAR' && actor.faith === 'SOLAR') && casusBelli !== 'IMPERIAL_BAN')
+  if (!(casusBelli === 'HOLY_WAR' && actor.faith === 'SOLAR') && casusBelli !== 'COALITION')
     actor.stability = clamp(actor.stability - 5);
   const war: War = {
     id: nextId(g, 'war'),
@@ -187,21 +142,10 @@ export function declareWar(
     peaceTerms: [],
   };
   g.wars.push(war);
-  g.diet.peaceTurnsCounter = 0;
-  if (g.diet.retaliationEdictActive) {
-    war.imperialBanAgainstId = id;
-    if (!g.diet.bannedRealmIds.includes(id)) g.diet.bannedRealmIds.push(id);
-    leaveDiet(g, id);
-    for (const member of g.diet.memberRealmIds)
-      if (member !== id && !war.defenderIds.includes(member)) war.defenderIds.push(member);
-    diplomaticEvent(
-      g,
-      'IMPERIAL_RETALIATION',
-      g.diet.emperorId,
-      id,
-      'O Édito de Paz convocou toda a Dieta contra o agressor.',
-    );
-  }
+  actor.aggressiveExpansion = clamp(
+    actor.aggressiveExpansion +
+      (casusBelli === 'CONQUEST' ? 20 : casusBelli === 'HUMILIATION' ? 10 : 0),
+  );
   syncWars(g);
   for (const ally of activeAlliances(g, targetId).map((r) => (r.a === targetId ? r.b : r.a)))
     if (![...war.attackerIds, ...war.defenderIds].includes(ally))
@@ -309,7 +253,7 @@ function validatePeace(g: GameState, war: War, actorId: string, terms: PeaceTerm
         'Tributo imediato deve estar entre 0 e 100.',
       );
     else if (t.type === 'FORCE_EMPIRE_OR_RELIGION')
-      assert(['EMPIRE', 'RELIGION'].includes(t.choice), 'Exigência inválida.');
+      assert(t.choice === 'RELIGION', 'Exigência inválida.');
     else assert(['HUMILIATE_DISARM', 'SUBJUGATE'].includes(t.type), 'Termo de paz inválido.');
   }
   return sides;
@@ -322,6 +266,7 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
     if (t.type === 'CEDE_PROVINCES')
       for (const id of t.provinceIds) {
         const p = provinceOf(g, id);
+        winner.aggressiveExpansion = clamp(winner.aggressiveExpansion + 12);
         p.ownerId = actorId;
         p.occupierId = null;
       }
@@ -343,8 +288,7 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
       loser.prestige -= 20;
       loser.disarmUntil = g.turn + 3;
       loser.armyCap = 8;
-      if (g.diet.emperorId === winner.id)
-        g.diet.imperialAuthority = clamp(g.diet.imperialAuthority + 20);
+
       let excess = liveArmySize(g, loser.id) - 8;
       for (const a of g.battalions
         .filter((a) => a.ownerId === loser.id && !a.isFleet)
@@ -363,8 +307,8 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
       );
     }
     if (t.type === 'FORCE_EMPIRE_OR_RELIGION') {
-      if (t.choice === 'EMPIRE') joinDiet(g, loser.id, true);
-      else loser.faith = winner.faith;
+      assert(t.choice === 'RELIGION', 'A Dieta foi substituída por coalizões.');
+      loser.faith = winner.faith;
     }
     if (t.type === 'SUBJUGATE') {
       assert(!winner.subjectOfId, 'Um súdito não pode impor submissão a outro reino.');
@@ -373,7 +317,6 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
       loser.subjectOfId = winner.id;
       const access = getRelation(g, winner.id, loser.id)!;
       access.militaryAccess = [...new Set([...access.militaryAccess, winner.id, loser.id])];
-      leaveDiet(g, loser.id);
     }
   }
   war.active = false;
@@ -471,7 +414,7 @@ export function answerOffer(g: GameState, id: string, offerId: string, accept: b
       r.allied = false;
       r.trust = clamp(r.trust - 50, -100, 100);
       to.prestige -= 15;
-      g.diet.imperialAuthority = clamp(g.diet.imperialAuthority - 5);
+
       syncWars(g);
     }
   } else if (accept) {
@@ -481,6 +424,15 @@ export function answerOffer(g: GameState, id: string, offerId: string, accept: b
       applyPeace(g, w, from.id, offer.terms ?? []);
     } else {
       assert(!atWar(g, id, from.id), 'Negocie a paz antes de firmar esse acordo.');
+      if (offer.kind === 'vassalage') {
+        assert(
+          from.nationId === 'aurelia' && !from.subjectOfId && !to.subjectOfId,
+          'Vassalagem indisponível.',
+        );
+        for (const p of g.players) if (p.subjectOfId === to.id) p.subjectOfId = from.id;
+        to.subjectOfId = from.id;
+        r.militaryAccess = [...new Set([...r.militaryAccess, from.id, to.id])];
+      }
       if (offer.kind === 'alliance') {
         assert(
           activeAlliances(g, id).length < 3 && activeAlliances(g, from.id).length < 3,
@@ -514,6 +466,28 @@ export function diplomacy(g: GameState, id: string, o: DiplomaticOrder) {
     target = playerOf(g, o.targetRealmId);
   assert(id !== target.id, 'Escolha outro reino.');
   const r = getRelation(g, id, target.id)!;
+  if (o.action === 'OFFER_VASSALAGE') {
+    assert(
+      actor.nationId === 'aurelia' &&
+        !actor.subjectOfId &&
+        !target.subjectOfId &&
+        !atWar(g, id, target.id),
+      'Somente Aurélia independente pode propor vassalagem em paz.',
+    );
+    assert(
+      !g.offers.some((f) => f.from === id && f.to === target.id && f.kind === 'vassalage'),
+      'Proposta já enviada.',
+    );
+    g.offers.push({
+      id: nextId(g, 'offer'),
+      from: id,
+      to: target.id,
+      kind: 'vassalage',
+      amount: 0,
+      expiresTurn: g.turn + 2,
+    });
+    return;
+  }
   if (o.action === 'BREAK_ALLIANCE') {
     breakAlliance(g, id, target.id);
     return;
@@ -581,11 +555,22 @@ export function diplomacy(g: GameState, id: string, o: DiplomaticOrder) {
   const amount = o.amount ?? 0;
   assert(Number.isInteger(amount) && amount >= 1 && amount <= 1000, 'Quantia inválida.');
   assert(actor.gold - reserved.gold >= amount, 'Ouro livre insuficiente.');
-  if (o.action === 'FUND_REBELS') {
+  if (o.action === 'BUY_VISION_OR_BRIHC' && !o.targetProvinceId) {
+    assert(actor.nationId === 'vespera' && amount >= 20, 'Visão mercante exige Véspera e 20 ouro.');
+    g.visionContracts = g.visionContracts.filter(
+      (v) => v.buyerId !== id || v.targetId !== target.id,
+    );
+    g.visionContracts.push({ buyerId: id, targetId: target.id, untilTurn: g.turn + 2 });
+    actor.gold = roundMoney(actor.gold - amount);
+    return;
+  }
+  if (o.action === 'FUND_REBELS' || o.action === 'BUY_VISION_OR_BRIHC') {
+    if (o.action === 'BUY_VISION_OR_BRIHC')
+      assert(actor.nationId === 'vespera', 'Ação exclusiva de Véspera.');
     assert(amount >= 12, 'Rebeldes exigem ao menos 12 ouro.');
     const p = provinceOf(g, o.targetProvinceId ?? '');
     assert(controller(p) === target.id && p.kind === 'LAND', 'Província rival inválida.');
-    p.unrest = clamp(p.unrest + 30);
+    p.unrest = clamp(p.unrest + (actor.nationId === 'vespera' ? 60 : 30));
     r.trust = clamp(r.trust - 15, -100, 100);
     diplomaticEvent(
       g,
@@ -611,23 +596,4 @@ export function diplomacy(g: GameState, id: string, o: DiplomaticOrder) {
     );
   }
   actor.gold = roundMoney(actor.gold - amount);
-}
-export function issueEdict(g: GameState, id: string) {
-  assert(g.diet.emperorId === id, 'Somente o Imperador pode emitir o Édito.');
-  assert(!g.diet.retaliationEdictActive, 'O Édito já está ativo.');
-  const p = playerOf(g, id);
-  assert(
-    g.diet.imperialAuthority >= 25 && p.gold - reservedResources(g, id).gold >= 25,
-    'Édito exige 25 ouro e 25 autoridade.',
-  );
-  p.gold = roundMoney(p.gold - 25);
-  g.diet.imperialAuthority -= 25;
-  g.diet.retaliationEdictActive = true;
-  diplomaticEvent(
-    g,
-    'IMPERIAL_EDICT',
-    id,
-    id,
-    'O Édito de Paz Imperial ameaça retaliar qualquer nova declaração de guerra.',
-  );
 }

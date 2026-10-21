@@ -12,14 +12,14 @@ import {
   viewFor,
 } from '../server/game';
 import { reservedResources, unitCount, victoryStatus } from '../shared/rules';
-import { declareWar, joinDiet } from '../server/diplomacy';
+import { declareWar } from '../server/diplomacy';
 import { setup, army } from './fixtures';
 
 test('início exige 3–8 jogadores, nações únicas e territórios sem sobreposição', () => {
   const g = createGame('START');
   assert.throws(() => startGame(g));
   addPlayer(g, 'A');
-  assert.throws(() => addPlayer(g, 'Duplicado', false, 'PORTUGAL'));
+  assert.throws(() => addPlayer(g, 'Duplicado', false, 'aurelia'));
   addPlayer(g, 'B');
   assert.throws(() => startGame(g));
   for (let i = 2; i < 8; i++) addPlayer(g, String(i));
@@ -81,7 +81,7 @@ test('mercenários imediatos respeitam ouro reservado, reserva humana e desconto
     g,
     players: [a],
   } = setup();
-  a.gold = 20;
+  a.gold = 18;
   submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'portugal' });
   assert.throws(() =>
     submitOrder(g, a.id, {
@@ -99,7 +99,7 @@ test('mercenários imediatos respeitam ouro reservado, reserva humana e desconto
     infantry: 2,
     isMercenary: true,
   });
-  assert.equal(a.gold, 11);
+  assert.equal(a.gold, 12.15);
   assert.equal(a.manpower, manpower);
   assert.equal(g.battalions[0].training, 1);
   assert.equal(g.battalions[0].isMercenary, true);
@@ -243,21 +243,18 @@ test('visões privadas escondem ordens, semente e caminhos adversários', () => 
   assert.equal('orders' in other, false);
   assert.deepEqual(other.battalions[0].pathQueue, []);
 });
-test('somente dominação e pacificação imperial podem vencer, sem desempate artificial no limite', () => {
+test('dominação exige 60% incluindo vassalos e a partida não acaba por rodadas', () => {
   const {
     g,
     players: [a],
   } = setup();
   assert.equal(victoryStatus(g), null);
-  for (const p of g.provinces.filter((p) => p.kind === 'LAND')) p.ownerId = a.id;
+  const lands = g.provinces.filter((p) => p.kind === 'LAND');
+  lands.slice(0, Math.ceil(lands.length * 0.6)).forEach((p) => (p.ownerId = a.id));
   assert.equal(victoryStatus(g)?.objective, 'DOMINATION');
-  const imperial = setup();
-  for (const p of imperial.players.slice(0, 2)) joinDiet(imperial.g, p.id);
-  imperial.g.diet.peaceTurnsCounter = 5;
-  assert.equal(victoryStatus(imperial.g)?.objective, 'IMPERIAL_PACIFICATION');
-  const draw = setup();
-  draw.g.maxTurns = 1;
-  resolveTurn(draw.g);
-  assert.equal(draw.g.winnerId, null);
-  assert.equal(draw.g.finishReason, 'turn_limit');
+  const running = setup();
+  running.g.maxTurns = 1;
+  resolveTurn(running.g);
+  assert.equal(running.g.phase, 'planning');
+  assert.equal(running.g.finishReason, null);
 });

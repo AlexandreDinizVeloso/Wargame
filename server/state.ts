@@ -64,10 +64,15 @@ export function createBattalion(
     isFleet: options.isFleet ?? false,
     isMercenary: options.isMercenary ?? false,
     morale: options.morale ?? 70,
-    training: options.training ?? 1.1,
+    training: Math.max(
+      options.training ?? 1.1,
+      g.players.find((p) => p.id === ownerId)?.nationId === 'sapiencia' ? 1.2 : 1,
+    ),
     entrenched: false,
     pathQueue: [],
     stranded: false,
+    movementCredit: 0,
+    movementPoints: 1,
   };
   g.battalions.push(army);
   return army;
@@ -145,7 +150,7 @@ export function setNation(p: Player, id: Player['nationId']) {
   p.faith = n.religion;
 }
 export function coalitionMorale(g: GameState, id: string) {
-  return g.wars.some((w) => w.active && w.imperialBanAgainstId && w.defenderIds.includes(id))
+  return g.wars.some((w) => w.active && w.casusBelli === 'COALITION' && w.attackerIds.includes(id))
     ? 1.2
     : 1;
 }

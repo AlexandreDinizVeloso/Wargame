@@ -78,7 +78,7 @@ export function useGame() {
             setStatus('online');
             break;
           case 'state':
-            if (data.state.version !== 3) {
+            if (data.state.version !== 4) {
               setError('Versão de protocolo incompatível. Atualize a página.');
               return;
             }

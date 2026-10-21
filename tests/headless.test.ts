@@ -105,7 +105,7 @@ test('servidor headless responde sem frontend e recupera a campanha após SIGKIL
   const schema = (await fetch(`http://127.0.0.1:${initial.port}/api/schema`).then((r) =>
     r.json(),
   )) as { protocolVersion: number; map: { terrain: string; path: string }[] };
-  assert.equal(schema.protocolVersion, 3);
+  assert.equal(schema.protocolVersion, 4);
   assert.equal(schema.map.filter((p) => p.terrain).length, 69);
   assert.ok(schema.map.every((p) => p.terrain && p.path));
   assert.equal((await fetch(`http://127.0.0.1:${initial.port}/`)).status, 404);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, Coins, Flag, Handshake, ScrollText, Swords, Users } from 'lucide-react';
 import type { CasusBelli, DiplomacyAction, GameView, PeaceTerm } from '../shared/types';
 import {
@@ -13,10 +13,14 @@ export default function DiplomacyDrawer({
   game,
   playerId,
   command,
+  focusedRealmId,
+  onDeclareWar,
 }: {
   game: GameView;
   playerId: string;
   command: Command;
+  focusedRealmId?: string;
+  onDeclareWar: (id: string) => void;
 }) {
   const me = game.players.find((p) => p.id === playerId)!,
     [targetId, setTarget] = useState(game.players.find((p) => p.id !== playerId)?.id ?? ''),
@@ -24,6 +28,9 @@ export default function DiplomacyDrawer({
     [allies, setAllies] = useState<string[]>([]),
     [money, setMoney] = useState(12),
     [provinceId, setProvince] = useState('');
+  useEffect(() => {
+    if (focusedRealmId && focusedRealmId !== playerId) setTarget(focusedRealmId);
+  }, [focusedRealmId, playerId]);
   const target =
       game.players.find((p) => p.id === targetId) ?? game.players.find((p) => p.id !== playerId)!,
     r = getRelation(game, playerId, target.id)!;
@@ -95,6 +102,13 @@ export default function DiplomacyDrawer({
         </div>
         <span className="tag">{wars.length} GUERRA(S)</span>
       </div>
+      <button
+        className="danger-button prominent-war"
+        disabled={!active || r.atWar}
+        onClick={() => onDeclareWar(target.id)}
+      >
+        ⚔️ Declarar Guerra a {target.nation}
+      </button>
       <div className="realm-list">
         {game.players.map((p) => {
           const rel = p.id === playerId ? null : getRelation(game, playerId, p.id);
@@ -184,7 +198,7 @@ export default function DiplomacyDrawer({
                 Casus belli
                 <select value={casusBelli} onChange={(e) => setCB(e.target.value as CasusBelli)}>
                   <option value="CONQUEST">Conquista</option>
-                  <option value="IMPERIAL_BAN">Banimento imperial</option>
+                  <option value="COALITION">Guerra de Contenção</option>
                   <option value="HOLY_WAR">Guerra Santa</option>
                   <option value="HUMILIATION">Humilhação</option>
                 </select>
@@ -208,11 +222,6 @@ export default function DiplomacyDrawer({
                   ))}
                 </fieldset>
               )}
-              {game.diet.retaliationEdictActive && (
-                <p className="warning-box">
-                  Édito ativo: toda a Dieta defenderá o alvo e você sofrerá banimento.
-                </p>
-              )}
               <button
                 className="danger-button"
                 disabled={!active || r.allied || r.truceUntil >= game.turn || !!me.subjectOfId}
@@ -229,6 +238,19 @@ export default function DiplomacyDrawer({
               </button>
             </details>
           </>
+        )}
+        {me.nationId === 'aurelia' && (
+          <button disabled={!active || r.atWar} onClick={() => action('OFFER_VASSALAGE')}>
+            👑 Propor vassalagem
+          </button>
+        )}
+        {me.nationId === 'vespera' && (
+          <button
+            disabled={!active || me.gold < 20}
+            onClick={() => action('BUY_VISION_OR_BRIHC', 20)}
+          >
+            🕵️ Comprar visão total · 20 ouro / 3 rodadas
+          </button>
         )}
         <div className="button-pair">
           <button disabled={!active} onClick={() => action('EMBARGO')}>
@@ -305,6 +327,7 @@ export default function DiplomacyDrawer({
             <strong>
               {
                 {
+                  vassalage: 'Proposta de vassalagem · 25% renda para Aurélia',
                   alliance: 'Proposta de aliança',
                   military_access: 'Pedido de acesso militar',
                   tribute: 'Exigência de tributo',
@@ -455,7 +478,6 @@ export default function DiplomacyDrawer({
             Exigência de Estado
             <select value={force} onChange={(e) => setForce(e.target.value as typeof force)}>
               <option value="NONE">Nenhuma</option>
-              <option value="EMPIRE">Forçar ingresso na Dieta · 30 pontos</option>
               <option value="RELIGION">Impor religião estatal · 30 pontos</option>
             </select>
           </label>

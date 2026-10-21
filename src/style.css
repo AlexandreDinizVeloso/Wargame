@@ -3141,3 +3141,357 @@ legend {
     scroll-behavior: auto !important;
   }
 }
+
+/* Quarta edição: lobby browser, comando tático e mundo dinâmico. */
+.server-browser {
+  position: absolute;
+  right: 4vw;
+  top: 24%;
+  width: min(480px, 42vw);
+  max-height: 62vh;
+  overflow: auto;
+  z-index: 9;
+  padding: 20px;
+}
+.server-browser h2 {
+  font-size: 18px;
+}
+.server-browser article {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #ffffff20;
+  padding: 14px 0;
+}
+.server-browser article div {
+  flex: 1;
+  min-width: 0;
+}
+.server-browser small {
+  display: block;
+  color: #a4bbc5;
+  margin-top: 5px;
+  line-height: 1.6;
+}
+.entry-content.with-form ~ .server-browser {
+  display: none;
+}
+.entry-content:not(.with-form) {
+  right: 49vw;
+}
+.entry-form {
+  max-height: calc(100dvh - 170px);
+  overflow: auto;
+}
+.nation-card span {
+  white-space: normal;
+  line-height: 1.5;
+}
+.nation-ribbon {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+  z-index: 12;
+  padding: 4px 8px;
+  background: #101c2de8;
+  border: 1px solid #d5ac6850;
+  border-radius: 8px;
+}
+.nation-ribbon button {
+  position: relative;
+  padding: 4px 8px;
+  min-width: 40px;
+}
+.nation-ribbon small {
+  position: absolute;
+  bottom: -2px;
+  right: 0;
+  font-size: 12px;
+}
+.first-ready-banner {
+  padding: 8px 12px;
+  color: #c8d6d9;
+  background: #132732ed;
+  border: 1px solid #637d84;
+  border-radius: 6px;
+  font-size: 11px;
+  text-align: center;
+}
+.game-viewport > .first-ready-banner {
+  position: absolute;
+  top: 141px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 90vw;
+  z-index: 11;
+  pointer-events: none;
+}
+.first-ready-banner.counting {
+  border-color: #ecae57;
+  color: #ffdaa0;
+  animation: timer-pulse 1.5s ease-in-out infinite;
+}
+@keyframes timer-pulse {
+  50% {
+    box-shadow: 0 0 14px #ffb34755;
+  }
+}
+.hud-navigation {
+  top: 94px;
+  max-width: 36vw;
+  flex-wrap: wrap;
+}
+.hud-navigation button {
+  padding: 8px;
+}
+.victory-tracker {
+  top: 181px;
+}
+.telemetry-tools {
+  top: 98px;
+}
+.tactical-hud {
+  position: absolute;
+  z-index: 16;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(900px, 94vw);
+  padding: 12px 16px;
+  box-shadow: 0 -5px 30px #0009;
+}
+.tactical-hud header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.tactical-hud header span {
+  flex: 1;
+  color: #a4bbc5;
+  font-size: 11px;
+}
+.tactical-hud header button {
+  padding: 3px 8px;
+}
+.tactical-composition {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+.tactical-composition b {
+  font-size: 19px;
+}
+.tactical-composition span {
+  font-size: 11px;
+}
+.tactical-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tactical-actions button {
+  font-size: 10px;
+  padding: 7px 9px;
+}
+.game-viewport:has(.tactical-hud) .map-hint {
+  bottom: 215px;
+}
+.destination-attack {
+  animation: attack-pulse 1.2s ease-in-out infinite;
+}
+.destination-friendly {
+  filter: drop-shadow(0 0 3px #22c55e);
+}
+.destination-naval {
+  filter: drop-shadow(0 0 3px #38bdf8);
+}
+@keyframes attack-pulse {
+  50% {
+    stroke-opacity: 0.45;
+    filter: drop-shadow(0 0 4px #ef4444);
+  }
+}
+.route-cancel {
+  cursor: pointer;
+}
+.route-cancel circle {
+  fill: #811f29;
+  stroke: #ffe0d0;
+  stroke-width: 0.6;
+}
+.route-cancel text {
+  fill: white;
+  pointer-events: none;
+}
+.secret-card,
+.coalition-card,
+.foreign-realm-card {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid #d5ac6855;
+  border-radius: 8px;
+  background: #172b37;
+}
+.world-ledger,
+.secret-ledger {
+  padding: 18px;
+}
+.world-ledger p,
+.secret-ledger p {
+  color: #aebfc5;
+  line-height: 1.6;
+  font-size: 12px;
+}
+.war-modal {
+  max-width: 560px;
+}
+.prominent-war {
+  width: 100%;
+  margin: 12px 0;
+  padding: 16px;
+}
+@media (max-width: 1000px) {
+  .server-browser {
+    top: 45%;
+    width: 40vw;
+    max-height: 44vh;
+  }
+  .nation-ribbon {
+    top: 114px;
+  }
+  .game-viewport > .first-ready-banner {
+    top: 164px;
+    font-size: 10px;
+  }
+  .hud-navigation {
+    max-width: 100%;
+    top: 78px;
+  }
+  .tactical-hud {
+    bottom: 12px;
+  }
+}
+@media (max-width: 700px) {
+  .entry-content:not(.with-form) {
+    right: 20px;
+    bottom: 46%;
+    top: 90px;
+  }
+  .hero-copy h1 {
+    font-size: 40px;
+  }
+  .hero-copy > p,
+  .hero-victories,
+  .hero-facts {
+    display: none;
+  }
+  .entry-actions {
+    margin-top: 15px;
+  }
+  .server-browser {
+    top: auto;
+    bottom: 58px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    max-height: 34vh;
+    padding: 12px;
+  }
+  .server-browser h2 {
+    font-size: 14px;
+  }
+  .server-browser article {
+    font-size: 11px;
+  }
+  .server-browser button {
+    font-size: 10px;
+  }
+  .nation-ribbon {
+    top: 120px;
+    gap: 0;
+    padding: 3px;
+  }
+  .nation-ribbon button {
+    min-width: 32px;
+    padding: 2px 5px;
+  }
+  .game-viewport > .first-ready-banner {
+    top: 166px;
+    width: 94vw;
+    max-width: 94vw;
+    font-size: 9px;
+  }
+  .hud-navigation {
+    top: 77px;
+    max-width: 95vw;
+  }
+  .hud-navigation button {
+    font-size: 9px;
+    padding: 6px;
+  }
+  .victory-tracker {
+    top: 207px;
+    left: 10px;
+  }
+  .telemetry-tools {
+    top: 210px;
+  }
+  .tactical-hud {
+    padding: 8px;
+    bottom: 8px;
+    max-height: 37vh;
+    overflow: auto;
+  }
+  .tactical-composition {
+    gap: 10px;
+    padding: 5px 0;
+  }
+  .tactical-composition b {
+    font-size: 15px;
+  }
+  .tactical-actions button {
+    font-size: 9px;
+    padding: 5px;
+  }
+  .game-viewport:has(.tactical-hud) .map-controls {
+    bottom: 39vh;
+  }
+  .game-viewport:has(.tactical-hud) .map-hint {
+    display: none;
+  }
+}
+.tactical-hud {
+  z-index: 35;
+  bottom: 68px;
+}
+@media (max-width: 700px) {
+  .tactical-hud {
+    bottom: 54px;
+  }
+}
+@media (max-width: 700px) {
+  .hud-navigation {
+    top: 123px;
+    max-width: calc(100vw - 18px);
+  }
+  .nation-ribbon {
+    top: 194px;
+  }
+  .game-viewport > .first-ready-banner {
+    top: 239px;
+  }
+  .telemetry-tools {
+    top: 286px;
+  }
+  .victory-tracker {
+    top: 286px;
+  }
+}

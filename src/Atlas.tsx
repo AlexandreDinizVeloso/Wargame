@@ -11,6 +11,8 @@ import type {
 } from '../shared/types';
 import {
   atWar,
+  canUnitVisit,
+  unitPath,
   clamp,
   controller,
   effectiveTax,
@@ -19,6 +21,7 @@ import {
   supplyLimit,
   unitCount,
 } from '../shared/rules';
+import { RESOURCES } from '../shared/strategy';
 import { typing } from './ui';
 export const MAP_MODES: { id: MapMode; name: string; key: string; description: string }[] = [
   {
@@ -74,6 +77,9 @@ interface Props {
   onSelectArmy?: (a: Battalion) => void;
   onTactical?: (p: Province) => void;
   preview?: boolean;
+  viewerId?: string;
+  onCancelOrder?: (id: string) => void;
+  onDeselect?: () => void;
   replay?: { report: TurnResolutionReport; progress: number } | null;
 }
 const heat = (n: number) => `hsl(${145 - clamp(n, 0, 1) * 140} 36% ${38 + clamp(n, 0, 1) * 8}%)`;
@@ -92,6 +98,9 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     onTactical,
     preview = false,
     replay,
+    viewerId,
+    onCancelOrder,
+    onDeselect,
   },
   ref,
 ) {
@@ -250,16 +259,65 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   };
   const armies = game?.battalions.filter((a) => !a.embarkedOnId) ?? [];
   const routes = armies
-    .filter((a) => a.ownerId === referenceId)
+    .filter((a) => a.ownerId === (viewerId ?? referenceId) || a.pathQueue.length > 0)
     .map((a) => {
       const order = orders.find((o) => o.type === 'MOVE_BATTALION' && o.battalionId === a.id);
       const path =
         order?.type === 'MOVE_BATTALION'
-          ? (order.path ?? (order.targetProvinceId ? [order.targetProvinceId] : []))
+          ? (order.path ??
+            (order.targetProvinceId && game
+              ? (unitPath(game, a, order.targetProvinceId) ?? [])
+              : []))
           : a.pathQueue;
       return { army: a, path };
     })
     .filter((r) => r.path.length);
+  const selectedArmy = game?.battalions.find(
+    (a) => a.id === selectedArmyId && a.ownerId === viewerId,
+  );
+  const current = provinces.find((p) => p.id === selectedArmy?.provinceId);
+  const highlight = (p: Province) => {
+    if (!selectedArmy || !current || !current.neighbors.includes(p.id) || !game) return null;
+    if (selectedArmy.embarkedOnId)
+      return p.kind === 'LAND' && p.isCoastal && canUnitVisit(game, selectedArmy, p)
+        ? 'naval'
+        : null;
+    if (selectedArmy.isFleet) return canUnitVisit(game, selectedArmy, p) ? 'naval' : null;
+    if (p.kind === 'SEA_ZONE')
+      return current.portLevel > 0 &&
+        armies.some(
+          (a) =>
+            a.ownerId === viewerId &&
+            a.isFleet &&
+            a.provinceId === p.id &&
+            !a.embarkedArmyId &&
+            a.transports * 4 >= unitCount(selectedArmy),
+        )
+        ? 'naval'
+        : null;
+    const owner = controller(p);
+    if (
+      owner &&
+      owner !== viewerId &&
+      getRelation(game, viewerId!, owner)?.allied &&
+      !canUnitVisit(game, selectedArmy, p)
+    )
+      return null;
+    return owner &&
+      owner !== viewerId &&
+      (atWar(game, viewerId!, owner) || !canUnitVisit(game, selectedArmy, p))
+      ? 'attack'
+      : owner === null
+        ? 'attack'
+        : 'friendly';
+  };
+  const pick = (p: Province) => {
+    if (highlight(p)) onTactical?.(p);
+    else {
+      onDeselect?.();
+      onSelect?.(p);
+    }
+  };
   const pathFor = (ids: string[]) => {
     const points = ids
       .map((id) => provinces.find((p) => p.id === id))
@@ -335,10 +393,14 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           else if (p.touch) {
             const army = p.armyId ? armies.find((a) => a.id === p.armyId) : undefined;
             if (army) onSelectArmy?.(army);
-            else onSelect?.(province);
+            else pick(province);
             dragged.current = true;
           }
         }
+      }}
+      onClick={(e) => {
+        if (e.target instanceof Element && !e.target.closest('[data-province]') && !dragged.current)
+          onDeselect?.();
       }}
       onPointerCancel={() => {
         pan.current = null;
@@ -386,10 +448,12 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         ].map((p) => {
           const owner = players.find((a) => a.id === controller(p));
           const selected = p.id === selectedId;
+          const destination = highlight(p);
           return (
             <g key={p.id}>
               <path
-                className="province-shape"
+                className={`province-shape ${destination ? `destination-${destination}` : ''}`}
+                data-destination={destination ?? undefined}
                 d={p.path}
                 data-province={p.id}
                 data-kind={p.kind}
@@ -398,17 +462,67 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                 aria-label={`${p.name}, ${p.kind === 'SEA_ZONE' ? 'zona marítima' : (owner?.nation ?? 'terra independente')}`}
                 fill={color(p)}
                 fillOpacity={p.kind === 'SEA_ZONE' ? 0.3 : 0.78}
-                stroke={selected ? '#f3d291' : p.kind === 'SEA_ZONE' ? '#49717e' : '#b6bdab'}
-                strokeOpacity={selected ? 1 : p.kind === 'SEA_ZONE' ? 0.35 : 0.55}
-                strokeWidth={selected ? 2 / scale : 0.6 / scale}
+                stroke={
+                  destination === 'attack'
+                    ? '#ef4444'
+                    : destination === 'naval'
+                      ? '#38bdf8'
+                      : destination === 'friendly'
+                        ? '#22c55e'
+                        : selected
+                          ? '#f3d291'
+                          : p.kind === 'SEA_ZONE'
+                            ? '#49717e'
+                            : '#b6bdab'
+                }
+                strokeOpacity={destination ? 1 : selected ? 1 : p.kind === 'SEA_ZONE' ? 0.35 : 0.55}
+                strokeWidth={destination ? 3 / scale : selected ? 2 / scale : 0.6 / scale}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (!dragged.current && !preview) onSelect?.(p);
+                  if (!dragged.current && !preview) pick(p);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') onSelect?.(p);
+                  if (e.key === 'Enter') pick(p);
                 }}
               />
+              {!preview && p.strategicResource && (
+                <g
+                  className={`resource-badge ${mode === 'ECONOMIC_SUPPLY' ? 'emphasized' : ''}`}
+                  pointerEvents="none"
+                >
+                  <title>
+                    {RESOURCES[p.strategicResource].name}: {RESOURCES[p.strategicResource].effect}
+                  </title>
+                  <circle
+                    cx={p.x + 17 / scale}
+                    cy={p.y - 22 / scale}
+                    r={(mode === 'ECONOMIC_SUPPLY' ? 11 : 8) / scale}
+                    fill="#172933"
+                    stroke="#e0c47c"
+                    strokeWidth={0.7 / scale}
+                  />
+                  <text
+                    x={p.x + 17 / scale}
+                    y={p.y - 18 / scale}
+                    textAnchor="middle"
+                    fontSize={(mode === 'ECONOMIC_SUPPLY' ? 13 : 10) / scale}
+                  >
+                    {RESOURCES[p.strategicResource].icon}
+                  </text>
+                </g>
+              )}
+              {destination && (
+                <text
+                  className="destination-icon"
+                  x={p.x}
+                  y={p.y + 18 / scale}
+                  textAnchor="middle"
+                  fontSize={15 / scale}
+                  pointerEvents="none"
+                >
+                  {destination === 'attack' ? '⚔️' : destination === 'naval' ? '⚓' : '👣'}
+                </text>
+              )}
               {p.kind === 'LAND' && (
                 <path d={p.path} fill="url(#map-texture)" pointerEvents="none" />
               )}
@@ -468,19 +582,46 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             </g>
           );
         })}
-        {routes.map(({ army, path }) => (
-          <path
-            key={army.id}
-            className={`planned-route ${army.id === selectedArmyId ? 'selected-route' : ''}`}
-            d={pathFor([army.provinceId, ...path])}
-            fill="none"
-            stroke="#e0c47c"
-            strokeWidth={1.6 / scale}
-            strokeDasharray={`${5 / scale} ${4 / scale}`}
-            markerEnd="url(#march-arrow)"
-            pointerEvents="none"
-          />
-        ))}
+        {routes.map(({ army, path }) => {
+          const from = provinces.find((p) => p.id === army.provinceId)!,
+            to = provinces.find((p) => p.id === path[0]);
+          return (
+            <g key={army.id}>
+              <path
+                className={`planned-route ${army.id === selectedArmyId ? 'selected-route' : ''} ${army.ownerId !== viewerId ? 'intelligence-route' : ''}`}
+                d={pathFor([army.provinceId, ...path])}
+                fill="none"
+                stroke={army.ownerId !== viewerId ? '#c084fc' : '#e0c47c'}
+                strokeWidth={1.6 / scale}
+                strokeDasharray={`${5 / scale} ${4 / scale}`}
+                markerEnd="url(#march-arrow)"
+                pointerEvents="none"
+              />
+              {army.ownerId === viewerId && to && (
+                <g
+                  role="button"
+                  aria-label={`Cancelar movimento de ${army.name}`}
+                  tabIndex={0}
+                  className="route-cancel"
+                  transform={`translate(${(from.x + to.x) / 2},${(from.y + to.y) / 2})`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCancelOrder?.(army.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') onCancelOrder?.(army.id);
+                  }}
+                >
+                  <circle r={8 / scale} />
+                  <text textAnchor="middle" dy={3 / scale} fontSize={11 / scale}>
+                    ✕
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
         {!preview &&
           armies.map((a) => {
             const p = provinces.find((p) => p.id === a.provinceId);

@@ -1,120 +1,99 @@
-# Concórdia — Atlas de Impérios · v0.3
+# Concórdia — Atlas de Impérios · v0.4
 
-Grand Strategy para **3–8 participantes**: ordens simultâneas, cidades e batalhões independentes, marinha, guerras formais, religião e uma Dieta Imperial. Cliente React/TypeScript/SVG e servidor Node.js autoritativo, também executável sem frontend.
+Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **60% das terras incluindo vassalos**, eliminação/submissão dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
 
 ## Executar
 
-Node.js **22.12+**; Node 24 foi verificado.
+Node.js **22.12+** (validado com Node 24).
 
 ```sh
 npm ci
 npm run dev
 ```
 
-HTTP e WebSocket `/ws` compartilham a porta **3000**. Todos entram no endereço do mesmo anfitrião e usam o código da sala. A demonstração cria uma partida com três bots e sem cronômetro.
+Abra a porta **3000**. O navegador de salas lista campanhas públicas desse servidor; salas privadas usam código. A demonstração cria três bots e obedece ao mesmo timer First-Ready.
 
 ```sh
 npm run build
 npm start
 ```
 
-Para servir somente o motor e o protocolo JSON, sem Vite ou interface compilada:
+Motor sem interface, Vite ou dependência de `dist/`:
 
 ```sh
 npm run server:headless
 ```
 
-| Variável opcional  | Padrão                                       |
-| ------------------ | -------------------------------------------- |
-| `PORT`             | `3000`                                       |
-| `HOST`             | `0.0.0.0`; `::` permite IPv6                 |
-| `ROOMS_STATE_FILE` | `.local/rooms-state.json` na raiz do projeto |
+| Variável           | Padrão                        |
+| ------------------ | ----------------------------- |
+| `PORT`             | `3000`                        |
+| `HOST`             | `0.0.0.0`; use `::` para IPv6 |
+| `ROOMS_STATE_FILE` | `.local/rooms-state.json`     |
 
-Não há banco externo, assets remotos de áudio ou chave de API obrigatória. No ambiente cloud com cache pessoal não gravável: `npm ci --include=dev --cache /workspace/.cache/npm --no-audit --no-fund`.
+Sem banco externo, chave de API ou assets remotos. No cloud com cache pessoal sem permissão, use `npm ci --include=dev --cache /workspace/.cache/npm --no-audit --no-fund`.
 
-## Um mundo e oito nações
+## Nações e mundo
 
-O mapa usa contornos orgânicos incorporados do **Natural Earth**, de domínio público. Rápido oferece Europa, Américas ou Ásia/Pacífico, cada teatro com **16 províncias terrestres** e suas zonas marítimas. Campanha usa **56 terras em quatro regiões e 13 zonas marítimas**.
+| Nação       | Mecânica                                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------------------------- |
+| Aurélia     | Vassalagem voluntária ou por tratado; recebe 25% da renda bruta dos súditos; compartilha visão e dominação          |
+| Ferro-Norte | +8 ouro por baixa inimiga; moral ao saquear; ignora inverno e penalidades da floresta                               |
+| Véspera     | Mercenários imediatos em porto/mercado, −35% custo; +30% receita comercial local; visão comprável e suborno dobrado |
+| Sol Invicto | Conversão +25 ouro e +10 Fervor; +20% ataque/moral em guerra religiosa e chance de agitação adjacente               |
+| Kaldor      | Fortes −30%, até nível 4, causam 15% de atrito em sitiantes; artilharia −25% custo e +25% fogo                      |
+| Turan       | Cavalaria pura percorre duas planícies/costas por rodada; arrasar conquista rende 80 ouro                           |
+| Sapiência   | Recruta com treinamento 1,20×; vê intenções inimigas em províncias adjacentes                                       |
+| Verídia     | Camuflagem em mata/colinas próprias; defesa local com +50% poder de emboscada                                       |
 
-O total de 56 permite três teatros de 16 terras mais oito de MENA/África. As fronteiras modernas são agrupadas para o jogo; não representam uma reconstrução política de 1550. Há travessias curtas abstratas, enquanto deslocamentos oceânicos usam frotas. Nações sem capital histórica no teatro escolhido recebem uma sede local. Capitais disponíveis são reservadas antes de distribuir territórios de apoio.
+As 56 terras e 13 zonas marítimas usam geometria Natural Earth incorporada, de domínio público. Os teatros Europa, Américas e Ásia têm 16 terras cada. As nações são ficcionais sobre geografia terrestre; o mapa não pretende reconstruir fronteiras de 1550. Quatro religiões fictícias mantêm doutrinas e cidades sagradas.
 
-Portugal, Castela, França, Sacro Império, Otomanos, Ming, Japão e Incas são escolhas exclusivas no lobby. Cada nação possui brasão SVG, religião, duas ideias nacionais e composição inicial própria. As quatro crenças usam doutrinas de jogo, com nomes fictícios; cada uma tem uma Cidade Sagrada por mapa configurado.
+Trigo, ferro, cavalos, minas de ouro e relíquias aparecem no mapa e alteram recrutamento, ataque, suprimento, renda e moral. Primavera, verão, outono e inverno formam um ano. Uma crise a cada quatro rodadas dura duas rodadas; expansão excessiva permite coalizões de contenção.
 
 ## Comandar
 
-- **Clique no território:** administrar cidade, construir, pacificar, converter e recrutar.
-- **Clique na ficha militar:** selecionar batalhão ou frota, inspecionar composição e preparar suas ordens.
-- **Clique direito em qualquer região:** calcular o menor caminho legal para a formação selecionada. Cada rodada percorre uma ligação.
-- **Scroll:** zoom entre 0,8× e 3,5×; arraste com botão direito, meio ou Espaço + esquerdo para mover a câmera.
-- **1–5:** mapas político, religioso, economia/suprimento, diplomático e estabilidade.
-- **Esc:** fechar a janela ou modal ativo.
+- Clique em uma província para administrar, recrutar, converter e negociar com o proprietário.
+- Selecione uma ficha militar: os destinos vizinhos ficam verdes (mover), vermelhos (invadir) ou azuis (transporte). Clique esquerdo ou direito prepara o movimento. Clique fora ou pressione **Esc** para desmarcar.
+- Clique no **✕ da seta** para cancelar a marcha. A HUD inferior divide 50/50, reúne formações, abre recrutamento, entrincheira e permite arrasar quando aplicável.
+- Declare guerra pelo brasão no topo, pelo painel de uma província estrangeira ou pelo modal ao tentar invadir em paz. **Declarar Guerra e Marchar** é uma operação atômica no servidor.
+- **Scroll** ajusta zoom; botão direito/meio ou Espaço + arraste move a câmera; **1–5** troca o modo de mapa.
 
-Cidades e batalhões recebem ordens separadas. Infantaria protege artilharia; cavalaria flanqueia e persegue; canhões neutralizam fortes e atacam a moral. Portos constroem navios; cada transporte embarca quatro unidades. Frotas em zonas adjacentes bloqueiam cidades inimigas.
+As janelas podem ser arrastadas, redimensionadas, desanexadas e minimizadas. A resolução tem replay de quatro segundos e áudio sintetizado com opção de silenciar.
 
-Diplomacia permite declarar guerra com casus belli, convocar aliados, negociar paz, impor reparações e desarmamento, ceder ocupações, forçar religião/ingresso na Dieta e subjugar reinos. Entrar em território de outra nação exige guerra formal ou acesso. Ocupação militar e propriedade definitiva são campos distintos.
+## Ritmo e vitória
 
-Todas as janelas podem ser desanexadas, arrastadas, redimensionadas e minimizadas. A disposição fica salva no navegador. A resolução tem replay de quatro segundos e sons sintetizados; o botão de som fica na barra superior.
+O lobby configura o prazo de **15–600 segundos**, padrão **60**. Cada rodada começa com `turnDeadlineAt: null`: o primeiro humano a confirmar inicia o relógio para todos. Todos prontos ou prazo expirado resolve a rodada. Cancelar a confirmação não reinicia o prazo. Bots não disparam o relógio. Após desconexão geral/reinício, a campanha pausa e conserva o tempo restante de um relógio já iniciado.
 
-## Exatamente duas vitórias
+Objetivos secretos vêm ativados por padrão. Cada comandante recebe duas cartas no turno 1 e escolhe uma. Se não escolher, a primeira é adotada ao resolver. Metas são adaptadas ao mapa; o botão **🎯 Meu Objetivo Secreto** mostra o progresso. O servidor verifica a vitória ao fim da rodada e revela a carta vencedora. Adversários não recebem as cartas, a seleção ou o progresso privado durante a partida.
 
-1. **Dominação Total:** eliminar/subjugar os demais reinos ou controlar pelo menos 75% das terras, sem outro reino acima de 15%.
-2. **Pacificação Imperial:** ser Imperador, reunir pelo menos 60% das nações vivas na Dieta e sustentar cinco rodadas consecutivas sem guerras no mundo.
+Não há limite de turnos em partidas humanas. Somente o simulador usa um corte interno para encerrar a coleta. Dissolução de todos os reinos encerra sem vencedor.
 
-Não há vitória por ouro, religião ou pontuação acumulada. No limite de rodadas, uma campanha sem condição cumprida termina sem vencedor. A dissolução de todos os reinos também encerra a campanha sem vencedor. Religião, economia e diplomacia dão meios para disputar esses dois objetivos.
+## Persistência e exportação
 
-Rápido: até **20 rodadas × 3 minutos**. Campanha: até **40 × 7,5 minutos**. Confirmação antecipada, pausas e uma vitória antes do limite alteram a duração real.
+O servidor grava snapshots atômicos, backups e hashes de tokens. Preserve `.local/` em volume persistente e use um processo por arquivo. O código da sala permite entrar no lobby; recuperar um jogador existente exige o token privado da aba.
 
-## Telemetria e persistência
+Snapshots v0.3 migram para v0.4 com uma cópia `.v3-backup`, preservando sessão, ouro, tropas e tabuleiro. Objetivos secretos ficam desligados nessas partidas já iniciadas; a Dieta passa a ser arquivo histórico. Snapshots v0.2 também são aceitos e guardam `.v2-backup`. Salas migradas ficam privadas por padrão.
 
-Na barra superior e no resultado final:
-
-- **Baixar Relatório (.JSON):** configuração, nações, todas as rodadas, guerras, batalhas, Dieta, economia e estado final público.
-- **Baixar Crônica (.TXT):** resumo por rodada e estatísticas finais.
-
-A exportação nunca inclui tokens de reconexão, semente privada ou ordens futuras dos rivais. O histórico completo é mantido durante a campanha; a interface também permite rever animações anteriores.
-
-O servidor salva alterações e resoluções em `.local/rooms-state.json`, usando arquivo temporário, sincronização, troca atômica e backup. Ao reiniciar ou quando todos desconectam, a campanha pausa até alguém reconectar. O token privado da aba permite retomar a sessão; o código da sala sozinho não basta.
-
-Snapshots v0.2 são migrados para entidades v0.3, preservando jogadores, tesouros, territórios, tropas e tokens. O tabuleiro antigo é mantido para essas campanhas. Marchas antigas são canceladas e relatórios antigos ficam no arquivo original **`.v2-backup`**, que é criado antes da gravação v3. Resultados de partidas v0.2 já encerradas ficam identificados como legados; não são reclassificados como vitórias v0.3. Novas salas usam o novo mapa. Preserve `.local/` ou use volume persistente; não execute dois servidores escrevendo no mesmo arquivo.
+JSON e TXT podem ser baixados na HUD e na tela final. O relatório inclui todas as rodadas, batalhas, economia, guerras, estações e coalizões, respeitando a visão de quem exportou. Tokens, semente privada e ordens ocultas não são exportados.
 
 ## Validar
 
 ```sh
 npm run build
 npm test
-npm run simulate:balance
+npx tsx scripts/smoke-browser.ts
+npx tsx scripts/simulate-balance.ts --games=40 --seed=20261020 --max-turns=60
 ```
 
-Os testes cobrem fórmulas, batalhões, frotas, guerras, tratados, Dieta, duas vitórias, exportação, privacidade, multiplayer, migração, corrupção de arquivos e queda de um processo headless com `SIGKILL`, seguida de recuperação em outro processo.
+O smoke inicia um servidor isolado em porta livre e abre três navegadores Chromium. É preciso Chromium instalado (`CHROMIUM_PATH` opcional; padrão `/usr/bin/chromium`). `BASE_URL` permite apontar para um servidor v0.4 já iniciado. Artefatos ficam em `.local/`. O simulador informa vitórias e partidas ainda sem vencedor no corte, sem inventar resultado por pontos.
 
-O simulador usa **200 partidas reais de seis bots** por padrão, alternando teatros rápidos e campanha mundial. Verifica invariantes militares, transporte naval, guerra formal e integridade da telemetria. Preserva campanhas sem vencedor e informa as duas vitórias separadamente.
+## Arquitetura
 
-```sh
-npx tsx scripts/simulate-balance.ts --seed=20261020 --output=.local/balance-v3.json
-npx tsx scripts/simulate-balance.ts --mode=campaign --games=200
-```
+| Área                                                      | Papel                                                            |
+| --------------------------------------------------------- | ---------------------------------------------------------------- |
+| `shared/types.ts`, `rules.ts`, `strategy.ts`              | Contratos, nações, recursos, economia, objetivos e regras comuns |
+| `shared/map.ts`                                           | Geometria, adjacências e recursos                                |
+| `server/game.ts`, `combat.ts`, `diplomacy.ts`, `world.ts` | Resolução autoritativa, combate, tratados, crises e coalizões    |
+| `server/rooms.ts`, `storage.ts`, `migration.ts`           | HTTP/WS, sessões, timer e persistência                           |
+| `src/`                                                    | Cliente React/SVG, HUD, áudio e janelas                          |
 
-Com o servidor iniciado e Chromium instalado:
-
-```sh
-npm run test:browser
-```
-
-`CHROMIUM_PATH` e `BASE_URL` permitem outros executáveis e endereços. Capturas e exportações de verificação ficam ignoradas em `.local/`. A validação inclui janelas, câmera, ordens, guerra, replay, áudio/mute, arquivos baixados, celular, três jogadores e vitória imperial.
-
-## Arquitetura e guias
-
-| Local                                           | Responsabilidade                                        |
-| ----------------------------------------------- | ------------------------------------------------------- |
-| `shared/types.ts`                               | Contratos JSON do protocolo 3                           |
-| `shared/map.ts`, `world-geometry.json`          | Grafo, terrenos e geometria orgânica                    |
-| `shared/rules.ts`                               | Nações, religiões, economia, BFS, vitórias e telemetria |
-| `server/game.ts`, `commands.ts`                 | Máquina de estados, validação, resolução e bots         |
-| `server/combat.ts`, `diplomacy.ts`              | Composição, recuo, guerras, paz e Dieta                 |
-| `server/rooms.ts`, `storage.ts`, `migration.ts` | Transporte, sessão e recuperação                        |
-| `src/FloatingWindow.tsx`, `audio.ts`            | Janelas e sintetizador Web Audio                        |
-| `scripts/generate-map.py`                       | Regeneração opcional da cartografia, com Python/Shapely |
-
-`shared/` e `server/` permanecem independentes de React, `src/` e DOM. Um cliente Godot pode usar HTTP/WebSocket com os mesmos contratos; o renderer Godot não faz parte desta versão.
-
-Veja [regras v0.3](docs/REGRAS_V3.md), [protocolo](docs/PROTOCOL.md), [balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md), [conceito](docs/CONCEITO.md) e [rede sem IPv4 público](docs/REDE.md). O [balanceamento v0.2](docs/BALANCE_V2.md) e suas sementes são históricos e usam outras condições de vitória.
+`shared/` e `server/` não importam React, `src/` ou DOM. Um cliente Godot pode consumir o [protocolo 4](docs/PROTOCOL.md). Consulte [regras v0.4](docs/REGRAS_V4.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3 em `docs/` são arquivos históricos.

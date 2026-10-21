@@ -5,13 +5,14 @@ import type { Composition, GameState } from '../shared/types';
 export function setup(seed = 42) {
   const g = createGame('RULES', 'campaign', true, seed);
   const players = [
-    addPlayer(g, 'A', false, 'PORTUGAL'),
-    addPlayer(g, 'B', false, 'CASTILE'),
-    addPlayer(g, 'C', false, 'FRANCE'),
+    addPlayer(g, 'A', false, 'vespera'),
+    addPlayer(g, 'B', false, 'sol_invicto'),
+    addPlayer(g, 'C', false, 'kaldor'),
   ];
   startGame(g);
   g.battalions = [];
   for (const p of g.provinces) {
+    p.strategicResource = null;
     p.ownerId = null;
     p.occupierId = null;
     p.capitalOf = null;

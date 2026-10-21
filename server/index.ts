@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { attachRooms } from './rooms';
 import { makeMap, makeStaticMap } from '../shared/map';
 import { NATIONS, RELIGIONS, EMBLEMS, holyCityId } from '../shared/rules';
+import { EVENTS, RESOURCES, SEASONS } from '../shared/strategy';
 import { OBJECTIVES } from '../shared/types';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,15 +26,20 @@ const server = http.createServer((req, res) => {
   if (req.url?.split('?')[0] === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
-      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.3.0', protocolVersion: 3 }),
+      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.4.0', protocolVersion: 4 }),
     );
+    return;
+  }
+  if (req.method === 'GET' && req.url?.split('?')[0] === '/api/rooms') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(roomService.listPublicRooms()));
     return;
   }
   if (req.url?.split('?')[0] === '/api/schema') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
-        protocolVersion: 3,
+        protocolVersion: 4,
         nations: NATIONS.map((n) => ({ ...n, emblemPath: EMBLEMS[n.emblem] })),
         religions: RELIGIONS,
         holyCities: Object.fromEntries(
@@ -54,6 +60,9 @@ const server = http.createServer((req, res) => {
           ]),
         ),
         objectives: OBJECTIVES,
+        resources: RESOURCES,
+        seasons: SEASONS,
+        events: EVENTS,
         transport: '/ws',
         map: makeStaticMap(),
         orderTypes: [
@@ -70,6 +79,8 @@ const server = http.createServer((req, res) => {
           'PACIFY',
           'CONVERT',
           'DIPLOMACY',
+          'RAZE_PROVINCE',
+          'MERGE_ALL',
         ],
       }),
     );

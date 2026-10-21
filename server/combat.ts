@@ -1,3 +1,4 @@
+import { hasReligiousWar, isCamouflaged, resourceCount } from '../shared/strategy';
 import type {
   Battalion,
   BattleReport,
@@ -33,10 +34,13 @@ import {
 export function compositionPower(g: GameState, a: Battalion, p: Province, defending = false) {
   const actor = g.players.find((p) => p.id === a.ownerId),
     nation = actor ? nationOf(actor.nationId) : null;
+  const crusade = actor && hasReligiousWar(g, actor.id);
+  const zeal = actor?.nationId === 'sol_invicto' && crusade;
   const morale = Math.min(
     100,
     a.morale *
       coalitionMorale(g, a.ownerId) *
+      (zeal ? 1.2 : 1) *
       (actor && actor.moraleBonusUntil >= g.turn ? 1.15 : 1),
   );
   if (a.isFleet)
@@ -53,12 +57,17 @@ export function compositionPower(g: GameState, a: Battalion, p: Province, defend
         ? 0.8
         : 1;
   const infantryModifier =
-    (actor?.faith === 'SOLAR' && !defending ? 1.15 : 1) * (nation?.modifiers.infantry ?? 1);
+    (actor?.faith === 'SOLAR' && !defending ? 1.15 : 1) *
+    (nation?.modifiers.infantry ?? 1) *
+    (1 + Math.min(0.24, resourceCount(g, a.ownerId, 'IRON') * 0.08));
   const artilleryModifier =
     (actor?.faith === 'REFORMED' ? 1.2 : 1) * (nation?.modifiers.artillery ?? 1);
   const value =
     a.infantry * (defending ? 1.2 : 1) * infantryModifier +
-    a.cavalry * (defending ? 1 : cavalryModifier) * (nation?.modifiers.cavalry ?? 1) +
+    a.cavalry *
+      (defending ? 1 : cavalryModifier) *
+      (nation?.modifiers.cavalry ?? 1) *
+      (1 + Math.min(0.3, resourceCount(g, a.ownerId, 'HORSES') * 0.1)) +
     a.artillery * (defending ? 0.6 : 2.2) * artilleryModifier;
   const home = defending && actor?.faith === 'ANCESTRAL' && p.ownerId === a.ownerId ? 1.2 : 1;
   return (
@@ -66,6 +75,9 @@ export function compositionPower(g: GameState, a: Battalion, p: Province, defend
     a.training *
     (0.5 + (0.5 * morale) / 100) *
     home *
+    (zeal && !defending ? 1.2 : 1) *
+    (g.globalEvent?.id === 'CRUSADE' && crusade && !defending ? 1.1 : 1) *
+    (defending && isCamouflaged(g, a) ? 1.5 : 1) *
     (defending && a.entrenched ? 1.15 : 1)
   );
 }
@@ -219,6 +231,13 @@ export function occupy(g: GameState, a: Battalion, p: Province) {
     p.occupierId = null;
   } else p.occupierId = p.ownerId === a.ownerId ? null : a.ownerId;
   const actor = playerOf(g, a.ownerId);
+  if (!previous) actor.aggressiveExpansion = clamp(actor.aggressiveExpansion + 4);
+  if (
+    actor.nationId === 'ferro_norte' &&
+    (p.isCoastal ||
+      p.neighbors.some((id) => g.provinces.some((q) => q.id === id && q.ownerId === a.ownerId)))
+  )
+    a.morale = clamp(a.morale + 20);
   p.pacification = p.religion === actor.faith ? 20 : 0;
   p.unrest = clamp(p.unrest + 30);
   p.conversionInstigatorId = null;
@@ -232,6 +251,31 @@ export function resolveBattle(
   target: Province,
   report: TurnResolutionReport,
 ) {
+  const fortOwner = g.players.find((q) => q.id === target.ownerId);
+  if (
+    !a.isFleet &&
+    target.fortLevel > 0 &&
+    fortOwner?.nationId === 'kaldor' &&
+    controller(target) === fortOwner.id &&
+    fortOwner.id !== a.ownerId &&
+    atWar(g, a.ownerId, fortOwner.id) &&
+    !report.attritionLosses.some((r) => r.armyId === a.id && r.provinceId === target.id)
+  ) {
+    const before = unitCount(a);
+    removeUnits(a, Math.ceil(before * 0.15));
+    report.attritionLosses.push({
+      armyId: a.id,
+      ownerId: a.ownerId,
+      provinceId: target.id,
+      troopsBefore: before,
+      supplyLimit: supplyLimit(target),
+      losses: before - unitCount(a),
+    });
+    if (!unitCount(a)) {
+      destroyBattalion(g, a);
+      return false;
+    }
+  }
   const enemies = g.battalions.filter(
     (b) =>
       b.id !== a.id &&
@@ -242,6 +286,12 @@ export function resolveBattle(
       (b.ownerId === 'NEUTRAL' || atWar(g, a.ownerId, b.ownerId)),
   );
   const defendingOwner = controller(target);
+  if (
+    enemies.length === 0 &&
+    defendingOwner &&
+    (defendingOwner === a.ownerId || !atWar(g, a.ownerId, defendingOwner))
+  )
+    return true;
   if (
     enemies.length === 0 &&
     (a.isFleet || unitCount(a) >= Math.max(0, target.fortLevel - a.artillery) * 3)
@@ -399,6 +449,30 @@ export function resolveBattle(
     const lost = tracked.count - unitCount(g.battalions.find((b) => b.id === tracked.id) ?? {});
     battle.casualtiesByRealm[tracked.ownerId] =
       (battle.casualtiesByRealm[tracked.ownerId] ?? 0) + lost;
+  }
+  for (const id of new Set(fighters.map((f) => f.ownerId))) {
+    const p = g.players.find((p) => p.id === id);
+    if (p?.nationId === 'ferro_norte') {
+      const loot =
+        Object.entries(battle.casualtiesByRealm)
+          .filter(([enemy]) => enemy === 'NEUTRAL' || atWar(g, id, enemy))
+          .reduce((n, [, loss]) => n + loss, 0) * 8;
+      p.gold += loot;
+    }
+  }
+  const zealot = g.players.find((p) => p.id === a.ownerId);
+  if (
+    zealot?.nationId === 'sol_invicto' &&
+    defenderId &&
+    zealot.faith !== g.players.find((p) => p.id === defenderId)?.faith
+  ) {
+    for (const p of g.provinces.filter(
+      (p) => p.ownerId === defenderId && target.neighbors.includes(p.id),
+    ))
+      if (roll(g, `religious-uprising:${p.id}:${a.id}`) < 0.2) {
+        p.unrest = 100;
+        report.events.push(`Fervor sagrado provocou revolta em ${p.name}.`);
+      }
   }
   report.battles.push(battle);
   log(

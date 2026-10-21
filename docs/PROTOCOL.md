@@ -1,142 +1,86 @@
-# Protocolo 3 — motor headless e cliente Godot
+# Protocolo 4 — servidor headless / Godot
 
-`shared/` e `server/` não importam React, `src/` ou APIs do DOM. O cliente web usa comandos e eventos JSON; outro cliente pode utilizar o mesmo transporte. O renderer Godot não está implementado nesta versão.
+`shared/` e `server/` não importam `src/`, React ou APIs DOM. O cliente utiliza JSON por HTTP/WS. Execute `npm run server:headless`; nenhum renderer Godot é incluído.
 
-```sh
-npm ci
-npm run server:headless
-```
+## HTTP
 
-## HTTP e WebSocket
+| Rota              | Retorno                                                                      |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `GET /api/health` | `status: ok`, `version: 0.4.0`, `protocolVersion: 4`                         |
+| `GET /api/schema` | Nações, brasões, mapas, recursos, estações, crises, crenças e tipos de ordem |
+| `GET /api/rooms`  | Array de salas públicas não encerradas, sem sessão ou cartas privadas        |
+| `/ws`             | WebSocket de mensagens JSON                                                  |
 
-| Rota          | Conteúdo                                                                             |
-| ------------- | ------------------------------------------------------------------------------------ |
-| `/api/health` | `status: ok`, versão 0.3.0 e `protocolVersion: 3`                                    |
-| `/api/schema` | Mapa, nações/brasões SVG, doutrinas, cidades sagradas por escopo, objetivos e ordens |
-| `/ws`         | Texto JSON UTF-8 em WebSocket                                                        |
+Browser usa mesma origem; cliente nativo pode omitir `Origin`. Mensagens têm até 16 KiB; há limite de frequência. HTTPS exige WSS.
 
-O modo headless não inicia Vite, não exige `dist/` e retorna 404 para a raiz. HTTP e WS usam a mesma porta, 3000 por padrão. Browser precisa da mesma origem; cliente nativo sem `Origin` é aceito. Um proxy HTTPS usa WSS. Mensagens de comando têm limite de 16 KiB e há controle de frequência por conexão.
+Cada item da listagem possui `roomId`, `roomName`, `hostName`, `theater` (`Mapa-Múndi`, `Europa`, `Américas`, `Ásia`), `enableSecretObjectives`, `playersCount`, `maxPlayers`, `status` (`LOBBY`/`IN_GAME`) e `turn`. O cliente consulta a cada 2 segundos. Só salas em lobby com vaga aceitam novas entradas; campanhas iniciadas exigem reconexão de sessão existente.
 
-## Sala, identidade e recuperação
+## Entrada
 
 ```json
 {
   "type": "create",
-  "name": "Estrategista",
+  "name": "Ana",
+  "roomName": "Mesa de sábado",
+  "isPublic": true,
+  "enableSecretObjectives": true,
+  "turnTimerSeconds": 60,
   "mode": "quick",
   "theater": "EUROPE",
-  "nationId": "PORTUGAL"
+  "nationId": "aurelia"
 }
 ```
 
-`mode`: `quick` ou `campaign`. `theater`: `EUROPE`, `AMERICAS` ou `ASIA`; Campanha ativa todos os continentes. `demo: true` cria três bots, inicia a sala e remove o cronômetro.
+`mode` é `quick` ou `campaign`; `theater` é `EUROPE`, `AMERICAS` ou `ASIA`. Campanha usa o mundo. Nome da sala, publicidade, objetivos e timer são opcionais; padrões: nome gerado, pública, objetivos ativos, 60 segundos. O timer aceita 15–600. `demo:true` adiciona três bots e inicia a sala.
 
 ```json
-{ "type": "join", "code": "A3F021", "name": "Convidado" }
+{ "type": "join", "code": "A3F021", "name": "Bia" }
 ```
 
-A escolha de nação é opcional na entrada; ausência escolhe a primeira disponível. Uma nação só pode estar em uso por um jogador. O lobby aceita `SET_IDENTITY` para mudar a seleção.
+O servidor responde `{type:"joined",code,playerId,token}`, seguido de `{type:"state",state:GameView}`. `nationId` é opcional e deve estar disponível. Use `SET_IDENTITY` no lobby para trocar. Código é dispensável na interface do browser de salas.
 
-O servidor responde `{type: joined, code, playerId, token}`, seguido de `{type: state, state: GameView}`. Guarde a credencial em armazenamento privado. Reencontre a sessão com `type: resume` e os mesmos `code`, `playerId` e `token`. Tokens não devem aparecer em chat, logs ou URLs.
-
-`{"type":"leave"}` desconecta da sala. Uma sessão aberta em outra conexão encerra a anterior com código 4001. O arquivo de campanhas guarda somente SHA256 dos tokens. Após queda/reinício ou quando todos saem, o relógio pausa até um humano reconectar.
-
-Os envelopes antigos v1/v2 são rejeitados com orientação para atualizar o cliente. A migração de snapshots v2 é independente do protocolo de rede e preserva uma cópia `.v2-backup`.
+Recuperação: `{type:"resume",code,playerId,token}`. Saída: `{type:"leave"}`. O token é privado, guardado na aba; o disco guarda somente SHA256. Uma conexão nova para a mesma sessão encerra a anterior com código 4001.
 
 ## Comandos
 
-```json
-{
-  "type": "command",
-  "command": {
-    "type": "SUBMIT_ORDER",
-    "order": { "type": "MOVE_BATTALION", "battalionId": "army-1", "path": ["castile", "france"] }
-  }
-}
-```
+Todo comando usa `{type:"command",command:{type:..., ...campos}}`.
 
-| `command.type`            | Campos adicionais                                    |
-| ------------------------- | ---------------------------------------------------- |
-| `SUBMIT_ORDER`            | `order: PlayerOrder`                                 |
-| `CANCEL_ORDER`            | `key`: `city:<provinceId>` ou `army:<battalionId>`   |
-| `READY`                   | `ready: boolean`                                     |
-| `ANSWER_OFFER`            | `offerId`, `accept: boolean`                         |
-| `START_GAME`              | Somente anfitrião, com 3–8 jogadores                 |
-| `SET_MODE`                | `mode`, `theater?`; anfitrião, no lobby              |
-| `SET_IDENTITY`            | `nationId`, `religiousPolicy?`; no lobby             |
-| `SET_RELIGIOUS_POLICY`    | `policy: INQUISITION ou TOLERANCE`                   |
-| `ADD_BOT`                 | Anfitrião, no lobby                                  |
-| `REPLACE_WITH_BOT`        | `playerId`; anfitrião, somente ausente               |
-| `CHAT`                    | `text`, não vazio, até 280 caracteres                |
-| `DECLARE_WAR`             | `targetRealmId`, `casusBelli`, `offensiveAllyIds?`   |
-| `CALL_TO_ARMS`            | `warId`, `allyId`                                    |
-| `OFFER_PEACE`             | `warId`, `terms: PeaceTerm[]`                        |
-| `JOIN_DIET`, `LEAVE_DIET` | Sem campos adicionais                                |
-| `VOTE_EMPEROR`            | `candidateId`, que deve ser membro                   |
-| `ISSUE_IMPERIAL_EDICT`    | Somente Imperador, com ouro e autoridade disponíveis |
+| Tipo                                      | Campos                                                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `SET_MODE`                                | `mode`, `theater?`; somente host no lobby                                                   |
+| `SET_LOBBY_OPTIONS`                       | `roomName`, `isPublic`, `enableSecretObjectives`, `turnTimerSeconds`; somente host no lobby |
+| `SET_IDENTITY`                            | `nationId`, `religiousPolicy?`; no lobby                                                    |
+| `ADD_BOT`, `START_GAME`                   | Somente host                                                                                |
+| `REPLACE_WITH_BOT`                        | `playerId`; somente ausente, pelo host                                                      |
+| `SUBMIT_ORDER`                            | `order`                                                                                     |
+| `CANCEL_ORDER`                            | `key`, por exemplo `army:army-1` ou `city:portugal`                                         |
+| `READY`                                   | `ready:boolean`                                                                             |
+| `CHOOSE_SECRET_OBJECTIVE`                 | `objectiveId`; turno 1, antes de confirmar                                                  |
+| `DECLARE_WAR`                             | `targetRealmId`, `casusBelli`, `offensiveAllyIds?`                                          |
+| `DECLARE_WAR_AND_MOVE`                    | Campos de declaração mais `battalionId`, `targetProvinceId`; atômico                        |
+| `JOIN_COALITION`, `DECLARE_COALITION_WAR` | `targetRealmId`                                                                             |
+| `CALL_TO_ARMS`                            | `warId`, `allyId`                                                                           |
+| `OFFER_PEACE`                             | `warId`, `terms`                                                                            |
+| `ANSWER_OFFER`                            | `offerId`, `accept`                                                                         |
+| `SET_RELIGIOUS_POLICY`                    | `policy`: `TOLERANCE`/`INQUISITION`                                                         |
+| `CHAT`                                    | `text`, até 280 caracteres                                                                  |
 
-`casusBelli`: `CONQUEST`, `IMPERIAL_BAN`, `HOLY_WAR`, `HUMILIATION`.
+Casus belli: `CONQUEST`, `HOLY_WAR`, `HUMILIATION`, `COALITION`. A contenção exige coalizão válida; o servidor inclui todos os membros. Comandos antigos de Dieta são rejeitados.
 
-## Ordens de cidade e formação
+Ordens de cidade: `RECRUIT_BATTALION`, `BUILD_FORT`, `BUILD_PORT`, `BUILD_MARKET`, `PACIFY`, `CONVERT`. Recrutamento usa `provinceId`, composição (`infantry`, `cavalry`, `artillery`, `warships`, `transports`), `isFleet?`, `isMercenary?`, `battalionId?` para reforçar e `name?`.
 
-| `order.type`                                         | Campos                                                                                                                                                              |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RECRUIT_BATTALION`                                  | `provinceId`, quantidades opcionais `infantry`, `cavalry`, `artillery`, `warships`, `transports`; `isFleet?`, `isMercenary?`, `battalionId?` para reforçar, `name?` |
-| `BUILD_FORT`, `BUILD_PORT`, `BUILD_MARKET`, `PACIFY` | `provinceId`                                                                                                                                                        |
-| `CONVERT`                                            | `targetProvinceId`                                                                                                                                                  |
-| `MOVE_BATTALION`                                     | `battalionId` e **exclusivamente** `targetProvinceId` ou `path: string[]`                                                                                           |
-| `ENTRENCH_BATTALION`, `TRAIN_BATTALION`              | `battalionId`                                                                                                                                                       |
-| `MERGE_BATTALIONS`                                   | `battalionId`, `targetBattalionId`                                                                                                                                  |
-| `SPLIT_BATTALION`                                    | `battalionId`, `composition` com as cinco quantidades, `name?`                                                                                                      |
-| `EMBARK_BATTALION`                                   | `battalionId` e **exclusivamente** `fleetId` ou `disembarkProvinceId`                                                                                               |
-| `DIPLOMACY`                                          | `action`, `targetRealmId`, `amount?`, `targetProvinceId?`                                                                                                           |
+Ordens de formação: `MOVE_BATTALION` (`battalionId` e `targetProvinceId` ou `path` exclusivamente), `TRAIN_BATTALION`, `ENTRENCH_BATTALION`, `SPLIT_BATTALION` (`composition`), `MERGE_BATTALIONS` (`targetBattalionId`), `MERGE_ALL`, `EMBARK_BATTALION` (`fleetId` ou `disembarkProvinceId`) e `RAZE_PROVINCE`.
 
-Quantidades são inteiros não negativos; uma ordem recruta 1–50 unidades. Não se mistura composição terrestre e naval. Uma cidade e um batalhão podem agir na mesma rodada. Mercenários e diplomacia são imediatos; demais ordens entram na fila. Cancelar ordem de formação também interrompe sua rota contínua.
+Diplomacia usa ordem `DIPLOMACY` com `action`, `targetRealmId`, `amount?`, `targetProvinceId?`. Ações: `PROPOSE_ALLIANCE`, `BREAK_ALLIANCE`, `MILITARY_ACCESS`, `DEMAND_TRIBUTE`, `EMBARGO`, `FUND_REBELS`, `SEND_SUBSIDY`, `OFFER_VASSALAGE` (Aurélia), `BUY_VISION_OR_BRIHC` (Véspera). Essa última compra visão quando não há província e suborna quando há `targetProvinceId`.
 
-Ações diplomáticas: `PROPOSE_ALLIANCE`, `BREAK_ALLIANCE`, `MILITARY_ACCESS`, `DEMAND_TRIBUTE`, `EMBARGO`, `FUND_REBELS`, `SEND_SUBSIDY`. Tributo, rebeldes e subsídio usam `amount`; rebeldes também exigem a província alvo.
+Tratados: `CEDE_PROVINCES` (`provinceIds`), `WAR_REPARATIONS` (`immediateTribute`), `HUMILIATE_DISARM`, `FORCE_EMPIRE_OR_RELIGION` com `choice:RELIGION` (nome preservado do protocolo anterior) e `SUBJUGATE`.
 
-## Tratados
+## Timer, privacidade e persistência
 
-`OFFER_PEACE.terms` aceita uma lista sem tipos repetidos:
+`GameView.version` e `MatchTelemetry.schemaVersion` valem **4**. `turnDeadlineAt` é `null` no começo de cada rodada. O primeiro humano vivo a enviar `READY:true` define o prazo e `firstReadyPlayerName`. `deadline` é alias de compatibilidade. Todos prontos ou prazo expirado resolve; nova rodada zera ambos. Desconfirmar não adia o prazo. Após pausa, um relógio iniciado retoma o tempo restante; planejamento ainda sem primeiro pronto continua livre.
 
-```json
-[
-  { "type": "CEDE_PROVINCES", "provinceIds": ["castile"] },
-  { "type": "WAR_REPARATIONS", "immediateTribute": 10 },
-  { "type": "HUMILIATE_DISARM" },
-  { "type": "FORCE_EMPIRE_OR_RELIGION", "choice": "RELIGION" }
-]
-```
+`GameView` não contém `seed`, `nextId`, ordens alheias ou pendências internas. As cartas e seleção dos outros jogadores são removidas inclusive do histórico. Intenções são fornecidas apenas à própria visão, a soberano de súditos, contratos de visão e inteligência adjacente de Sapiência. Tropas camufladas de Verídia são removidas da visão adversária; não são enviadas como composição zero. A visão final revela as cartas.
 
-Também há `{type: SUBJUGATE}`. A escolha forçada é `EMPIRE` ou `RELIGION`. Os custos devem caber na pontuação; só se exige terra inimiga ocupada. Uma lista vazia propõe paz sem exigências. Pontuação favorável 100 permite imposição; em outros casos é criada oferta respondida pelo destinatário com `ANSWER_OFFER`. Bots podem aceitar automaticamente conforme sua situação.
+`reports`, `lastReport` e `history` incluem `world:{season,event,coalitions}`. Exportações têm `worldHistory`; `dietHistory` permanece apenas como arquivo legado. O histórico não recebe o corte interno do simulador em jogos humanos.
 
-## Estado e privacidade
-
-`GameView.version` é 3. Dados principais:
-
-- `matchConfig`, `mode`, `theater`, `turn`, `maxTurns`, `deadline` ou `null`, fase e pausa.
-- `players`: nação, fé/política, recursos, prestígio, desgaste, condição de súdito e modificadores temporários.
-- `provinces`: estático mais runtime. `ownerId` e `occupierId` são distintos; não existe `province.troops`.
-- `battalions`: composição física, moral 0–100, treinamento 1,00–1,50, posição, fila de caminho, entrincheiramento, estado isolado, tipo naval e vínculos de embarque.
-- `wars`: lados, líderes, casus belli, pontuação −100–100, início/fim, banimento e termos finais.
-- `diet`: Imperador, autoridade, membros, votos, contador de paz, Édito e banimentos.
-- `plannedOrders`: somente ordens do jogador autenticado. Caminhos futuros de formações rivais são removidos.
-- `lastReport`, `reports` e `history`: última resolução, oito relatórios recentes e histórico integral da campanha.
-- `winnerObjective`: apenas `DOMINATION` ou `IMPERIAL_PACIFICATION`; `winnerId` pode ser `null` quando não há vencedor.
-
-Semente, contador interno, hashes/tokens e filas adversárias não são enviados. Autoria de financiamento encoberto é redigida para outros jogadores. O servidor valida todos os custos, adjacências, composições, tratados, capacidades e permissões. Em erro, responde `{type: error, message}` sem confirmar a mutação.
-
-## Eventos, replay e exportação
-
-`TurnResolutionReport` inclui `movements`, `battles`, `retreats`, `stackwipes`, `conversions`, `rebellions`, `diplomaticChanges`, `attritionLosses`, `economy`, `diet` e `events`.
-
-- Movimento informa formação, dono, origem, destino, tipo naval e quantidade.
-- Batalha informa lados, IDs das formações, poderes, moral, treinamento, composição perdida, baixas por reino, terreno, fortes neutralizados, bloqueio e recuo.
-- Recuos têm motivo `battle`, `repatriation` ou `regrouping` e quantidade preservada/dispersa.
-- Cada entrada de `history` acrescenta as nações, guerras e controle territorial daquela rodada.
-
-O cliente web usa os eventos para um replay de quatro segundos; outro cliente pode escolher sua apresentação. Efeitos sonoros e animações não participam da resolução do servidor.
-
-`MatchTelemetry` contém exatamente as seções `matchConfig`, `nations`, `turnByTurnHistory`, `wars`, `battles`, `dietHistory`, `economyMetrics`, `finalState`, além de `schemaVersion: 3`. O exportador público não inclui segredos nem ordens futuras adversárias. Uma crônica legível pode ser construída a partir do mesmo histórico.
-
-`rings` usa listas de coordenadas de mundo. Um cliente Godot pode transformar cada anel em `PackedVector2Array` e desenhá-lo com `Polygon2D`. `path` é fornecido para SVG. O BFS usa somente IDs e vizinhos; nenhum cliente determina resultados de combate ou custos autoritativos.
+Snapshots 2/3 são migrados para 4 com backups específicos. O arquivo usa escrita temporária, `fsync`, troca atômica e rollback quando uma gravação de comando falha. Não há autenticação por conta: o token privado da sessão é a credencial de reconexão.

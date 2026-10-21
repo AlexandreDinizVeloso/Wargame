@@ -32,7 +32,7 @@ test('oito nações têm duas ideias, brasão e composição independentes da pr
   assert.equal(new Set(NATIONS.map((n) => n.emblem)).size, 8);
   for (const n of NATIONS) {
     assert.equal(n.ideas.length, 2);
-    assert.equal(Object.keys(n.modifiers).length, 2);
+    assert.ok(n.style.length > 0 && n.mechanic.length > 0);
     assert.ok(RELIGIONS[n.religion]);
   }
   const army: Battalion = {
@@ -48,6 +48,8 @@ test('oito nações têm duas ideias, brasão e composição independentes da pr
     pathQueue: [],
     isMercenary: false,
     stranded: false,
+    movementCredit: 0,
+    movementPoints: 1,
   };
   assert.deepEqual(JSON.parse(JSON.stringify(army)), army);
   assert.equal('troops' in makeMap()[0], false);

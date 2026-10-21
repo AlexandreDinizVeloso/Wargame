@@ -35,7 +35,7 @@ export function FloatingWindow({
   onActivate,
   className = '',
 }: Props) {
-  const key = `concordia-v3-window-${id}`,
+  const key = `concordia-v4-window-${id}`,
     root = useRef<HTMLElement>(null);
   const defaults = (): Geometry => ({
     x:
@@ -44,7 +44,7 @@ export function FloatingWindow({
         : anchor === 'bottom'
           ? (innerWidth - width) / 2
           : 16,
-    y: anchor === 'bottom' ? innerHeight - height - 24 : innerWidth < 700 ? 184 : 146,
+    y: anchor === 'bottom' ? innerHeight - height - 24 : innerWidth < 700 ? 235 : 188,
     width,
     height,
     docked: true,

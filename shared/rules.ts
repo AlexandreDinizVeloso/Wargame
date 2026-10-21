@@ -1,3 +1,4 @@
+import { coalitionFighter, effectiveSupply, objectiveProgress, resourceCount } from './strategy';
 import type {
   Battalion,
   Composition,
@@ -23,6 +24,18 @@ export const zeroComposition = (): Composition => ({
 });
 export const compositionOf = (a: Partial<Composition>): Composition =>
   Object.fromEntries(UNIT_KEYS.map((k) => [k, a[k] ?? 0])) as unknown as Composition;
+export function splitHalf(a: Partial<Composition>): Composition {
+  const result = compositionOf(
+    Object.fromEntries(UNIT_KEYS.map((k) => [k, Math.floor((a[k] ?? 0) / 2)])),
+  );
+  let remaining = Math.floor(unitCount(a) / 2) - unitCount(result);
+  for (const key of UNIT_KEYS)
+    if (remaining > 0 && result[key] < (a[key] ?? 0)) {
+      result[key]++;
+      remaining--;
+    }
+  return result;
+}
 export const unitCount = (a: Partial<Composition>) =>
   UNIT_KEYS.reduce((n, k) => n + (a[k] ?? 0), 0);
 export const landCount = (a: Partial<Composition>) =>
@@ -30,92 +43,179 @@ export const landCount = (a: Partial<Composition>) =>
 export const controller = (p: Province) => p.occupierId ?? p.ownerId;
 export const NATIONS: NationDefinition[] = [
   {
-    id: 'PORTUGAL',
-    name: 'Portugal',
+    id: 'aurelia',
+    name: 'Império Solar de Aurélia',
     color: '#d5ac68',
+    emblem: 'eagle',
+    religion: 'SOLAR',
+    homeProvinceId: 'germany',
+    style: 'Hegemonia e vassalagem',
+    mechanic: 'Vassalos pagam 25% da renda bruta e compartilham visão e dominação',
+    ideas: [
+      'Hegemonia e vassalagem',
+      'Vassalos pagam 25% da renda bruta e compartilham visão e dominação',
+    ],
+    modifiers: {},
+    initial: {
+      infantry: 5,
+      cavalry: 2,
+      artillery: 1,
+      warships: 1,
+      transports: 2,
+    },
+  },
+  {
+    id: 'ferro_norte',
+    name: 'Clãs de Ferro-Norte',
+    color: '#d8787d',
+    emblem: 'dragon',
+    religion: 'ANCESTRAL',
+    homeProvinceId: 'scandinavia',
+    style: 'Saqueadores',
+    mechanic: '+8 ouro por baixa inimiga; saque recupera moral; imune a inverno e floresta',
+    ideas: [
+      'Saqueadores',
+      '+8 ouro por baixa inimiga; saque recupera moral; imune a inverno e floresta',
+    ],
+    modifiers: {},
+    initial: {
+      infantry: 6,
+      cavalry: 2,
+      artillery: 0,
+      warships: 2,
+      transports: 2,
+    },
+  },
+  {
+    id: 'vespera',
+    name: 'Liga Mercante de Véspera',
+    color: '#70acd4',
     emblem: 'anchor',
     religion: 'MERCHANT',
-    ideas: ['Armada: +20% ataque naval', 'Feitorias: +15% comércio'],
     homeProvinceId: 'portugal',
-    modifiers: { navalAttack: 1.2, trade: 1.15 },
-    initial: { infantry: 4, cavalry: 1, artillery: 1, warships: 2, transports: 2 },
+    style: 'Talassocracia e procuração',
+    mechanic: 'Mercenários −35%; portos/mercados +30%; compra visão e dobra suborno',
+    ideas: [
+      'Talassocracia e procuração',
+      'Mercenários −35%; portos/mercados +30%; compra visão e dobra suborno',
+    ],
+    modifiers: {},
+    initial: {
+      infantry: 4,
+      cavalry: 1,
+      artillery: 1,
+      warships: 3,
+      transports: 3,
+    },
   },
   {
-    id: 'CASTILE',
-    name: 'Coroa de Castela',
-    color: '#d8787d',
-    emblem: 'castle',
+    id: 'sol_invicto',
+    name: 'Ordem do Sol Invicto',
+    color: '#e6a26d',
+    emblem: 'sun',
     religion: 'SOLAR',
-    ideas: ['Terços: +10% infantaria', 'Cavaleiros: +20% cavalaria'],
-    homeProvinceId: 'castile',
-    modifiers: { infantry: 1.1, cavalry: 1.2 },
-    initial: { infantry: 5, cavalry: 2, artillery: 0, warships: 1, transports: 2 },
+    homeProvinceId: 'italy',
+    style: 'Teocracia militar',
+    mechanic: 'Conversões +25 ouro e Fervor; guerra de outra fé +20% ataque e moral',
+    ideas: [
+      'Teocracia militar',
+      'Conversões +25 ouro e Fervor; guerra de outra fé +20% ataque e moral',
+    ],
+    modifiers: {},
+    initial: {
+      infantry: 6,
+      cavalry: 1,
+      artillery: 1,
+      warships: 1,
+      transports: 2,
+    },
   },
   {
-    id: 'FRANCE',
-    name: 'França',
-    color: '#70acd4',
+    id: 'kaldor',
+    name: 'Forjas de Kaldor',
+    color: '#b2bc75',
+    emblem: 'castle',
+    religion: 'REFORMED',
+    homeProvinceId: 'france',
+    style: 'Indústria e defesa',
+    mechanic: 'Fortes −30% até nível 4 e 15% atrito de cerco; artilharia −25% e +25% poder',
+    ideas: [
+      'Indústria e defesa',
+      'Fortes −30% até nível 4 e 15% atrito de cerco; artilharia −25% e +25% poder',
+    ],
+    modifiers: {
+      artillery: 1.25,
+    },
+    initial: {
+      infantry: 4,
+      cavalry: 1,
+      artillery: 3,
+      warships: 1,
+      transports: 2,
+    },
+  },
+  {
+    id: 'turan',
+    name: 'Canato das Estepes de Turan',
+    color: '#cf8b59',
+    emblem: 'crescent',
+    religion: 'ANCESTRAL',
+    homeProvinceId: 'mongolia',
+    style: 'Horda nômade',
+    mechanic: 'Cavalaria pura percorre 2 planícies/costas; arrasar rende 80 ouro',
+    ideas: ['Horda nômade', 'Cavalaria pura percorre 2 planícies/costas; arrasar rende 80 ouro'],
+    modifiers: {},
+    initial: {
+      infantry: 0,
+      cavalry: 8,
+      artillery: 0,
+      warships: 1,
+      transports: 2,
+    },
+  },
+  {
+    id: 'sapiencia',
+    name: 'Conclave de Sapiência',
+    color: '#b295c8',
     emblem: 'lily',
     religion: 'REFORMED',
-    ideas: ['Grande bateria: +15% artilharia', 'Ordenanças: −10% custo terrestre'],
-    homeProvinceId: 'france',
-    modifiers: { artillery: 1.15, recruitCost: 0.9 },
-    initial: { infantry: 4, cavalry: 1, artillery: 2, warships: 1, transports: 2 },
-  },
-  {
-    id: 'AUSTRIA',
-    name: 'Sacro Império',
-    color: '#b2bc75',
-    emblem: 'eagle',
-    religion: 'ANCESTRAL',
-    ideas: ['Chancelaria: +50% autoridade gerada', 'Integração: +10% pacificação'],
-    homeProvinceId: 'germany',
-    modifiers: { authority: 1.5, pacification: 1.1 },
-    initial: { infantry: 5, cavalry: 2, artillery: 1, warships: 1, transports: 2 },
-  },
-  {
-    id: 'OTTOMANS',
-    name: 'Império Otomano',
-    color: '#e6a26d',
-    emblem: 'crescent',
-    religion: 'SOLAR',
-    ideas: ['Bombardas: +15% artilharia', 'Recrutamento: +20% reservas'],
-    homeProvinceId: 'anatolia',
-    modifiers: { artillery: 1.15, manpower: 1.2 },
-    initial: { infantry: 5, cavalry: 1, artillery: 2, warships: 2, transports: 2 },
-  },
-  {
-    id: 'MING',
-    name: 'Império Ming',
-    color: '#cf8b59',
-    emblem: 'dragon',
-    religion: 'REFORMED',
-    ideas: ['Oficinas: −15% custo terrestre', 'Censo: +20% reservas'],
     homeProvinceId: 'china-east',
-    modifiers: { recruitCost: 0.85, manpower: 1.2 },
-    initial: { infantry: 6, cavalry: 0, artillery: 2, warships: 1, transports: 3 },
+    style: 'Tecnocracia e inteligência',
+    mechanic: 'Recrutamento treinado 1,20×; revela intenções inimigas adjacentes',
+    ideas: [
+      'Tecnocracia e inteligência',
+      'Recrutamento treinado 1,20×; revela intenções inimigas adjacentes',
+    ],
+    modifiers: {},
+    initial: {
+      infantry: 5,
+      cavalry: 1,
+      artillery: 2,
+      warships: 1,
+      transports: 2,
+    },
   },
   {
-    id: 'JAPAN',
-    name: 'Japão',
-    color: '#b295c8',
-    emblem: 'sun',
-    religion: 'ANCESTRAL',
-    ideas: ['Samurais: +15% infantaria', 'Estaleiros: −15% custo naval'],
-    homeProvinceId: 'japan',
-    modifiers: { infantry: 1.15, fleetCost: 0.85 },
-    initial: { infantry: 5, cavalry: 1, artillery: 0, warships: 2, transports: 2 },
-  },
-  {
-    id: 'INCA',
-    name: 'Império Inca',
+    id: 'veridia',
+    name: 'Confederação Silvestre de Verídia',
     color: '#6db6a1',
     emblem: 'mountain',
-    religion: 'SOLAR',
-    ideas: ['Integração andina: +25% pacificação', 'Rotas: +20% comércio'],
-    homeProvinceId: 'andes',
-    modifiers: { pacification: 1.25, trade: 1.2 },
-    initial: { infantry: 7, cavalry: 0, artillery: 0, warships: 1, transports: 3 },
+    religion: 'ANCESTRAL',
+    homeProvinceId: 'amazon',
+    style: 'Guerrilha e emboscada',
+    mechanic: 'Camuflagem em florestas/colinas próprias; +50% dano na defesa local',
+    ideas: [
+      'Guerrilha e emboscada',
+      'Camuflagem em florestas/colinas próprias; +50% dano na defesa local',
+    ],
+    modifiers: {},
+    initial: {
+      infantry: 7,
+      cavalry: 1,
+      artillery: 0,
+      warships: 1,
+      transports: 3,
+    },
   },
 ];
 export const nationOf = (id: NationId) => NATIONS.find((n) => n.id === id)!;
@@ -253,7 +353,10 @@ export function unitPath(
   return shortestPath(g.provinces, army.provinceId, target, (p) => canUnitVisit(g, army, p));
 }
 export const supplyLimit = (p: Province) =>
-  p.baseSupplyLimit + p.fortLevel * 3 + (p.pacification >= 80 ? 2 : 0);
+  p.baseSupplyLimit +
+  (p.strategicResource === 'GRAIN' ? 6 : 0) +
+  p.fortLevel * 3 +
+  (p.pacification >= 80 ? 2 : 0);
 export const attritionLoss = (troops: number, limit: number) =>
   troops > limit ? Math.max(1, Math.ceil((troops - limit) * 0.15)) : 0;
 export function armyUpkeep(troops: number, mercenaries: number, limit: number, base = 0.35) {
@@ -293,7 +396,16 @@ export const tradeIncomeOf = (p: Province) =>
 export function realmEconomy(
   g: Pick<
     GameState,
-    'provinces' | 'players' | 'relations' | 'wars' | 'battalions' | 'baseUpkeep' | 'diet'
+    | 'provinces'
+    | 'players'
+    | 'relations'
+    | 'wars'
+    | 'battalions'
+    | 'baseUpkeep'
+    | 'diet'
+    | 'globalEvent'
+    | 'season'
+    | 'turn'
   >,
   id: string,
 ) {
@@ -301,7 +413,10 @@ export function realmEconomy(
   const owned = g.provinces.filter((p) => controller(p) === id && p.kind === 'LAND');
   const nat = nationOf(actor.nationId);
   const modifier = (p: Province) =>
-    actor.faith === 'MERCHANT' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.25 : 1;
+    (actor.faith === 'MERCHANT' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.25 : 1) *
+    (actor.nationId === 'vespera' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.3 : 1) *
+    (g.season === 'AUTUMN' && p.strategicResource === 'GRAIN' ? 1.15 : 1) *
+    (g.globalEvent?.id === 'GOLD_RUSH' && p.strategicResource === 'GOLD_MINE' ? 1.5 : 1);
   const taxes = owned.reduce(
     (n, p) =>
       n + effectiveTax(p, actor.faith, isBlockaded(g, p), actor.religiousPolicy) * modifier(p),
@@ -324,7 +439,7 @@ export function realmEconomy(
         : 0)
     );
   }, 0);
-  const grossIncome = taxes + trade + tithes,
+  const grossIncome = taxes + trade + tithes + resourceCount(g, id, 'RELIC') * 3,
     income = grossIncome * (1 - actor.warExhaustion * 0.004);
   let upkeep = 0;
   for (const p of g.provinces) {
@@ -335,11 +450,9 @@ export function realmEconomy(
       let count = unitCount(a);
       if (a.embarkedArmyId)
         count += unitCount(g.battalions.find((b) => b.id === a.embarkedArmyId) ?? {});
-      const imperial = g.wars.some(
-        (w) => w.active && w.imperialBanAgainstId && w.defenderIds.includes(id),
-      );
+      const imperial = coalitionFighter(g, id);
       upkeep +=
-        ((armyUpkeep(total, 0, supplyLimit(p), g.baseUpkeep) * count) / total) *
+        ((armyUpkeep(total, 0, effectiveSupply(g, id, p), g.baseUpkeep) * count) / total) *
         (a.isMercenary ? 2.2 : 1) *
         (imperial ? 0.75 : 1);
     }
@@ -350,7 +463,7 @@ export function realmEconomy(
     trade: roundMoney(trade),
     tithes: roundMoney(tithes),
     grossIncome: roundMoney(grossIncome),
-    income: roundMoney(income),
+    income: roundMoney(roundMoney(grossIncome) * (1 - actor.warExhaustion * 0.004)),
     upkeep: roundMoney(upkeep),
     net: roundMoney(income - upkeep),
     manpower: Math.ceil(
@@ -375,15 +488,28 @@ export function orderProvinceId(o: PlayerOrder, g?: Pick<GameState, 'battalions'
         ? g?.battalions.find((a) => a.id === o.battalionId)?.provinceId
         : null;
 }
-export function orderCost(o: PlayerOrder, p?: Province, actor?: Player) {
+export function orderCost(
+  o: PlayerOrder,
+  p?: Province,
+  actor?: Player,
+  g?: Pick<GameState, 'globalEvent'> & Partial<Pick<GameState, 'provinces'>>,
+) {
   let gold = 0,
     manpower = 0,
     influence = 0;
   if (o.type === 'RECRUIT_BATTALION') {
     gold =
-      (o.infantry ?? 0) * 3 +
-      (o.cavalry ?? 0) * 6 +
-      (o.artillery ?? 0) * 8 +
+      (o.infantry ?? 0) * 3 * (p?.strategicResource === 'IRON' ? 0.85 : 1) +
+      (o.cavalry ?? 0) *
+        6 *
+        (p?.strategicResource === 'HORSES' ||
+        (actor && g?.provinces && resourceCount({ provinces: g.provinces }, actor.id, 'HORSES') > 0)
+          ? 0.8
+          : 1) +
+      (o.artillery ?? 0) *
+        8 *
+        (p?.strategicResource === 'IRON' ? 0.85 : 1) *
+        (actor?.nationId === 'kaldor' ? 0.75 : 1) +
       (o.warships ?? 0) * 9 +
       (o.transports ?? 0) * 6;
     gold *= o.isFleet
@@ -393,10 +519,18 @@ export function orderCost(o: PlayerOrder, p?: Province, actor?: Player) {
       : actor
         ? (nationOf(actor.nationId).modifiers.recruitCost ?? 1)
         : 1;
-    if (o.isMercenary) gold *= 2 * (actor?.faith === 'MERCHANT' ? 0.75 : 1);
+    if (o.isMercenary)
+      gold *=
+        2 *
+        (actor?.faith === 'MERCHANT' ? 0.75 : 1) *
+        (actor?.nationId === 'vespera' ? 0.65 : 1) *
+        (g?.globalEvent?.id === 'MERCENARY_CRISIS' ? 0.6 : 1);
     else manpower = landCount(o);
   } else if (o.type === 'BUILD_FORT')
-    gold = (18 + (p?.fortLevel ?? 0) * 10) * (actor?.faith === 'REFORMED' ? 0.75 : 1);
+    gold =
+      (18 + (p?.fortLevel ?? 0) * 10) *
+      (actor?.faith === 'REFORMED' ? 0.75 : 1) *
+      (actor?.nationId === 'kaldor' ? 0.7 : 1);
   else if (o.type === 'BUILD_PORT') gold = 20 + (p?.portLevel ?? 0) * 10;
   else if (o.type === 'BUILD_MARKET') gold = 16 + (p?.marketLevel ?? 0) * 8;
   else if (o.type === 'PACIFY') gold = 8;
@@ -409,7 +543,7 @@ export function orderCost(o: PlayerOrder, p?: Province, actor?: Player) {
   return { gold: roundMoney(gold), manpower, influence };
 }
 export function reservedResources(
-  g: Pick<GameState, 'orders' | 'provinces' | 'players' | 'battalions'>,
+  g: Pick<GameState, 'orders' | 'provinces' | 'players' | 'battalions' | 'globalEvent'>,
   id: string,
   exceptKey?: string,
 ) {
@@ -421,6 +555,7 @@ export function reservedResources(
           o,
           g.provinces.find((p) => p.id === orderProvinceId(o, g)),
           g.players.find((p) => p.id === id),
+          g,
         );
         return {
           gold: roundMoney(sum.gold + c.gold),
@@ -431,31 +566,24 @@ export function reservedResources(
       { gold: 0, manpower: 0, influence: 0 },
     );
 }
-export function victoryStatus(g: Pick<GameState, 'players' | 'provinces' | 'wars' | 'diet'>) {
+export function victoryStatus(g: GameState) {
   const living = livingPlayers(g),
-    land = landProvinces(g),
-    total = land.length;
-  for (const p of living) {
-    const own = land.filter((q) => controller(q) === p.id).length;
-    const rivals = living.filter((q) => q.id !== p.id);
-    if (
-      rivals.length === 0 ||
-      rivals.every((r) => r.subjectOfId === p.id) ||
-      (own / total >= 0.75 &&
-        rivals.every((r) => land.filter((q) => controller(q) === r.id).length / total <= 0.15))
-    )
+    land = landProvinces(g);
+  for (const p of living.filter((p) => !p.subjectOfId)) {
+    const subjects = new Set([
+      p.id,
+      ...g.players.filter((q) => q.subjectOfId === p.id).map((q) => q.id),
+    ]);
+    const own = land.filter((q) => !!controller(q) && subjects.has(controller(q)!)).length;
+    if (living.every((q) => subjects.has(q.id)) || own / land.length >= 0.6)
       return { winnerId: p.id, objective: 'DOMINATION' as const };
   }
-  const members = g.diet.memberRealmIds.filter((id) => living.some((p) => p.id === id));
-  if (
-    g.diet.emperorId &&
-    living.some((p) => p.id === g.diet.emperorId) &&
-    members.includes(g.diet.emperorId) &&
-    members.length / Math.max(1, living.length) >= 0.6 &&
-    g.diet.peaceTurnsCounter >= 5 &&
-    !g.wars.some((w) => w.active)
-  )
-    return { winnerId: g.diet.emperorId, objective: 'IMPERIAL_PACIFICATION' as const };
+  if (g.enableSecretObjectives)
+    for (const p of living.filter((p) => !p.subjectOfId)) {
+      const card = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId);
+      if (card && objectiveProgress(g, p, card).every((r) => r.progress >= 1))
+        return { winnerId: p.id, objective: 'SECRET_OBJECTIVE' as const };
+    }
   return null;
 }
 export const dietSnapshot = (diet: ImperialDiet, turn: number) => ({
@@ -470,13 +598,14 @@ export const dietSnapshot = (diet: ImperialDiet, turn: number) => ({
 export function telemetry(view: GameView) {
   const { history, ...finalState } = structuredClone(view);
   return {
-    schemaVersion: 3 as const,
+    schemaVersion: 4 as const,
     matchConfig: view.matchConfig,
     nations: view.players,
     turnByTurnHistory: history,
     wars: view.wars,
     battles: history.flatMap((h) => h.battles),
     dietHistory: history.map((h) => h.diet),
+    worldHistory: history.map((h) => h.world),
     economyMetrics: history.flatMap((h) => h.economy),
     finalState,
   };
@@ -496,7 +625,7 @@ export function chronicle(view: GameView) {
         (b) =>
           `${view.provinces.find((p) => p.id === b.provinceId)?.name}: ataque ${b.attackPower.toFixed(2)} × defesa ${b.defensePower.toFixed(2)}; baixas ${b.attackerCasualties}/${b.defenderCasualties}`,
       ),
-      `Dieta: Imperador ${h.diet.emperorId ?? 'vago'}, autoridade ${h.diet.imperialAuthority}, paz ${h.diet.peaceTurnsCounter}/5`,
+      `Estações e crises: ${h.events.join('; ')}`,
     ]),
     '\nESTATÍSTICAS FINAIS',
     'Nação | Ouro | Reservas | Prestígio | Desgaste | Terras | Tropas',
@@ -539,7 +668,8 @@ export function peaceTermCost(provinces: Province[], terms: import('./types').Pe
 }
 export const CASUS_LABELS: Record<import('./types').CasusBelli, string> = {
   CONQUEST: 'Conquista',
-  IMPERIAL_BAN: 'Banimento Imperial',
+  IMPERIAL_BAN: 'Banimento (arquivo v0.3)',
+  COALITION: 'Guerra de Contenção',
   HOLY_WAR: 'Guerra Santa',
   HUMILIATION: 'Humilhação',
 };
