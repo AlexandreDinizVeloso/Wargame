@@ -1,3 +1,4 @@
+import { bridgeOptions } from '../shared/naval';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type {
   Battalion,
@@ -261,14 +262,21 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   const routes = armies
     .filter((a) => a.ownerId === (viewerId ?? referenceId) || a.pathQueue.length > 0)
     .map((a) => {
-      const order = orders.find((o) => o.type === 'MOVE_BATTALION' && o.battalionId === a.id);
+      const order = orders.find(
+        (o) => (o.type === 'MOVE_BATTALION' || o.type === 'NAVAL_BRIDGE') && o.battalionId === a.id,
+      );
       const path =
         order?.type === 'MOVE_BATTALION'
           ? (order.path ??
             (order.targetProvinceId && game
               ? (unitPath(game, a, order.targetProvinceId) ?? [])
               : []))
-          : a.pathQueue;
+          : order?.type === 'NAVAL_BRIDGE'
+            ? [
+                game!.battalions.find((f) => f.id === order.fleetId)!.provinceId,
+                order.targetProvinceId,
+              ]
+            : a.pathQueue;
       return { army: a, path };
     })
     .filter((r) => r.path.length);
@@ -277,7 +285,9 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   );
   const current = provinces.find((p) => p.id === selectedArmy?.provinceId);
   const highlight = (p: Province) => {
-    if (!selectedArmy || !current || !current.neighbors.includes(p.id) || !game) return null;
+    if (!selectedArmy || !current || !game) return null;
+    if (!current.neighbors.includes(p.id))
+      return bridgeOptions(game, selectedArmy, p).length ? 'naval' : null;
     if (selectedArmy.embarkedOnId)
       return p.kind === 'LAND' && p.isCoastal && canUnitVisit(game, selectedArmy, p)
         ? 'naval'
@@ -522,6 +532,28 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                 >
                   {destination === 'attack' ? '⚔️' : destination === 'naval' ? '⚓' : '👣'}
                 </text>
+              )}
+              {p.siege && !preview && (
+                <g
+                  className="siege-map-ring"
+                  transform={`translate(${p.x - 24 / scale} ${p.y - 24 / scale})`}
+                  pointerEvents="none"
+                >
+                  <circle r={12 / scale} fill="#291c16" stroke="#7f5238" strokeWidth={3 / scale} />
+                  <circle
+                    r={12 / scale}
+                    fill="none"
+                    stroke="#fb923c"
+                    strokeWidth={3 / scale}
+                    strokeDasharray={`${(Math.min(1, p.siege.progress / p.siege.required) * 75.4) / scale} ${75.4 / scale}`}
+                  />
+                  <text textAnchor="middle" dy={3 / scale} fontSize={9 / scale} fill="#ffe1b0">
+                    🔥
+                  </text>
+                  <text textAnchor="middle" y={25 / scale} fontSize={10 / scale} fill="#ffca8c">
+                    Cerco {p.siege.progress}/{p.siege.required}
+                  </text>
+                </g>
               )}
               {p.kind === 'LAND' && (
                 <path d={p.path} fill="url(#map-texture)" pointerEvents="none" />

@@ -1,3 +1,5 @@
+import { BUILDINGS, buildingLevel, constructionType, imperialInflation } from './development';
+import { commanderFor, hasSkill } from './military';
 import { coalitionFighter, effectiveSupply, objectiveProgress, resourceCount } from './strategy';
 import type {
   Battalion,
@@ -138,10 +140,10 @@ export const NATIONS: NationDefinition[] = [
     religion: 'REFORMED',
     homeProvinceId: 'france',
     style: 'Indústria e defesa',
-    mechanic: 'Fortes −30% até nível 4 e 15% atrito de cerco; artilharia −25% e +25% poder',
+    mechanic: 'Fortes −30% até nível 3 e 15% atrito de cerco; artilharia −25% e +25% poder',
     ideas: [
       'Indústria e defesa',
-      'Fortes −30% até nível 4 e 15% atrito de cerco; artilharia −25% e +25% poder',
+      'Fortes −30% até nível 3 e 15% atrito de cerco; artilharia −25% e +25% poder',
     ],
     modifiers: {
       artillery: 1.25,
@@ -297,7 +299,8 @@ export const canTransit = (
   p: Province,
 ) => {
   const owner = controller(p);
-  if (p.kind === 'SEA_ZONE' || !owner || owner === id) return true;
+  if (p.kind === 'SEA_ZONE') return false;
+  if (!owner || owner === id) return true;
   return (
     atWar(g, id, owner) ||
     sameWarSide(g, id, owner) ||
@@ -309,7 +312,7 @@ export function shortestPath(
   provinces: Province[],
   from: string,
   to: string,
-  canVisit: (p: Province) => boolean = () => true,
+  canVisit: (p: Province, from: Province) => boolean = () => true,
 ): string[] | null {
   if (from === to) return [];
   const seen = new Set([from]),
@@ -319,7 +322,7 @@ export function shortestPath(
     const [id, path] = queue[i];
     for (const next of lookup.get(id)?.neighbors ?? []) {
       const p = lookup.get(next);
-      if (!p || seen.has(next) || !canVisit(p)) continue;
+      if (!p || seen.has(next) || !canVisit(p, lookup.get(id)!)) continue;
       const route = [...path, next];
       if (next === to) return route;
       seen.add(next);
@@ -345,17 +348,46 @@ export function canUnitVisit(
             !!(controller(p) && sameWarSide(g, army.ownerId, controller(p)!))))
     : p.kind === 'LAND' && canTransit(g, army.ownerId, p);
 }
+export function canTraverse(
+  g: Pick<GameState, 'provinces' | 'wars' | 'relations' | 'players'>,
+  army: Battalion,
+  from: Province,
+  to: Province,
+) {
+  if (!canUnitVisit(g, army, to)) return false;
+  if (
+    !army.isFleet &&
+    from.kind === 'LAND' &&
+    from.fortLevel >= 1 &&
+    controller(from) !== army.ownerId &&
+    (!controller(from) || atWar(g, army.ownerId, controller(from)!))
+  ) {
+    const target = controller(to);
+    return (
+      target === army.ownerId ||
+      !!(
+        target &&
+        (getRelation(g, army.ownerId, target)?.allied ||
+          g.players.find((p) => p.id === target)?.subjectOfId === army.ownerId)
+      )
+    );
+  }
+  return true;
+}
 export function unitPath(
   g: Pick<GameState, 'provinces' | 'wars' | 'relations' | 'players'>,
   army: Battalion,
   target: string,
 ) {
-  return shortestPath(g.provinces, army.provinceId, target, (p) => canUnitVisit(g, army, p));
+  return shortestPath(g.provinces, army.provinceId, target, (p, from) =>
+    canTraverse(g, army, from, p),
+  );
 }
 export const supplyLimit = (p: Province) =>
   p.baseSupplyLimit +
   (p.strategicResource === 'GRAIN' ? 6 : 0) +
   p.fortLevel * 3 +
+  (p.isCoastal ? p.portLevel * 4 : 0) +
   (p.pacification >= 80 ? 2 : 0);
 export const attritionLoss = (troops: number, limit: number) =>
   troops > limit ? Math.max(1, Math.ceil((troops - limit) * 0.15)) : 0;
@@ -387,12 +419,11 @@ export function effectiveTax(
     : ((p.baseTax * p.pacification) / 100) *
         (p.religion === stateReligion ? 1.15 : 0.85) *
         (1 - p.unrest / 200) *
-        (1 + 0.25 * p.marketLevel) *
         (blockaded ? 0.5 : 1) *
         (policy === 'TOLERANCE' ? 0.9 : 1);
 }
 export const tradeIncomeOf = (p: Province) =>
-  ((p.resource === 'trade' ? 2 : 0) + p.portLevel * 1.5) * (1 + 0.25 * p.marketLevel);
+  (p.resource === 'trade' ? 2 : 0) + p.portLevel * 2.5 + p.marketLevel * 3;
 export function realmEconomy(
   g: Pick<
     GameState,
@@ -401,6 +432,7 @@ export function realmEconomy(
     | 'relations'
     | 'wars'
     | 'battalions'
+    | 'commanders'
     | 'baseUpkeep'
     | 'diet'
     | 'globalEvent'
@@ -409,29 +441,52 @@ export function realmEconomy(
   >,
   id: string,
 ) {
-  const actor = g.players.find((p) => p.id === id)!;
-  const owned = g.provinces.filter((p) => controller(p) === id && p.kind === 'LAND');
-  const nat = nationOf(actor.nationId);
-  const modifier = (p: Province) =>
-    (actor.faith === 'MERCHANT' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.25 : 1) *
-    (actor.nationId === 'vespera' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.3 : 1) *
+  const actor = g.players.find((p) => p.id === id)!,
+    nat = nationOf(actor.nationId),
+    owned = g.provinces.filter((p) => p.kind === 'LAND' && controller(p) === id);
+  const modifier = (p: Province, owner: Player) =>
+    (owner.faith === 'MERCHANT' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.25 : 1) *
+    (owner.nationId === 'vespera' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.3 : 1) *
     (g.season === 'AUTUMN' && p.strategicResource === 'GRAIN' ? 1.15 : 1) *
     (g.globalEvent?.id === 'GOLD_RUSH' && p.strategicResource === 'GOLD_MINE' ? 1.5 : 1);
-  const taxes = owned.reduce(
-    (n, p) =>
-      n + effectiveTax(p, actor.faith, isBlockaded(g, p), actor.religiousPolicy) * modifier(p),
-    0,
-  );
+  const raiders = (p: Province) => [
+    ...new Set(
+      g.battalions
+        .filter(
+          (a) =>
+            a.isFleet &&
+            a.warships > 0 &&
+            p.neighbors.includes(a.provinceId) &&
+            g.provinces.some((s) => s.id === a.provinceId && s.kind === 'SEA_ZONE') &&
+            !!controller(p) &&
+            atWar(g, a.ownerId, controller(p)!) &&
+            hasSkill(g, a.ownerId, 'NAV_T2A'),
+        )
+        .map((a) => a.ownerId),
+    ),
+  ];
+  const revenue = (p: Province, owner: Player) => ({
+    tax:
+      effectiveTax(p, owner.faith, isBlockaded(g, p), owner.religiousPolicy) * modifier(p, owner),
+    trade: tradeIncomeOf(p) * modifier(p, owner),
+  });
+  const rawTaxes = owned.reduce(
+      (n, p) => n + revenue(p, actor).tax * (raiders(p).length ? 0.65 : 1),
+      0,
+    ),
+    corruption = Math.min(0.3, 0.15 + Math.max(0, owned.length - 6) * 0.01),
+    administration = Math.max(0, rawTaxes - 50) * corruption;
+  const taxes = rawTaxes - administration;
   let embargo = 1;
   for (const r of g.relations.filter((r) => r.a === id || r.b === id))
     for (const issuer of r.embargoes) embargo *= issuer === id ? 0.95 : 0.85;
   const trade =
-    owned.reduce((n, p) => n + tradeIncomeOf(p) * modifier(p), 0) *
+    owned.reduce((n, p) => n + revenue(p, actor).trade * (raiders(p).length ? 0.65 : 1), 0) *
     embargo *
     (nat.modifiers.trade ?? 1);
-  const tithes = Object.entries(RELIGIONS).reduce((n, [faith]) => {
-    const r = faith as ReligionId;
-    const city = g.provinces.find((p) => p.id === holyCityId(r, g.provinces));
+  const tithes = Object.keys(RELIGIONS).reduce((n, faith) => {
+    const r = faith as ReligionId,
+      city = g.provinces.find((p) => p.id === holyCityId(r, g.provinces));
     return (
       n +
       (city && controller(city) === id
@@ -439,22 +494,41 @@ export function realmEconomy(
         : 0)
     );
   }, 0);
-  const grossIncome = taxes + trade + tithes + resourceCount(g, id, 'RELIC') * 3,
-    income = grossIncome * (1 - actor.warExhaustion * 0.004);
-  let upkeep = 0;
+  const plunder = g.provinces
+    .filter((p) => p.kind === 'LAND' && controller(p) && controller(p) !== id)
+    .reduce((n, p) => {
+      const corsairs = raiders(p),
+        owner = g.players.find((q) => q.id === controller(p));
+      if (!owner || !corsairs.includes(id)) return n;
+      const r = revenue(p, owner);
+      return n + ((r.tax + r.trade) * 0.35) / corsairs.length;
+    }, 0);
+  const industry = owned.reduce((n, p) => n + p.foundryLevel * 2, 0),
+    buildingUpkeep = owned.reduce(
+      (n, p) => n + (p.strategicResource === 'IRON' ? 0 : p.foundryLevel * 1.5),
+      0,
+    );
+  const grossIncome = roundMoney(
+      taxes + trade + tithes + industry + plunder + resourceCount(g, id, 'RELIC') * 3,
+    ),
+    income = roundMoney(grossIncome * (1 - actor.warExhaustion * 0.004));
+  let upkeep = buildingUpkeep;
   for (const p of g.provinces) {
-    const units = g.battalions.filter((a) => a.provinceId === p.id && !a.embarkedOnId);
-    const total = units.reduce((n, a) => n + unitCount(a), 0);
+    const units = g.battalions.filter((a) => a.provinceId === p.id && !a.embarkedOnId),
+      total = units.reduce((n, a) => n + unitCount(a), 0);
     if (!total) continue;
     for (const a of units.filter((a) => a.ownerId === id)) {
       let count = unitCount(a);
       if (a.embarkedArmyId)
         count += unitCount(g.battalions.find((b) => b.id === a.embarkedArmyId) ?? {});
-      const imperial = coalitionFighter(g, id);
+      const quarter = commanderFor(g, a)?.trait === 'QUARTERMASTER';
       upkeep +=
-        ((armyUpkeep(total, 0, effectiveSupply(g, id, p), g.baseUpkeep) * count) / total) *
+        ((armyUpkeep(total, 0, effectiveSupply(g, id, p) + (quarter ? 6 : 0), g.baseUpkeep) *
+          count) /
+          total) *
         (a.isMercenary ? 2.2 : 1) *
-        (imperial ? 0.75 : 1);
+        (coalitionFighter(g, id) ? 0.75 : 1) *
+        (quarter ? 0.7 : 1);
     }
   }
   return {
@@ -462,14 +536,22 @@ export function realmEconomy(
     taxes: roundMoney(taxes),
     trade: roundMoney(trade),
     tithes: roundMoney(tithes),
-    grossIncome: roundMoney(grossIncome),
-    income: roundMoney(roundMoney(grossIncome) * (1 - actor.warExhaustion * 0.004)),
+    industry: roundMoney(industry),
+    administration: roundMoney(administration),
+    buildingUpkeep: roundMoney(buildingUpkeep),
+    plunder: roundMoney(plunder),
+    grossIncome,
+    income,
     upkeep: roundMoney(upkeep),
-    net: roundMoney(income - upkeep),
+    net: roundMoney(income - roundMoney(upkeep)),
     manpower: Math.ceil(
-      owned.reduce((n, p) => n + (p.resource === 'grain' ? 2 : 1), 0) *
-        (nat.modifiers.manpower ?? 1),
+      owned.reduce(
+        (n, p) =>
+          n + Math.max(0, (p.resource === 'grain' ? 2 : 1) + p.barracksLevel * 3 - p.marketLevel),
+        0,
+      ) * (nat.modifiers.manpower ?? 1),
     ),
+    manpowerCap: 100 + owned.reduce((n, p) => n + p.barracksLevel * 3, 0),
   };
 }
 export function orderKey(o: PlayerOrder) {
@@ -519,6 +601,7 @@ export function orderCost(
       : actor
         ? (nationOf(actor.nationId).modifiers.recruitCost ?? 1)
         : 1;
+    gold *= p?.barracksLevel ? 0.85 : 1;
     if (o.isMercenary)
       gold *=
         2 *
@@ -526,14 +609,20 @@ export function orderCost(
         (actor?.nationId === 'vespera' ? 0.65 : 1) *
         (g?.globalEvent?.id === 'MERCENARY_CRISIS' ? 0.6 : 1);
     else manpower = landCount(o);
-  } else if (o.type === 'BUILD_FORT')
+  } else if (
+    o.type === 'BUILD_BUILDING' ||
+    o.type === 'BUILD_FORT' ||
+    o.type === 'BUILD_PORT' ||
+    o.type === 'BUILD_MARKET'
+  ) {
+    const building = constructionType(o)!;
     gold =
-      (18 + (p?.fortLevel ?? 0) * 10) *
-      (actor?.faith === 'REFORMED' ? 0.75 : 1) *
-      (actor?.nationId === 'kaldor' ? 0.7 : 1);
-  else if (o.type === 'BUILD_PORT') gold = 20 + (p?.portLevel ?? 0) * 10;
-  else if (o.type === 'BUILD_MARKET') gold = 16 + (p?.marketLevel ?? 0) * 8;
-  else if (o.type === 'PACIFY') gold = 8;
+      BUILDINGS[building].baseCost *
+      ((p ? buildingLevel(p, building) : 0) + 1) *
+      (actor && g?.provinces ? imperialInflation({ provinces: g.provinces }, actor.id) : 1);
+    if (building === 'FORT')
+      gold *= (actor?.faith === 'REFORMED' ? 0.75 : 1) * (actor?.nationId === 'kaldor' ? 0.7 : 1);
+  } else if (o.type === 'PACIFY') gold = 8;
   else if (o.type === 'CONVERT') {
     gold = 8;
     influence = 2;
@@ -574,14 +663,22 @@ export function victoryStatus(g: GameState) {
       p.id,
       ...g.players.filter((q) => q.subjectOfId === p.id).map((q) => q.id),
     ]);
-    const own = land.filter((q) => !!controller(q) && subjects.has(controller(q)!)).length;
-    if (living.every((q) => subjects.has(q.id)) || own / land.length >= 0.6)
+    const own = land.reduce(
+      (n, q) =>
+        n + (controller(q) === p.id ? 1 : controller(q) && subjects.has(controller(q)!) ? 0.5 : 0),
+      0,
+    );
+    if (living.length === 1 || own / land.length >= 0.75)
       return { winnerId: p.id, objective: 'DOMINATION' as const };
   }
   if (g.enableSecretObjectives)
     for (const p of living.filter((p) => !p.subjectOfId)) {
       const card = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId);
-      if (card && objectiveProgress(g, p, card).every((r) => r.progress >= 1))
+      if (
+        card &&
+        p.objectiveStreak >= 2 &&
+        objectiveProgress(g, p, card).every((r) => r.progress >= 1)
+      )
         return { winnerId: p.id, objective: 'SECRET_OBJECTIVE' as const };
     }
   return null;
@@ -598,7 +695,7 @@ export const dietSnapshot = (diet: ImperialDiet, turn: number) => ({
 export function telemetry(view: GameView) {
   const { history, ...finalState } = structuredClone(view);
   return {
-    schemaVersion: 4 as const,
+    schemaVersion: 5 as const,
     matchConfig: view.matchConfig,
     nations: view.players,
     turnByTurnHistory: history,
@@ -661,7 +758,7 @@ export function peaceTermCost(provinces: Province[], terms: import('./types').Pe
           : t.type === 'HUMILIATE_DISARM'
             ? 25
             : t.type === 'SUBJUGATE'
-              ? 70
+              ? 85
               : 30),
     0,
   );

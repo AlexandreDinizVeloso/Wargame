@@ -1,15 +1,15 @@
-# Protocolo 4 — servidor headless / Godot
+# Protocolo 5 — servidor headless / Godot
 
 `shared/` e `server/` não importam `src/`, React ou APIs DOM. O cliente utiliza JSON por HTTP/WS. Execute `npm run server:headless`; nenhum renderer Godot é incluído.
 
 ## HTTP
 
-| Rota              | Retorno                                                                      |
-| ----------------- | ---------------------------------------------------------------------------- |
-| `GET /api/health` | `status: ok`, `version: 0.4.0`, `protocolVersion: 4`                         |
-| `GET /api/schema` | Nações, brasões, mapas, recursos, estações, crises, crenças e tipos de ordem |
-| `GET /api/rooms`  | Array de salas públicas não encerradas, sem sessão ou cartas privadas        |
-| `/ws`             | WebSocket de mensagens JSON                                                  |
+| Rota              | Retorno                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `GET /api/health` | `status: ok`, `version: 0.5.0`, `protocolVersion: 5`                                        |
+| `GET /api/schema` | Nações, mapas, recursos, crises, crenças, ordens, `skills`, `commanderTraits` e `buildings` |
+| `GET /api/rooms`  | Array de salas públicas não encerradas, sem sessão ou cartas privadas                       |
+| `/ws`             | WebSocket de mensagens JSON                                                                 |
 
 Browser usa mesma origem; cliente nativo pode omitir `Origin`. Mensagens têm até 16 KiB; há limite de frequência. HTTPS exige WSS.
 
@@ -67,9 +67,9 @@ Todo comando usa `{type:"command",command:{type:..., ...campos}}`.
 
 Casus belli: `CONQUEST`, `HOLY_WAR`, `HUMILIATION`, `COALITION`. A contenção exige coalizão válida; o servidor inclui todos os membros. Comandos antigos de Dieta são rejeitados.
 
-Ordens de cidade: `RECRUIT_BATTALION`, `BUILD_FORT`, `BUILD_PORT`, `BUILD_MARKET`, `PACIFY`, `CONVERT`. Recrutamento usa `provinceId`, composição (`infantry`, `cavalry`, `artillery`, `warships`, `transports`), `isFleet?`, `isMercenary?`, `battalionId?` para reforçar e `name?`.
+Ordens de cidade: `BUILD_BUILDING`/`DEMOLISH_BUILDING` (`provinceId`, `building`: `MARKET`/`BARRACKS`/`FORT`/`FOUNDRY`/`TEMPLE`/`PORT`), `RECRUIT_BATTALION`, `BUILD_FORT`, `BUILD_PORT`, `BUILD_MARKET`, `PACIFY`, `CONVERT`. Recrutamento usa `provinceId`, composição (`infantry`, `cavalry`, `artillery`, `warships`, `transports`), `isFleet?`, `isMercenary?`, `battalionId?` para reforçar e `name?`.
 
-Ordens de formação: `MOVE_BATTALION` (`battalionId` e `targetProvinceId` ou `path` exclusivamente), `TRAIN_BATTALION`, `ENTRENCH_BATTALION`, `SPLIT_BATTALION` (`composition`), `MERGE_BATTALIONS` (`targetBattalionId`), `MERGE_ALL`, `EMBARK_BATTALION` (`fleetId` ou `disembarkProvinceId`) e `RAZE_PROVINCE`.
+Ordens de formação: `MOVE_BATTALION` (`battalionId` e `targetProvinceId` ou `path` exclusivamente), `TRAIN_BATTALION`, `ENTRENCH_BATTALION`, `SPLIT_BATTALION` (`composition`), `MERGE_BATTALIONS` (`targetBattalionId`), `MERGE_ALL`, `EMBARK_BATTALION` (`fleetId` ou `disembarkProvinceId`), `RAZE_PROVINCE`, `ASSAULT_SIEGE` (`battalionId`) e `NAVAL_BRIDGE` (`battalionId`, `fleetId`, `targetProvinceId`). Fusão/divisão enviadas pelo antigo `SUBMIT_ORDER` também são imediatas, sem entrar na fila.
 
 Diplomacia usa ordem `DIPLOMACY` com `action`, `targetRealmId`, `amount?`, `targetProvinceId?`. Ações: `PROPOSE_ALLIANCE`, `BREAK_ALLIANCE`, `MILITARY_ACCESS`, `DEMAND_TRIBUTE`, `EMBARGO`, `FUND_REBELS`, `SEND_SUBSIDY`, `OFFER_VASSALAGE` (Aurélia), `BUY_VISION_OR_BRIHC` (Véspera). Essa última compra visão quando não há província e suborna quando há `targetProvinceId`.
 
@@ -77,10 +77,42 @@ Tratados: `CEDE_PROVINCES` (`provinceIds`), `WAR_REPARATIONS` (`immediateTribute
 
 ## Timer, privacidade e persistência
 
-`GameView.version` e `MatchTelemetry.schemaVersion` valem **4**. `turnDeadlineAt` é `null` no começo de cada rodada. O primeiro humano vivo a enviar `READY:true` define o prazo e `firstReadyPlayerName`. `deadline` é alias de compatibilidade. Todos prontos ou prazo expirado resolve; nova rodada zera ambos. Desconfirmar não adia o prazo. Após pausa, um relógio iniciado retoma o tempo restante; planejamento ainda sem primeiro pronto continua livre.
+`GameView.version` e `MatchTelemetry.schemaVersion` valem **5**. `turnDeadlineAt` é `null` no começo de cada rodada. O primeiro humano vivo a enviar `READY:true` define o prazo e `firstReadyPlayerName`. `deadline` é alias de compatibilidade. Todos prontos ou prazo expirado resolve; nova rodada zera ambos. Desconfirmar não adia o prazo. Após pausa, um relógio iniciado retoma o tempo restante; planejamento ainda sem primeiro pronto continua livre.
 
 `GameView` não contém `seed`, `nextId`, ordens alheias ou pendências internas. As cartas e seleção dos outros jogadores são removidas inclusive do histórico. Intenções são fornecidas apenas à própria visão, a soberano de súditos, contratos de visão e inteligência adjacente de Sapiência. Tropas camufladas de Verídia são removidas da visão adversária; não são enviadas como composição zero. A visão final revela as cartas.
 
 `reports`, `lastReport` e `history` incluem `world:{season,event,coalitions}`. Exportações têm `worldHistory`; `dietHistory` permanece apenas como arquivo legado. O histórico não recebe o corte interno do simulador em jogos humanos.
 
-Snapshots 2/3 são migrados para 4 com backups específicos. O arquivo usa escrita temporária, `fsync`, troca atômica e rollback quando uma gravação de comando falha. Não há autenticação por conta: o token privado da sessão é a credencial de reconexão.
+Snapshots 2/3/4 são migrados para 5 com backups específicos. O arquivo usa escrita temporária, `fsync`, troca atômica e rollback quando uma gravação de comando falha. Não há autenticação por conta: o token privado da sessão é a credencial de reconexão.
+
+## Ações imediatas da v0.5
+
+Todos os comandos abaixo exigem planejamento aberto (`ready:false`). Um jogador confirmado deve enviar `READY:false`; o relógio em andamento não é reiniciado. Mudanças usam a mesma transação autoritativa com persistência e rollback dos demais comandos.
+
+| Comando               | Campos                                                                          |
+| --------------------- | ------------------------------------------------------------------------------- |
+| `INSTANT_ARMY_ACTION` | `action`: `MERGE_BATTALIONS`, `MERGE_ALL`, `SPLIT_BATTALION` ou `ASSIGN_LEADER` |
+| `ASSIGN_LEADER`       | `battalionId`, `commanderId:string                                              | null`; transfere ou retira o líder |
+| `RECRUIT_COMMANDER`   | `isAdmiral`, `trait`, `name?`; 60 ouro + 15 influência, máximo três             |
+| `UNLOCK_SKILL`        | `skillId`; custa 25/45/70 XP, com pré-requisitos e exclusividade A/B            |
+| `SET_AUTO_MERGE`      | `battalionId`, `autoMerge:boolean`                                              |
+
+```json
+{
+  "type": "command",
+  "command": {
+    "type": "INSTANT_ARMY_ACTION",
+    "action": {
+      "type": "SPLIT_BATTALION",
+      "battalionId": "army-1",
+      "composition": { "infantry": 3, "cavalry": 0, "artillery": 0, "warships": 0, "transports": 0 }
+    }
+  }
+}
+```
+
+O servidor publica o estado atualizado imediatamente. Fusão/divisão cancelam ordens e rotas das formações envolvidas; a formação resultante pode receber nova marcha na mesma rodada. `DECLARE_WAR_AND_MOVE` aceita `bridgeFleetId?` para declarar guerra e preparar uma ponte naval atomicamente.
+
+`Province.siege` contém `attackerOwnerId`, `progress`, `required`, `turnsUnderSiege`, `startedTurn` e `lastProgressTurn`. `maxBuildingSlots`, `barracksLevel`, `foundryLevel` e `templeLevel` completam a cidade. `GameView.commanders` contém os líderes; batalhões expõem `autoMerge`, `infantryPower` e `artilleryPower`. Jogadores expõem `militaryXP` e `unlockedSkills`; `paxStreak` e `objectiveStreak` permanecem privados durante a partida.
+
+Relatórios incluem `sieges`, `movements[].viaSeaId?`, `battles[].capturedShips?` e métricas `industry`, `administration`, `buildingUpkeep` e `plunder`. Batalhas navais sempre reportam modificadores terrestres neutros (1) e forte 0. A ponte nunca cria um estado terrestre em zona marítima. Embarque explícito continua disponível e exige vínculo recíproco entre frota/carga e capacidade suficiente.

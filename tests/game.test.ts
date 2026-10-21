@@ -49,7 +49,7 @@ test('cidade e batalhão têm filas independentes; substituição e cancelamento
   submitOrder(g, a.id, { type: 'TRAIN_BATTALION', battalionId: unit.id });
   submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'portugal' });
   assert.equal(g.orders[a.id].length, 2);
-  assert.equal(reservedResources(g, a.id).gold, 22);
+  assert.equal(reservedResources(g, a.id).gold, 26);
   submitOrder(g, a.id, { type: 'PACIFY', provinceId: 'portugal' });
   assert.equal(reservedResources(g, a.id).gold, 14);
   cancelOrder(g, a.id, 'city:portugal');
@@ -81,7 +81,7 @@ test('mercenários imediatos respeitam ouro reservado, reserva humana e desconto
     g,
     players: [a],
   } = setup();
-  a.gold = 18;
+  a.gold = 22;
   submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'portugal' });
   assert.throws(() =>
     submitOrder(g, a.id, {
@@ -99,7 +99,7 @@ test('mercenários imediatos respeitam ouro reservado, reserva humana e desconto
     infantry: 2,
     isMercenary: true,
   });
-  assert.equal(a.gold, 12.15);
+  assert.equal(a.gold, 16.15);
   assert.equal(a.manpower, manpower);
   assert.equal(g.battalions[0].training, 1);
   assert.equal(g.battalions[0].isMercenary, true);
@@ -161,6 +161,7 @@ test('marcha continua uma aresta por rodada e atravessar fronteira exige guerra 
     }),
   );
   declareWar(g, a.id, b.id, 'CONQUEST');
+  g.provinces.find((p) => p.id === 'japan')!.ownerId = g.players[2].id;
   g.provinces.find((p) => p.id === 'france')!.ownerId = a.id;
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
@@ -169,7 +170,17 @@ test('marcha continua uma aresta por rodada e atravessar fronteira exige guerra 
   });
   resolveTurn(g);
   assert.equal(unit.provinceId, 'castile');
-  assert.deepEqual(unit.pathQueue, ['france']);
+  assert.deepEqual(unit.pathQueue, []);
+  const fort = g.provinces.find((p) => p.id === 'castile')!;
+  assert.equal(fort.occupierId, null);
+  assert.equal(fort.siege?.progress, 1);
+  resolveTurn(g);
+  assert.equal(fort.occupierId, a.id);
+  submitOrder(g, a.id, {
+    type: 'MOVE_BATTALION',
+    battalionId: unit.id,
+    targetProvinceId: 'france',
+  });
   resolveTurn(g);
   assert.equal(unit.provinceId, 'france');
   assert.deepEqual(unit.pathQueue, []);
@@ -243,14 +254,14 @@ test('visões privadas escondem ordens, semente e caminhos adversários', () => 
   assert.equal('orders' in other, false);
   assert.deepEqual(other.battalions[0].pathQueue, []);
 });
-test('dominação exige 60% incluindo vassalos e a partida não acaba por rodadas', () => {
+test('dominação exige 75% com vassalos ponderados e a partida não acaba por rodadas', () => {
   const {
     g,
     players: [a],
   } = setup();
   assert.equal(victoryStatus(g), null);
   const lands = g.provinces.filter((p) => p.kind === 'LAND');
-  lands.slice(0, Math.ceil(lands.length * 0.6)).forEach((p) => (p.ownerId = a.id));
+  lands.slice(0, Math.ceil(lands.length * 0.75)).forEach((p) => (p.ownerId = a.id));
   assert.equal(victoryStatus(g)?.objective, 'DOMINATION');
   const running = setup();
   running.g.maxTurns = 1;

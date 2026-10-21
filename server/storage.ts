@@ -12,8 +12,10 @@ import {
 import path from 'node:path';
 import type { GameState } from '../shared/types';
 import { UNIT_KEYS, unitCount } from '../shared/rules';
+import { SKILLS, TRAITS } from '../shared/military';
+import { buildingSlots, usedSlots } from '../shared/development';
 import { parseOrder } from './commands';
-import { migrateV2, migrateV3 } from './migration';
+import { migrateV2, migrateV3, migrateV4 } from './migration';
 export interface SavedRoom {
   game: GameState;
   sessions: { playerId: string; tokenHash: string }[];
@@ -21,7 +23,7 @@ export interface SavedRoom {
   remainingMs: number;
 }
 interface Snapshot {
-  schemaVersion: 4;
+  schemaVersion: 5;
   savedAt: number;
   rooms: SavedRoom[];
 }
@@ -29,7 +31,7 @@ export function validGame(g: GameState): boolean {
   try {
     if (
       !g ||
-      g.version !== 4 ||
+      g.version !== 5 ||
       typeof g.code !== 'string' ||
       !['lobby', 'planning', 'finished'].includes(g.phase) ||
       !Array.isArray(g.players) ||
@@ -39,6 +41,7 @@ export function validGame(g: GameState): boolean {
       g.provinces.length < 1 ||
       g.provinces.length > 200 ||
       !Array.isArray(g.battalions) ||
+      !Array.isArray(g.commanders) ||
       !Array.isArray(g.wars) ||
       !Array.isArray(g.history) ||
       !Array.isArray(g.relations) ||
@@ -78,7 +81,22 @@ export function validGame(g: GameState): boolean {
           p.aggressiveExpansion,
           p.fervor,
           p.objectiveStreak,
+          p.paxStreak,
+          p.militaryXP,
         ].every(Number.isFinite) ||
+        p.militaryXP < 0 ||
+        !Array.isArray(p.unlockedSkills) ||
+        new Set(p.unlockedSkills).size !== p.unlockedSkills.length ||
+        p.unlockedSkills.some((id) => {
+          const skill = SKILLS.find((s) => s.id === id);
+          if (!skill) return true;
+          const branch = p.unlockedSkills.filter((s) => s.startsWith(skill.branch));
+          return (
+            (skill.tier > 1 && !branch.includes(`${skill.branch}_T1`)) ||
+            (skill.tier === 3 && !branch.some((s) => s.startsWith(`${skill.branch}_T2`))) ||
+            branch.filter((s) => s.startsWith(`${skill.branch}_T2`)).length > 1
+          );
+        }) ||
         p.gold < 0 ||
         p.manpower < 0 ||
         p.influence < 0 ||
@@ -99,14 +117,31 @@ export function validGame(g: GameState): boolean {
           p.portLevel,
           p.marketLevel,
         ].every(Number.isFinite) ||
+        usedSlots(p) > buildingSlots(p) ||
+        (p.siege !== null &&
+          (!p.siege ||
+            p.kind !== 'LAND' ||
+            !ids.has(p.siege.attackerOwnerId) ||
+            ![
+              p.siege.progress,
+              p.siege.required,
+              p.siege.turnsUnderSiege,
+              p.siege.startedTurn,
+              p.siege.lastProgressTurn,
+            ].every(Number.isInteger) ||
+            p.siege.progress < 1 ||
+            p.siege.required !== 2 + p.fortLevel * 2 ||
+            p.siege.turnsUnderSiege < 1)) ||
         p.pacification < 0 ||
         p.pacification > 100 ||
         p.unrest < 0 ||
         p.unrest > 100 ||
         !Number.isInteger(p.fortLevel) ||
         p.fortLevel < 0 ||
-        p.fortLevel > 4 ||
-        [p.portLevel, p.marketLevel].some((v) => !Number.isInteger(v) || v < 0 || v > 3) ||
+        p.fortLevel > 3 ||
+        [p.portLevel, p.marketLevel, p.barracksLevel, p.foundryLevel, p.templeLevel].some(
+          (v) => !Number.isInteger(v) || v < 0 || v > 2,
+        ) ||
         (p.ownerId !== null && !ids.has(p.ownerId)) ||
         (p.occupierId !== null && !ids.has(p.occupierId)) ||
         !Array.isArray(p.rings) ||
@@ -114,6 +149,45 @@ export function validGame(g: GameState): boolean {
       )
         return false;
     for (const a of g.battalions) {
+      const location = g.provinces.find((p) => p.id === a.provinceId);
+      if (a.embarkedOnId) {
+        const f = g.battalions.find((f) => f.id === a.embarkedOnId);
+        if (
+          !f ||
+          a.isFleet ||
+          !f.isFleet ||
+          f.embarkedArmyId !== a.id ||
+          f.ownerId !== a.ownerId ||
+          f.provinceId !== a.provinceId ||
+          unitCount(a) > f.transports * 4
+        )
+          return false;
+      }
+      if (
+        a.embarkedArmyId &&
+        (!a.isFleet ||
+          !g.battalions.some((c) => c.id === a.embarkedArmyId && c.embarkedOnId === a.id))
+      )
+        return false;
+      if (
+        !a.isFleet &&
+        location?.kind === 'SEA_ZONE' &&
+        (!a.embarkedOnId ||
+          !g.battalions.some(
+            (f) =>
+              f.id === a.embarkedOnId &&
+              f.isFleet &&
+              f.embarkedArmyId === a.id &&
+              f.provinceId === a.provinceId &&
+              f.ownerId === a.ownerId,
+          ))
+      )
+        return false;
+      if (
+        (a.isFleet && (a.infantry || a.cavalry || a.artillery)) ||
+        (!a.isFleet && (a.warships || a.transports))
+      )
+        return false;
       if (
         (!ids.has(a.ownerId) && a.ownerId !== 'NEUTRAL') ||
         !provinceIds.has(a.provinceId) ||
@@ -126,6 +200,10 @@ export function validGame(g: GameState): boolean {
         a.training < 1 - 1e-8 ||
         a.training > 1.5 + 1e-8 ||
         typeof a.isFleet !== 'boolean' ||
+        typeof a.autoMerge !== 'boolean' ||
+        ![a.infantryPower, a.artilleryPower].every(
+          (n) => Number.isFinite(n) && n >= 1 && n <= 1.2 + 1e-8,
+        ) ||
         !Array.isArray(a.pathQueue) ||
         !a.pathQueue.every((id) => provinceIds.has(id))
       )
@@ -143,6 +221,30 @@ export function validGame(g: GameState): boolean {
       g.diet.memberRealmIds.some((id) => !ids.has(id))
     )
       return false;
+    if (
+      new Set(g.commanders.map((c) => c.id)).size !== g.commanders.length ||
+      new Set(g.commanders.map((c) => c.assignedBattalionId).filter(Boolean)).size !==
+        g.commanders.filter((c) => c.assignedBattalionId).length ||
+      g.players.some((p) => g.commanders.filter((c) => c.ownerId === p.id).length > 3)
+    )
+      return false;
+    for (const c of g.commanders)
+      if (
+        !ids.has(c.ownerId) ||
+        !(c.trait in TRAITS) ||
+        typeof c.isAdmiral !== 'boolean' ||
+        ![1, 2, 3].includes(c.stars) ||
+        !Number.isFinite(c.xp) ||
+        c.xp < 0 ||
+        (c.assignedBattalionId &&
+          !g.battalions.some(
+            (a) =>
+              a.id === c.assignedBattalionId &&
+              a.ownerId === c.ownerId &&
+              a.isFleet === c.isAdmiral,
+          ))
+      )
+        return false;
     for (const w of g.wars)
       if (
         !Number.isFinite(w.warScore) ||
@@ -165,7 +267,7 @@ function decode(value: unknown): SavedRoom[] {
   const snapshot = value as { schemaVersion: number; rooms: SavedRoom[] };
   if (
     !snapshot ||
-    ![2, 3, 4].includes(snapshot.schemaVersion) ||
+    ![2, 3, 4, 5].includes(snapshot.schemaVersion) ||
     !Array.isArray(snapshot.rooms) ||
     snapshot.rooms.length > 200
   )
@@ -177,7 +279,9 @@ function decode(value: unknown): SavedRoom[] {
         ? migrateV2(room.game)
         : snapshot.schemaVersion === 3
           ? migrateV3(room.game)
-          : room.game,
+          : snapshot.schemaVersion === 4
+            ? migrateV4(room.game)
+            : room.game,
   }));
   for (const room of rooms) {
     if (
@@ -214,6 +318,11 @@ export function readSnapshot(filename: string): SavedRoom[] {
         !existsSync(`${filename}.v3-backup`)
       )
         copyFileSync(candidate, `${filename}.v3-backup`);
+      if (
+        (raw as { schemaVersion: number }).schemaVersion === 4 &&
+        !existsSync(`${filename}.v4-backup`)
+      )
+        copyFileSync(candidate, `${filename}.v4-backup`);
       return rooms;
     } catch {
       continue;
@@ -226,7 +335,7 @@ export function readSnapshot(filename: string): SavedRoom[] {
   return [];
 }
 export function writeSnapshot(filename: string, rooms: SavedRoom[], now: number) {
-  const snapshot: Snapshot = { schemaVersion: 4, savedAt: now, rooms };
+  const snapshot: Snapshot = { schemaVersion: 5, savedAt: now, rooms };
   decode(snapshot);
   const temporary = `${filename}.tmp`;
   mkdirSync(path.dirname(filename), { recursive: true });

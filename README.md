@@ -1,6 +1,6 @@
-# Concórdia — Atlas de Impérios · v0.4
+# Concórdia — Atlas de Impérios · v0.5
 
-Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **60% das terras incluindo vassalos**, eliminação/submissão dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
+Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
 
 ## Executar
 
@@ -32,6 +32,15 @@ npm run server:headless
 
 Sem banco externo, chave de API ou assets remotos. No cloud com cache pessoal sem permissão, use `npm ci --include=dev --cache /workspace/.cache/npm --no-audit --no-fund`.
 
+## Novidades da v0.5
+
+- Fusão, divisão e atribuição de líderes instantâneas no planejamento, preservando movimento. Reabra as ordens se já confirmou. Fusão automática é opcional por formação.
+- Toda conquista terrestre exige cerco de pelo menos duas rodadas. Fortes criam zonas de controle; assaltos aceleram o cerco com perdas e queda de moral.
+- Generais e almirantes com seis traços, veterania e 16 doutrinas em quatro árvores com escolhas exclusivas.
+- Cidades com dois ou três slots e seis edifícios; inflação de construção e corrupção marginal freiam a expansão.
+- Combate naval próprio, recuos por tipo de unidade e ponte naval entre costas na mesma zona marítima.
+- Dominação em 75%, vassalagem limitada e cartas proporcionais ao teatro, sustentadas por duas rodadas com alerta global.
+
 ## Nações e mundo
 
 | Nação       | Mecânica                                                                                                            |
@@ -40,7 +49,7 @@ Sem banco externo, chave de API ou assets remotos. No cloud com cache pessoal se
 | Ferro-Norte | +8 ouro por baixa inimiga; moral ao saquear; ignora inverno e penalidades da floresta                               |
 | Véspera     | Mercenários imediatos em porto/mercado, −35% custo; +30% receita comercial local; visão comprável e suborno dobrado |
 | Sol Invicto | Conversão +25 ouro e +10 Fervor; +20% ataque/moral em guerra religiosa e chance de agitação adjacente               |
-| Kaldor      | Fortes −30%, até nível 4, causam 15% de atrito em sitiantes; artilharia −25% custo e +25% fogo                      |
+| Kaldor      | Fortes −30%, até nível 3, causam 15% de atrito em sitiantes; artilharia −25% custo e +25% fogo                      |
 | Turan       | Cavalaria pura percorre duas planícies/costas por rodada; arrasar conquista rende 80 ouro                           |
 | Sapiência   | Recruta com treinamento 1,20×; vê intenções inimigas em províncias adjacentes                                       |
 | Verídia     | Camuflagem em mata/colinas próprias; defesa local com +50% poder de emboscada                                       |
@@ -63,7 +72,7 @@ As janelas podem ser arrastadas, redimensionadas, desanexadas e minimizadas. A r
 
 O lobby configura o prazo de **15–600 segundos**, padrão **60**. Cada rodada começa com `turnDeadlineAt: null`: o primeiro humano a confirmar inicia o relógio para todos. Todos prontos ou prazo expirado resolve a rodada. Cancelar a confirmação não reinicia o prazo. Bots não disparam o relógio. Após desconexão geral/reinício, a campanha pausa e conserva o tempo restante de um relógio já iniciado.
 
-Objetivos secretos vêm ativados por padrão. Cada comandante recebe duas cartas no turno 1 e escolhe uma. Se não escolher, a primeira é adotada ao resolver. Metas são adaptadas ao mapa; o botão **🎯 Meu Objetivo Secreto** mostra o progresso. O servidor verifica a vitória ao fim da rodada e revela a carta vencedora. Adversários não recebem as cartas, a seleção ou o progresso privado durante a partida.
+Objetivos secretos vêm ativados por padrão. Cada jogador recebe duas cartas no turno 1 e escolhe uma. Se não escolher, a primeira é adotada ao resolver. Metas são adaptadas ao mapa; o botão **🎯 Meu Objetivo Secreto** mostra o progresso. O servidor exige duas rodadas consecutivas de condição completa, avisa todos na primeira e revela a carta vencedora ao concluir. Pax também exige três rodadas de liderança militar e estabilidade antes da sustentação da carta. Adversários não recebem as cartas, a seleção ou o progresso privado durante a partida.
 
 Não há limite de turnos em partidas humanas. Somente o simulador usa um corte interno para encerrar a coleta. Dissolução de todos os reinos encerra sem vencedor.
 
@@ -71,7 +80,7 @@ Não há limite de turnos em partidas humanas. Somente o simulador usa um corte 
 
 O servidor grava snapshots atômicos, backups e hashes de tokens. Preserve `.local/` em volume persistente e use um processo por arquivo. O código da sala permite entrar no lobby; recuperar um jogador existente exige o token privado da aba.
 
-Snapshots v0.3 migram para v0.4 com uma cópia `.v3-backup`, preservando sessão, ouro, tropas e tabuleiro. Objetivos secretos ficam desligados nessas partidas já iniciadas; a Dieta passa a ser arquivo histórico. Snapshots v0.2 também são aceitos e guardam `.v2-backup`. Salas migradas ficam privadas por padrão.
+Snapshots v0.4 migram para v0.5 com cópia `.v4-backup`. Sessões, tesouros e tropas são preservados; cidades antigas são ajustadas aos slots e níveis permitidos, objetivos são reescalados e marchas são canceladas para novo planejamento sob as regras de cerco. Ordens locais compatíveis são preservadas, confirmações e relógios são reabertos. Resultados encerrados ficam arquivados com sua versão de origem. Snapshots v0.2/v0.3 também são aceitos, com `.v2-backup`/`.v3-backup`, objetivos retroativos desativados e Dieta histórica.
 
 JSON e TXT podem ser baixados na HUD e na tela final. O relatório inclui todas as rodadas, batalhas, economia, guerras, estações e coalizões, respeitando a visão de quem exportou. Tokens, semente privada e ordens ocultas não são exportados.
 
@@ -84,16 +93,16 @@ npx tsx scripts/smoke-browser.ts
 npx tsx scripts/simulate-balance.ts --games=40 --seed=20261020 --max-turns=60
 ```
 
-O smoke inicia um servidor isolado em porta livre e abre três navegadores Chromium. É preciso Chromium instalado (`CHROMIUM_PATH` opcional; padrão `/usr/bin/chromium`). `BASE_URL` permite apontar para um servidor v0.4 já iniciado. Artefatos ficam em `.local/`. O simulador informa vitórias e partidas ainda sem vencedor no corte, sem inventar resultado por pontos.
+O smoke inicia um servidor isolado em porta livre e abre três navegadores Chromium. É preciso Chromium instalado (`CHROMIUM_PATH` opcional; padrão `/usr/bin/chromium`). `BASE_URL` permite apontar para um servidor v0.5 já iniciado. Artefatos ficam em `.local/`. O simulador informa vitórias e partidas ainda sem vencedor no corte, sem inventar resultado por pontos.
 
 ## Arquitetura
 
-| Área                                                      | Papel                                                            |
-| --------------------------------------------------------- | ---------------------------------------------------------------- |
-| `shared/types.ts`, `rules.ts`, `strategy.ts`              | Contratos, nações, recursos, economia, objetivos e regras comuns |
-| `shared/map.ts`                                           | Geometria, adjacências e recursos                                |
-| `server/game.ts`, `combat.ts`, `diplomacy.ts`, `world.ts` | Resolução autoritativa, combate, tratados, crises e coalizões    |
-| `server/rooms.ts`, `storage.ts`, `migration.ts`           | HTTP/WS, sessões, timer e persistência                           |
-| `src/`                                                    | Cliente React/SVG, HUD, áudio e janelas                          |
+| Área                                                                                               | Papel                                                            |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `shared/types.ts`, `rules.ts`, `strategy.ts`                                                       | Contratos, nações, recursos, economia, objetivos e regras comuns |
+| `shared/map.ts`                                                                                    | Geometria, adjacências e recursos                                |
+| `server/game.ts`, `combat.ts`, `siege.ts`, `armies.ts`, `transport.ts`, `diplomacy.ts`, `world.ts` | Resolução autoritativa, combate, tratados, crises e coalizões    |
+| `server/rooms.ts`, `storage.ts`, `migration.ts`                                                    | HTTP/WS, sessões, timer e persistência                           |
+| `src/`                                                                                             | Cliente React/SVG, HUD, áudio e janelas                          |
 
-`shared/` e `server/` não importam React, `src/` ou DOM. Um cliente Godot pode consumir o [protocolo 4](docs/PROTOCOL.md). Consulte [regras v0.4](docs/REGRAS_V4.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3 em `docs/` são arquivos históricos.
+`shared/` e `server/` não importam React, `src/` ou DOM. Um cliente Godot pode consumir o [protocolo 5](docs/PROTOCOL.md). Consulte [regras v0.5](docs/REGRAS_V5.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3/v0.4 em `docs/` são arquivos históricos.

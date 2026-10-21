@@ -1,3 +1,11 @@
+import {
+  buildingSlots,
+  buildingLevel,
+  setBuildingLevel,
+  buildingLimit,
+} from '../shared/development';
+import { objectiveCards } from '../shared/strategy';
+import { recruitCommander } from './armies';
 import type { GameState, Player, Province, ReligionId } from '../shared/types';
 import { compositionOf, NATIONS } from '../shared/rules';
 import { addPlayer, createGame } from './game';
@@ -168,7 +176,12 @@ export function migrateV2(value: unknown): GameState {
       unrest: p.unrest,
       fortLevel: p.fortLevel,
       portLevel: p.terrain === 'coastal' && p.capital ? 1 : 0,
-      marketLevel: p.development,
+      marketLevel: Math.min(2, p.development),
+      barracksLevel: 0,
+      foundryLevel: 0,
+      templeLevel: 0,
+      maxBuildingSlots: p.capital ? 3 : 2,
+      siege: null,
       conversion: 0,
       conversionReligion: null,
       conversionInstigatorId: null,
@@ -261,9 +274,9 @@ export function migrateV2(value: unknown): GameState {
     }
   log(
     g,
-    'Campanha migrada para v0.4: tropas viraram batalhões, cidades mantiveram controle e tesouro. O tabuleiro legado foi preservado. Marchas antigas foram canceladas; relatórios originais permanecem no backup v2.',
+    'Campanha migrada para v0.5: tropas viraram batalhões, cidades mantiveram controle e tesouro. O tabuleiro legado foi preservado. Marchas antigas foram canceladas; relatórios originais permanecem no backup v2.',
   );
-  return g;
+  return finalizeV5(g);
 }
 
 export function migrateV3(value: unknown): GameState {
@@ -318,7 +331,7 @@ export function migrateV3(value: unknown): GameState {
     };
     g.finishReason = 'legacy_finished';
   }
-  g.version = 4;
+  Object.assign(g, { version: 4 });
   g.roomName = `Campanha ${g.code}`;
   g.isPublic = false;
   g.enableSecretObjectives = false;
@@ -326,13 +339,14 @@ export function migrateV3(value: unknown): GameState {
   g.matchConfig = {
     ...g.matchConfig,
     maxTurns: 0,
-    createdVersion: '0.4.0',
+    createdVersion: '0.5.0',
     enableSecretObjectives: false,
   };
   g.season = (['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'] as const)[(g.turn - 1) % 4];
   g.globalEvent = null;
   g.coalitions = [];
   g.visionContracts = [];
+  g.deadline = null;
   g.deadline = null;
   g.turnDeadlineAt = null;
   g.firstReadyPlayerName = null;
@@ -363,7 +377,124 @@ export function migrateV3(value: unknown): GameState {
   };
   log(
     g,
-    'Campanha migrada para v0.4: objetivos secretos desativados para preservar a partida iniciada.',
+    'Campanha migrada para v0.5: objetivos secretos desativados para preservar a partida iniciada.',
+  );
+  return migrateV4(g);
+}
+
+export function migrateV4(value: unknown): GameState {
+  const g = structuredClone(value) as GameState;
+  if ((g as unknown as { version: number }).version !== 4) throw new Error('Campanha v4 inválida.');
+  if (g.phase === 'finished' && !g.matchConfig.legacyResult) {
+    g.matchConfig.legacyResult = {
+      winnerId: g.winnerId,
+      objective: g.winnerObjective,
+      version: '0.4.0',
+    };
+    g.finishReason = 'legacy_finished';
+  }
+  return finalizeV5(g);
+}
+function finalizeV5(g: GameState): GameState {
+  g.version = 5;
+  g.commanders ??= [];
+  g.matchConfig.createdVersion = '0.5.0';
+  for (const p of g.players) {
+    p.militaryXP ??= 0;
+    p.unlockedSkills ??= [];
+    p.paxStreak = 0;
+    p.objectiveStreak = 0;
+  }
+  for (const p of g.provinces) {
+    p.barracksLevel ??= 0;
+    p.foundryLevel ??= 0;
+    p.templeLevel ??= 0;
+    p.siege = null;
+    p.maxBuildingSlots = buildingSlots(p);
+    const owner = g.players.find((q) => q.id === p.ownerId);
+    let used = 0;
+    for (const b of ['FORT', 'PORT', 'MARKET', 'BARRACKS', 'FOUNDRY', 'TEMPLE'] as const) {
+      const n = buildingLevel(p, b);
+      if (n <= 0) continue;
+      setBuildingLevel(p, b, used < p.maxBuildingSlots ? Math.min(n, buildingLimit(b, owner)) : 0);
+      used++;
+    }
+  }
+  for (const a of g.battalions) {
+    a.autoMerge ??= false;
+    a.infantryPower ??= 1;
+    a.artilleryPower ??= 1;
+    a.movementCredit ??= 0;
+    a.movementPoints ??= 1;
+    const p = g.provinces.find((p) => p.id === a.provinceId);
+    if (!a.isFleet && p?.kind === 'SEA_ZONE') {
+      const fleet = g.battalions.find(
+        (f) =>
+          f.isFleet &&
+          f.ownerId === a.ownerId &&
+          f.provinceId === a.provinceId &&
+          (f.id === a.embarkedOnId || f.embarkedArmyId === a.id),
+      );
+      if (fleet && fleet.transports * 4 >= a.infantry + a.cavalry + a.artillery) {
+        a.embarkedOnId = fleet.id;
+        fleet.embarkedArmyId = a.id;
+      } else {
+        delete a.embarkedOnId;
+        const safe =
+          g.provinces.find((q) => q.kind === 'LAND' && q.ownerId === a.ownerId) ??
+          g.provinces.find((q) => q.kind === 'LAND');
+        if (safe) a.provinceId = safe.id;
+        a.pathQueue = [];
+        a.stranded = safe?.ownerId !== a.ownerId;
+      }
+    }
+  }
+  for (const p of g.players) {
+    if (g.enableSecretObjectives && g.players.length >= 3) {
+      const selected = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId)?.kind;
+      p.secretObjectives = objectiveCards(g, p);
+      p.selectedObjectiveId =
+        p.secretObjectives.find((c) => c.kind === selected)?.id ??
+        (p.bot ? (p.secretObjectives[0]?.id ?? null) : null);
+    }
+    if (!g.commanders.some((c) => c.ownerId === p.id)) {
+      const a = g.battalions.find((a) => a.ownerId === p.id && !a.isFleet);
+      if (a)
+        recruitCommander(g, p.id, false, 'IRON_WALL', undefined, true).assignedBattalionId = a.id;
+    }
+  }
+  for (const r of [...g.history, ...g.reports, ...(g.lastReport ? [g.lastReport] : [])]) {
+    r.sieges ??= [];
+    for (const e of r.economy) {
+      e.industry ??= 0;
+      e.administration ??= 0;
+      e.buildingUpkeep ??= 0;
+      e.plunder ??= 0;
+    }
+  }
+  for (const h of g.history)
+    for (const p of h.nations) {
+      p.militaryXP ??= 0;
+      p.unlockedSkills ??= [];
+      p.paxStreak ??= 0;
+    }
+  g.orders = Object.fromEntries(
+    g.players.map((p) => [
+      p.id,
+      (g.orders[p.id] ?? []).filter(
+        (o) =>
+          !['MERGE_BATTALIONS', 'SPLIT_BATTALION', 'MERGE_ALL', 'MOVE_BATTALION'].includes(o.type),
+      ),
+    ]),
+  );
+  for (const p of g.players) p.ready = false;
+  for (const a of g.battalions) a.pathQueue = [];
+  g.deadline = null;
+  g.turnDeadlineAt = null;
+  g.firstReadyPlayerName = null;
+  log(
+    g,
+    'Campanha migrada para v0.5: cidades ajustadas aos slots, ordens antigas reabertas e objetivos reescalados.',
   );
   return g;
 }

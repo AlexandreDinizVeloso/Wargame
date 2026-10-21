@@ -1,3 +1,4 @@
+import CityDevelopment from './CityDevelopment';
 import { useState } from 'react';
 import {
   Anchor,
@@ -193,6 +194,21 @@ export default function ProvinceDrawer({
           · {RESOURCES[province.strategicResource].effect}
         </p>
       )}
+      {province.siege && (
+        <section className="siege-card">
+          <h3>
+            🔥 Cerco {province.siege.progress}/{province.siege.required}
+          </h3>
+          <Meter
+            label="Progresso do cerco"
+            value={(province.siege.progress / province.siege.required) * 100}
+          />
+          <p>
+            {game.players.find((p) => p.id === province.siege!.attackerOwnerId)?.nation} ·{' '}
+            {province.siege.turnsUnderSiege} rodada(s). O controle muda apenas ao concluir.
+          </p>
+        </section>
+      )}
       <div className="region-heading">
         <div>
           <span className="eyebrow" style={{ color: ruler?.color }}>
@@ -282,16 +298,16 @@ export default function ProvinceDrawer({
               <Castle size={14} />
               Forte{' '}
               <b>
-                {province.fortLevel}/{ruler?.nationId === 'kaldor' ? 4 : 3}
+                {province.fortLevel}/{ruler?.nationId === 'kaldor' ? 3 : 2}
               </b>
             </span>
             <span>
               <Anchor size={14} />
-              Porto <b>{province.portLevel}/3</b>
+              Porto <b>{province.portLevel}/2</b>
             </span>
             <span>
               <Landmark size={14} />
-              Mercado <b>{province.marketLevel}/3</b>
+              Mercado <b>{province.marketLevel}/2</b>
             </span>
           </div>
         </>
@@ -335,27 +351,8 @@ export default function ProvinceDrawer({
             !own,
             <Flag size={17} />,
           )}
-          {build(
-            'BUILD_FORT',
-            'Construir forte',
-            '+15% defesa e +3 suprimento por nível.',
-            !legalOwn || province.fortLevel >= (me.nationId === 'kaldor' ? 4 : 3),
-            <Castle size={17} />,
-          )}
-          {build(
-            'BUILD_PORT',
-            'Construir porto',
-            'Litoral; permite frotas e acrescenta comércio.',
-            !legalOwn || !province.isCoastal || province.portLevel >= 3,
-            <Anchor size={17} />,
-          )}
-          {build(
-            'BUILD_MARKET',
-            'Construir mercado',
-            '+25% de imposto/comércio por nível.',
-            !legalOwn || province.marketLevel >= 3,
-            <Landmark size={17} />,
-          )}
+          <CityDevelopment game={game} province={province} playerId={playerId} command={command} />
+
           <button
             className="action-row"
             disabled={!active || !canConvert || !conversionBudget.affordable}

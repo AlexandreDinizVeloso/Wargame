@@ -31,14 +31,14 @@ import { emptyTurnReport } from '../shared/types';
 import { setup, army } from './fixtures';
 const close = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-7, `${a} ≠ ${b}`);
 
-test('imposto mantém pacificação/revolta e aplica mercado, tolerância e bloqueio', () => {
+test('imposto mantém pacificação/revolta e aplica tolerância e bloqueio', () => {
   const {
       g,
       players: [a],
     } = setup(),
     p = g.provinces[0];
   Object.assign(p, { baseTax: 6, pacification: 40, unrest: 30, marketLevel: 2, religion: 'SOLAR' });
-  close(effectiveTax(p, a.faith, true, 'TOLERANCE'), 6 * 0.4 * 0.85 * 0.85 * 1.5 * 0.5 * 0.9);
+  close(effectiveTax(p, a.faith, true, 'TOLERANCE'), 6 * 0.4 * 0.85 * 0.85 * 0.5 * 0.9);
   p.pacification = 0;
   assert.equal(effectiveTax(p, a.faith), 0);
 });
@@ -90,7 +90,7 @@ test('limite, atrito, custo progressivo e manutenção mercenária seguem as fó
       players: [a],
     } = setup(),
     p = g.provinces[0];
-  Object.assign(p, { baseSupplyLimit: 10, fortLevel: 2, pacification: 80 });
+  Object.assign(p, { baseSupplyLimit: 10, fortLevel: 2, pacification: 80, portLevel: 0 });
   assert.equal(supplyLimit(p), 18);
   assert.equal(attritionLoss(31, 18), 2);
   close(armyUpkeep(31, 0, 18), 0.35 * (18 + 13 ** 1.25));
@@ -106,6 +106,7 @@ test('separar formações não cria suprimento nem reduz manutenção progressiv
     } = setup(),
     p = g.provinces[0];
   p.baseSupplyLimit = 8;
+  p.portLevel = 0;
   army(g, a.id, p.id, { infantry: 20 });
   army(g, a.id, p.id, { infantry: 20 });
   close(realmEconomy(g, a.id).upkeep, Math.round(armyUpkeep(40, 0, 10) * 100) / 100);
@@ -223,6 +224,9 @@ test('invasão precisa de guerra formal e ocupa sem transferir propriedade defin
   resolveTurn(g);
   const p = g.provinces.find((p) => p.id === 'castile')!;
   assert.equal(p.ownerId, b.id);
+  assert.equal(p.occupierId, null);
+  assert.equal(p.siege?.progress, 1);
+  resolveTurn(g);
   assert.equal(p.occupierId, a.id);
   assert.equal(p.pacification, 0);
 });
@@ -335,6 +339,9 @@ test('embarque respeita capacidade, frota transporta e desembarque preserva trop
   });
   resolveTurn(g);
   assert.equal(unit.embarkedOnId, undefined);
+  assert.equal(coast.ownerId, null);
+  assert.equal(coast.siege?.progress, 1);
+  resolveTurn(g);
   assert.equal(coast.ownerId, a.id);
   assert.equal(unitCount(unit), 6);
 });
@@ -486,7 +493,9 @@ test('forte vazio ainda exige tropas de cerco e frotas não ocupam cidades', () 
   const small = army(g, a.id, p.id, { infantry: 2 });
   const report = emptyTurnReport(1, g.diet);
   resolveBattle(g, small, p, report);
-  assert.equal(report.battles[0].outcome, 'siege_blocked');
+  assert.equal(report.battles.length, 0);
+  assert.equal(p.siege?.progress, 1);
+  assert.equal(p.siege?.required, 8);
   assert.equal(p.occupierId, null);
   const fleet = createBattalion(g, a.id, p.id, compositionOf({ warships: 10 }), { isFleet: true });
   resolveBattle(g, fleet, p, report);
@@ -540,25 +549,25 @@ test('ocupação completa do líder causa capitulação real e permite impor sub
   assert.equal(w.active, false);
   assert.equal(b.subjectOfId, a.id);
 });
-test('dominação atinge exatamente 60% sem restrição sobre tamanho rival', () => {
+test('dominação atinge exatamente 75% sem restrição sobre tamanho rival', () => {
   const {
     g,
     players: [a, b, c],
   } = setup();
   const land = g.provinces.filter((p) => p.kind === 'LAND');
-  land.forEach((p, i) => (p.ownerId = i < 33 ? a.id : i < 50 ? b.id : c.id));
+  land.forEach((p, i) => (p.ownerId = i < 41 ? a.id : i < 50 ? b.id : c.id));
   assert.equal(victoryStatus(g), null);
-  land[33].ownerId = a.id;
+  land[41].ownerId = a.id;
   assert.equal(victoryStatus(g)?.objective, 'DOMINATION');
 });
-test('subjugar todos os demais é uma vitória mesmo abaixo de 75% de terras', () => {
+test('subjugar todos os demais não basta abaixo de 75% ponderados', () => {
   const {
     g,
     players: [a, b, c],
   } = setup();
   b.subjectOfId = a.id;
   c.subjectOfId = a.id;
-  assert.equal(victoryStatus(g)?.objective, 'DOMINATION');
+  assert.equal(victoryStatus(g), null);
 });
 
 test('submissão incorpora os súditos anteriores e concede acesso militar recíproco', () => {
@@ -573,7 +582,7 @@ test('submissão incorpora os súditos anteriores e concede acesso militar recí
   applyPeace(g, w, a.id, [{ type: 'SUBJUGATE' }]);
   assert.equal(b.subjectOfId, a.id);
   assert.equal(c.subjectOfId, a.id);
-  assert.equal(victoryStatus(g)?.objective, 'DOMINATION');
+  assert.equal(victoryStatus(g), null);
   const r = g.relations.find((r) => r.a === a.id && r.b === b.id)!;
   assert.ok(r.militaryAccess.includes(a.id) && r.militaryAccess.includes(b.id));
 });
@@ -640,6 +649,9 @@ test('tropa com acesso estacionada em cidade estrangeira precisa lutar após dec
   declareWar(g, a.id, b.id, 'CONQUEST');
   const r = resolveTurn(g);
   assert.ok(r.battles.some((b) => b.provinceId === 'castile'));
+  assert.equal(g.provinces.find((p) => p.id === 'castile')!.occupierId, null);
+  assert.equal(g.provinces.find((p) => p.id === 'castile')!.siege?.progress, 1);
+  resolveTurn(g);
   assert.equal(g.provinces.find((p) => p.id === 'castile')!.occupierId, a.id);
 });
 test('formação que recuou na rodada não recebe recuperação de moral nem pacificação estacionária', () => {
@@ -691,6 +703,7 @@ test('reagrupamento de frota isolada também move seu batalhão embarcado', () =
     g,
     players: [a],
   } = setup();
+  g.provinces.find((p) => p.id === 'lowlands')!.portLevel = 1;
   const fleet = createBattalion(
       g,
       a.id,

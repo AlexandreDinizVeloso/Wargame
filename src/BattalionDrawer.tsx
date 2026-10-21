@@ -1,3 +1,5 @@
+import CommanderPanel from './CommanderPanel';
+import { commanderFor, TRAITS } from '../shared/military';
 import { useMemo, useState } from 'react';
 import { Anchor, ArrowUpRight, Merge, Shield, Split, Swords, Target } from 'lucide-react';
 import type { Battalion, Composition, GameView, PlayerOrder } from '../shared/types';
@@ -27,7 +29,8 @@ export default function BattalionDrawer({
   onSelect: (id: string) => void;
 }) {
   const own = army.ownerId === playerId,
-    active = own && game.phase === 'planning',
+    active =
+      own && game.phase === 'planning' && !game.players.find((p) => p.id === playerId)?.ready,
     location = game.provinces.find((p) => p.id === army.provinceId)!;
   const [destination, setDestination] = useState(''),
     [mergeId, setMerge] = useState(''),
@@ -77,12 +80,42 @@ export default function BattalionDrawer({
           canTransit(game, playerId, p),
       )
     : [];
-  const send = (order: PlayerOrder) => command({ type: 'SUBMIT_ORDER', order });
+  const send = (order: PlayerOrder) => {
+    if (
+      order.type === 'SPLIT_BATTALION' ||
+      order.type === 'MERGE_BATTALIONS' ||
+      order.type === 'MERGE_ALL'
+    )
+      command({ type: 'INSTANT_ARMY_ACTION', action: order });
+    else command({ type: 'SUBMIT_ORDER', order });
+  };
   const fields = army.isFleet
     ? (['warships', 'transports'] as const)
     : (['infantry', 'cavalry', 'artillery'] as const);
   return (
     <div className="battalion-ledger">
+      {own && <CommanderPanel game={game} army={army} playerId={playerId} command={command} />}
+      {own && (
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={army.autoMerge}
+            disabled={
+              game.phase !== 'planning' || !!game.players.find((p) => p.id === playerId)?.ready
+            }
+            onChange={(e) =>
+              command({ type: 'SET_AUTO_MERGE', battalionId: army.id, autoMerge: e.target.checked })
+            }
+          />
+          Fusão automática após movimento
+        </label>
+      )}
+      {location.siege && (
+        <p className="warning-box">
+          🔥 Cerco {location.siege.progress}/{location.siege.required} ·{' '}
+          {location.siege.turnsUnderSiege} rodada(s)
+        </p>
+      )}
       <div className="region-heading">
         <div>
           <span className="eyebrow">{army.isFleet ? 'COMANDO NAVAL' : 'COMANDO TERRESTRE'}</span>
@@ -176,7 +209,7 @@ export default function BattalionDrawer({
         <>
           <div className="field-heading">Ordens de formação</div>
           <p className="fine-print">
-            Clique direito no mapa para calcular uma rota. Cada rodada percorre uma ligação.
+            Clique direito no mapa para calcular uma rota. Cercos e doutrinas afetam o avanço.
           </p>
           <label>
             Destino
@@ -260,7 +293,7 @@ export default function BattalionDrawer({
                 send({ type: 'SPLIT_BATTALION', battalionId: army.id, composition: split })
               }
             >
-              Confirmar divisão
+              Dividir agora · sem gastar movimento
             </button>
           </details>
           <details className="command-details">
@@ -284,7 +317,11 @@ export default function BattalionDrawer({
                   </select>
                 </label>
                 <button
-                  disabled={!active || !!army.embarkedArmyId}
+                  disabled={
+                    !active ||
+                    !!army.embarkedArmyId ||
+                    !!game.players.find((p) => p.id === playerId)?.ready
+                  }
                   onClick={() =>
                     send({
                       type: 'MERGE_BATTALIONS',
@@ -293,7 +330,7 @@ export default function BattalionDrawer({
                     })
                   }
                 >
-                  Confirmar fusão
+                  Fundir agora · sem gastar movimento
                 </button>
               </>
             ) : (
@@ -391,8 +428,16 @@ export function TacticalBar({
 }) {
   const actor = game.players.find((p) => p.id === playerId)!,
     p = game.provinces.find((p) => p.id === army.provinceId)!;
-  const active = game.phase === 'planning' && !army.stranded && !army.embarkedOnId;
-  const send = (order: PlayerOrder) => command({ type: 'SUBMIT_ORDER', order });
+  const active = game.phase === 'planning' && !actor.ready && !army.stranded && !army.embarkedOnId;
+  const send = (order: PlayerOrder) => {
+    if (
+      order.type === 'SPLIT_BATTALION' ||
+      order.type === 'MERGE_BATTALIONS' ||
+      order.type === 'MERGE_ALL'
+    )
+      command({ type: 'INSTANT_ARMY_ACTION', action: order });
+    else command({ type: 'SUBMIT_ORDER', order });
+  };
   const half = splitHalf(army);
   const compatible = game.battalions.some(
     (b) =>
@@ -420,6 +465,11 @@ export function TacticalBar({
         <b>⛵ {army.warships + army.transports}</b>
         <span>Moral {Math.round(army.morale)}%</span>
         <span>Treinamento {army.training.toFixed(2)}×</span>
+        <span>
+          {commanderFor(game, army)
+            ? `${'★'.repeat(commanderFor(game, army)!.stars)} ${TRAITS[commanderFor(game, army)!.trait].name}`
+            : 'Sem líder'}
+        </span>
       </div>
       <Meter label="Moral" value={army.morale} />
       <div className="tactical-actions">
@@ -427,16 +477,16 @@ export function TacticalBar({
           👣 Mover / Escolher Destino no Mapa
         </button>
         <button
-          disabled={!active || !!army.embarkedArmyId || !unitCount(half)}
+          disabled={!active || actor.ready || !!army.embarkedArmyId || !unitCount(half)}
           onClick={() => send({ type: 'SPLIT_BATTALION', battalionId: army.id, composition: half })}
         >
-          ➗ Dividir Batalhão (50/50)
+          ➗ Dividir agora (50/50)
         </button>
         <button
-          disabled={!active || !!army.embarkedArmyId || !compatible}
+          disabled={!active || actor.ready || !!army.embarkedArmyId || !compatible}
           onClick={() => send({ type: 'MERGE_ALL', battalionId: army.id })}
         >
-          🔗 Juntar Todos na Província
+          🔗 Fundir agora na província
         </button>
         <button disabled={game.phase !== 'planning' || p.ownerId !== playerId} onClick={onRecruit}>
           ➕ Reforçar / Recrutar Aqui
@@ -459,6 +509,14 @@ export function TacticalBar({
             onClick={() => send({ type: 'RAZE_PROVINCE', battalionId: army.id })}
           >
             🔥 Arrasar Província
+          </button>
+        )}
+        {p.siege?.attackerOwnerId === playerId && !army.isFleet && (
+          <button
+            disabled={!active || army.infantry < 1}
+            onClick={() => send({ type: 'ASSAULT_SIEGE', battalionId: army.id })}
+          >
+            🔥 Assaltar Muralha (+3 cerco)
           </button>
         )}
         <button

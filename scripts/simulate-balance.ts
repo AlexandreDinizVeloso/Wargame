@@ -1,3 +1,4 @@
+import { buildingSlots, usedSlots } from '../shared/development';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -14,6 +15,10 @@ import {
 const ARCHETYPES: BotArchetype[] = ['Militarist', 'Merchant', 'Theocrat', 'Diplomat'];
 interface MatchResult {
   seed: number;
+  siegesCompleted: number;
+  skillsUnlocked: number;
+  leaderXP: number;
+  peakTroopsByTurn15: number;
   mode: GameMode;
   theater: Theater;
   winnerId: string | null;
@@ -58,6 +63,10 @@ export function simulateBalance(
     startGame(g, 0);
     const result: MatchResult = {
       seed: gameSeed,
+      siegesCompleted: 0,
+      skillsUnlocked: 0,
+      leaderXP: 0,
+      peakTroopsByTurn15: 0,
       mode,
       theater,
       winnerId: null,
@@ -82,7 +91,36 @@ export function simulateBalance(
     while (g.phase === 'planning' && g.history.length < maxTurns) {
       const r = resolveTurn(g, g.turn * g.turnSeconds * 1000);
       if (!validGame(g)) throw new Error(`Estado inválido: semente ${gameSeed}, rodada ${r.turn}.`);
+      for (const p of g.provinces) {
+        if (usedSlots(p) > buildingSlots(p))
+          throw new Error(`Slots excedidos: ${gameSeed}, ${p.id}`);
+      }
+      for (const b of r.battles.filter((b) => b.naval))
+        if (
+          b.infantryModifier !== 1 ||
+          b.cavalryModifier !== 1 ||
+          b.artilleryModifier !== 1 ||
+          b.terrainDefenseBonus !== 1 ||
+          b.fortLevel !== 0
+        )
+          throw new Error(`Modificador terrestre em batalha naval: ${b.id}`);
+      result.siegesCompleted += r.sieges.filter((s) => s.completed).length;
+      if (r.turn <= 15)
+        result.peakTroopsByTurn15 = Math.max(
+          result.peakTroopsByTurn15,
+          ...g.players.map((p) =>
+            g.battalions
+              .filter((a) => a.ownerId === p.id && !a.isFleet)
+              .reduce((n, a) => n + unitCount(a), 0),
+          ),
+        );
       for (const a of g.battalions) {
+        if (
+          !a.isFleet &&
+          !a.embarkedOnId &&
+          g.provinces.find((p) => p.id === a.provinceId)?.kind === 'SEA_ZONE'
+        )
+          throw new Error('Terrestre no mar sem transporte.');
         if (a.embarkedArmyId) {
           const cargo = g.battalions.find((c) => c.id === a.embarkedArmyId);
           if (
@@ -120,6 +158,8 @@ export function simulateBalance(
     )
       throw new Error('Telemetria incompleta.');
     const winner = g.players.find((p) => p.id === g.winnerId);
+    result.skillsUnlocked = g.players.reduce((n, p) => n + p.unlockedSkills.length, 0);
+    result.leaderXP = g.commanders.reduce((n, c) => n + c.xp, 0);
     result.winnerId = g.winnerId;
     result.winnerArchetype = winner?.botArchetype ?? null;
     result.condition = g.winnerObjective;
@@ -155,7 +195,7 @@ export function simulateBalance(
       | 'attritionLosses',
   ) => matches.reduce((n, m) => n + m[key], 0) / games;
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     games,
     maxTurns,
     seed,
@@ -202,7 +242,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     Number(argument('max-turns') ?? 40),
   );
   console.log(
-    `\nConcórdia v0.4 · ${result.games} partidas reais do motor · 6 bots · cenário ${scenario} · semente ${result.seed}`,
+    `\nConcórdia v0.5 · ${result.games} partidas reais do motor · 6 bots · cenário ${scenario} · semente ${result.seed}`,
   );
   console.table([
     ...result.conditions.map((c) => ({

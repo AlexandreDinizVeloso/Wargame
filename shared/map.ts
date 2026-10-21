@@ -240,6 +240,12 @@ export function makeMap(mode: GameMode = 'campaign', theater: Theater = 'EUROPE'
     fortLevel: 0,
     portLevel: 0,
     marketLevel: 0,
+    barracksLevel: 0,
+    foundryLevel: 0,
+    templeLevel: 0,
+    maxBuildingSlots:
+      p.strategicResource === 'GOLD_MINE' || p.strategicResource === 'RELIC' ? 3 : 2,
+    siege: null,
     conversion: 0,
     conversionReligion: null,
     conversionInstigatorId: null,

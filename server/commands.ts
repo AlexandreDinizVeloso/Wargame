@@ -1,3 +1,5 @@
+import { BUILDINGS } from '../shared/development';
+import { SKILLS, TRAITS } from '../shared/military';
 import type {
   Composition,
   GameCommand,
@@ -8,6 +10,10 @@ import type {
   ReligiousPolicy,
   CasusBelli,
   DiplomacyAction,
+  BuildingType,
+  CommanderTrait,
+  SkillId,
+  InstantArmyAction,
 } from '../shared/types';
 import { NATIONS, compositionOf, UNIT_KEYS } from '../shared/rules';
 import { assert } from './state';
@@ -56,6 +62,17 @@ export function parseOrder(value: unknown): PlayerOrder {
       type: type as 'BUILD_FORT' | 'BUILD_PORT' | 'BUILD_MARKET' | 'PACIFY',
       provinceId: string(o.provinceId),
     };
+  if (type === 'BUILD_BUILDING' || type === 'DEMOLISH_BUILDING') {
+    assert(Object.hasOwn(BUILDINGS, String(o.building)), 'Edifício desconhecido.');
+    return { type, provinceId: string(o.provinceId), building: o.building as BuildingType };
+  }
+  if (type === 'NAVAL_BRIDGE')
+    return {
+      type,
+      battalionId: string(o.battalionId),
+      fleetId: string(o.fleetId),
+      targetProvinceId: string(o.targetProvinceId),
+    };
   if (type === 'CONVERT') return { type, targetProvinceId: string(o.targetProvinceId) };
   if (type === 'MOVE_BATTALION') {
     assert(
@@ -70,7 +87,8 @@ export function parseOrder(value: unknown): PlayerOrder {
     type === 'ENTRENCH_BATTALION' ||
     type === 'TRAIN_BATTALION' ||
     type === 'RAZE_PROVINCE' ||
-    type === 'MERGE_ALL'
+    type === 'MERGE_ALL' ||
+    type === 'ASSAULT_SIEGE'
   )
     return { type, battalionId: string(o.battalionId) };
   if (type === 'MERGE_BATTALIONS')
@@ -123,7 +141,7 @@ export function parseOrder(value: unknown): PlayerOrder {
       ...(o.targetProvinceId !== undefined ? { targetProvinceId: string(o.targetProvinceId) } : {}),
     };
   }
-  throw new Error('Ordem desconhecida para o protocolo 4.');
+  throw new Error('Ordem desconhecida para o protocolo 5.');
 }
 export function parseTerms(value: unknown): PeaceTerm[] {
   assert(Array.isArray(value) && value.length <= 5, 'Termos de paz inválidos.');
@@ -144,6 +162,44 @@ export function parseTerms(value: unknown): PeaceTerm[] {
 export function parseCommand(value: unknown): GameCommand {
   const c = object(value),
     type = string(c.type);
+  if (type === 'ASSIGN_LEADER')
+    return {
+      type,
+      battalionId: string(c.battalionId),
+      commanderId: c.commanderId === null ? null : string(c.commanderId),
+    };
+  if (type === 'INSTANT_ARMY_ACTION') {
+    const a = object(c.action);
+    if (a.type === 'ASSIGN_LEADER') {
+      const parsed = parseCommand(a);
+      assert(parsed.type === 'ASSIGN_LEADER', 'Atribuição inválida.');
+      return { type, action: parsed };
+    }
+    const action = parseOrder(a);
+    assert(
+      ['MERGE_BATTALIONS', 'MERGE_ALL', 'SPLIT_BATTALION'].includes(action.type),
+      'Ação não instantânea.',
+    );
+    return { type, action: action as InstantArmyAction };
+  }
+  if (type === 'RECRUIT_COMMANDER') {
+    assert(Object.hasOwn(TRAITS, String(c.trait)), 'Traço inválido.');
+    return {
+      type,
+      isAdmiral: boolean(c.isAdmiral),
+      trait: c.trait as CommanderTrait,
+      ...(c.name !== undefined ? { name: string(c.name, 40) } : {}),
+    };
+  }
+  if (type === 'UNLOCK_SKILL') {
+    assert(
+      SKILLS.some((s) => s.id === c.skillId),
+      'Doutrina inválida.',
+    );
+    return { type, skillId: c.skillId as SkillId };
+  }
+  if (type === 'SET_AUTO_MERGE')
+    return { type, battalionId: string(c.battalionId), autoMerge: boolean(c.autoMerge) };
   if (type === 'SUBMIT_ORDER') return { type, order: parseOrder(c.order) };
   if (type === 'CANCEL_ORDER') return { type, key: string(c.key) };
   if (type === 'READY') return { type, ready: boolean(c.ready) };
@@ -200,6 +256,7 @@ export function parseCommand(value: unknown): GameCommand {
       type,
       battalionId: string(c.battalionId),
       targetProvinceId: string(c.targetProvinceId),
+      ...(c.bridgeFleetId !== undefined ? { bridgeFleetId: string(c.bridgeFleetId) } : {}),
     };
   }
   if (type === 'CALL_TO_ARMS') return { type, warId: string(c.warId), allyId: string(c.allyId) };
@@ -218,5 +275,5 @@ export function parseCommand(value: unknown): GameCommand {
     };
   }
   if (type === 'OFFER_PEACE') return { type, warId: string(c.warId), terms: parseTerms(c.terms) };
-  throw new Error('Comando desconhecido para o protocolo 4.');
+  throw new Error('Comando desconhecido para o protocolo 5.');
 }

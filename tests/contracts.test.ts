@@ -50,6 +50,9 @@ test('oito nações têm duas ideias, brasão e composição independentes da pr
     stranded: false,
     movementCredit: 0,
     movementPoints: 1,
+    autoMerge: false,
+    infantryPower: 1,
+    artilleryPower: 1,
   };
   assert.deepEqual(JSON.parse(JSON.stringify(army)), army);
   assert.equal('troops' in makeMap()[0], false);
