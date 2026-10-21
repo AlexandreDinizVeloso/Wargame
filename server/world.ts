@@ -1,6 +1,12 @@
 import type { GameState, TurnResolutionReport } from '../shared/types';
 import { atWar, clamp, getRelation, livingPlayers, roundMoney, unitCount } from '../shared/rules';
-import { EVENTS, hegemonicThreat, objectiveCards, seasonAt } from '../shared/strategy';
+import {
+  EVENTS,
+  hegemonicThreat,
+  objectiveCards,
+  objectiveProgress,
+  seasonAt,
+} from '../shared/strategy';
 import { assert, log, playerOf, roll } from './state';
 import { declareWar, syncWars } from './diplomacy';
 export function joinCoalition(g: GameState, id: string, targetId: string) {
@@ -76,23 +82,6 @@ export function advanceWorld(g: GameState, report: TurnResolutionReport) {
 }
 export function endWorld(g: GameState, report: TurnResolutionReport) {
   for (const p of g.players) {
-    const active = g.wars.some(
-      (w) => w.active && [...w.attackerIds, ...w.defenderIds].includes(p.id),
-    );
-    if (!active) p.aggressiveExpansion = clamp(p.aggressiveExpansion - 8);
-    const size = (id: string) =>
-      g.battalions
-        .filter((a) => a.ownerId === id && !a.isFleet)
-        .reduce((n, a) => n + unitCount(a), 0);
-    const ownSize = size(p.id);
-    p.objectiveStreak =
-      ownSize > 0 &&
-      g.players.filter((q) => q.id !== p.id).every((q) => ownSize > size(q.id)) &&
-      !report.rebellions.some((r) => r.previousOwnerId === p.id)
-        ? p.objectiveStreak + 1
-        : 0;
-    if (g.enableSecretObjectives && !p.selectedObjectiveId && p.secretObjectives.length)
-      p.selectedObjectiveId = p.secretObjectives[0].id;
     if (p.subjectOfId) {
       const lord = g.players.find((q) => q.id === p.subjectOfId);
       if (lord?.nationId === 'aurelia') {
@@ -102,6 +91,38 @@ export function endWorld(g: GameState, report: TurnResolutionReport) {
         lord.gold = roundMoney(lord.gold + amount);
         report.events.push(`${p.nation} pagou ${amount} ouro de vassalagem a ${lord.nation}.`);
       }
+    }
+  }
+  for (const p of g.players) {
+    const active = g.wars.some(
+      (w) => w.active && [...w.attackerIds, ...w.defenderIds].includes(p.id),
+    );
+    if (!active) p.aggressiveExpansion = clamp(p.aggressiveExpansion - 8);
+    const size = (id: string) =>
+      g.battalions
+        .filter((a) => a.ownerId === id && !a.isFleet)
+        .reduce((n, a) => n + unitCount(a), 0);
+    const ownSize = size(p.id);
+    p.paxStreak =
+      ownSize > 0 &&
+      p.stability >= 85 &&
+      g.players.filter((q) => q.id !== p.id).every((q) => ownSize > size(q.id)) &&
+      !report.rebellions.some((r) => r.previousOwnerId === p.id)
+        ? p.paxStreak + 1
+        : 0;
+    if (g.enableSecretObjectives && !p.selectedObjectiveId && p.secretObjectives.length)
+      p.selectedObjectiveId = p.secretObjectives[0].id;
+    const card = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId);
+    p.objectiveStreak =
+      g.enableSecretObjectives &&
+      card &&
+      objectiveProgress(g, p, card).every((r) => r.progress >= 1)
+        ? p.objectiveStreak + 1
+        : 0;
+    if (p.objectiveStreak === 1) {
+      const warning = `⚠️ ${p.nation} está a 1 rodada de concluir seu Objetivo Secreto!`;
+      report.events.push(warning);
+      log(g, warning);
     }
   }
 }

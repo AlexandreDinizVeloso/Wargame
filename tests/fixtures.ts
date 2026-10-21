@@ -11,6 +11,7 @@ export function setup(seed = 42) {
   ];
   startGame(g);
   g.battalions = [];
+  g.commanders = [];
   for (const p of g.provinces) {
     p.strategicResource = null;
     p.ownerId = null;

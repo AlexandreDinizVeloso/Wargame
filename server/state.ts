@@ -50,9 +50,36 @@ export function createBattalion(
   provinceId: string,
   composition: Composition,
   options: Partial<
-    Pick<Battalion, 'isFleet' | 'isMercenary' | 'name' | 'training' | 'morale'>
+    Pick<
+      Battalion,
+      | 'isFleet'
+      | 'isMercenary'
+      | 'name'
+      | 'training'
+      | 'morale'
+      | 'autoMerge'
+      | 'infantryPower'
+      | 'artilleryPower'
+    >
   > = {},
 ): Battalion {
+  const location = provinceOf(g, provinceId);
+  assert(
+    options.isFleet
+      ? landCount(composition) === 0
+      : composition.warships + composition.transports === 0,
+    'Composição naval/terrestre incompatível.',
+  );
+  assert(
+    options.isFleet || location.kind === 'LAND',
+    'Recrutamento terrestre não pode surgir no mar.',
+  );
+  assert(
+    !options.isFleet ||
+      location.kind === 'SEA_ZONE' ||
+      (location.isCoastal && location.portLevel > 0),
+    'Frota exige mar ou porto costeiro.',
+  );
   const army: Battalion = {
     ...compositionOf(composition),
     id: nextId(g, 'army'),
@@ -73,6 +100,9 @@ export function createBattalion(
     stranded: false,
     movementCredit: 0,
     movementPoints: 1,
+    autoMerge: options.autoMerge ?? false,
+    infantryPower: options.infantryPower ?? 1,
+    artilleryPower: options.artilleryPower ?? 1,
   };
   g.battalions.push(army);
   return army;
@@ -84,6 +114,13 @@ export function mergeBattalions(target: Battalion, source: Battalion) {
   if (total) {
     target.morale = Math.round((target.morale * a + source.morale * b) / total);
     target.training = (target.training * a + source.training * b) / total;
+  }
+  for (const [key, power] of [
+    ['infantry', 'infantryPower'],
+    ['artillery', 'artilleryPower'],
+  ] as const) {
+    const total = target[key] + source[key];
+    if (total) target[power] = (target[power] * target[key] + source[power] * source[key]) / total;
   }
   for (const key of UNIT_KEYS) target[key] += source[key];
 }
@@ -111,7 +148,12 @@ export function removeUnits(army: Battalion, count: number, exposed = false): Co
   return losses;
 }
 export function destroyBattalion(g: GameState, a: Battalion) {
-  if (a.embarkedArmyId) g.battalions = g.battalions.filter((b) => b.id !== a.embarkedArmyId);
+  if (a.embarkedArmyId) {
+    const cargo = g.battalions.find((b) => b.id === a.embarkedArmyId);
+    delete a.embarkedArmyId;
+    if (cargo) destroyBattalion(g, cargo);
+  }
+  for (const c of g.commanders) if (c.assignedBattalionId === a.id) c.assignedBattalionId = null;
   if (a.embarkedOnId) {
     const fleet = g.battalions.find((f) => f.id === a.embarkedOnId);
     if (fleet) delete fleet.embarkedArmyId;

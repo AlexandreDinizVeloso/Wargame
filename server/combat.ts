@@ -1,3 +1,5 @@
+import { commanderFor, hasSkill } from '../shared/military';
+import { beginSiege } from './siege';
 import { hasReligiousWar, isCamouflaged, resourceCount } from '../shared/strategy';
 import type {
   Battalion,
@@ -22,6 +24,7 @@ import {
 } from '../shared/rules';
 import {
   coalitionMorale,
+  assert,
   destroyBattalion,
   log,
   nextId,
@@ -31,54 +34,112 @@ import {
   roll,
   syncCargo,
 } from './state';
-export function compositionPower(g: GameState, a: Battalion, p: Province, defending = false) {
+export function compositionPower(
+  g: GameState,
+  a: Battalion,
+  p: Province,
+  defending = false,
+  opponents: Battalion[] = [],
+) {
   const actor = g.players.find((p) => p.id === a.ownerId),
-    nation = actor ? nationOf(actor.nationId) : null;
-  const crusade = actor && hasReligiousWar(g, actor.id);
-  const zeal = actor?.nationId === 'sol_invicto' && crusade;
-  const morale = Math.min(
-    100,
+    nation = actor ? nationOf(actor.nationId) : null,
+    c = commanderFor(g, a),
+    veteran = 1 + 0.05 * ((c?.stars ?? 1) - 1);
+  if (a.isFleet) {
+    const morale = clamp(
+      a.morale * coalitionMorale(g, a.ownerId) * (hasSkill(g, a.ownerId, 'NAV_T1') ? 1.2 : 1),
+    );
+    const value =
+      a.warships * 3 * (!defending && hasSkill(g, a.ownerId, 'NAV_T2B') ? 1.25 : 1) +
+      a.transports * 0.5;
+    return (
+      value *
+      a.training *
+      veteran *
+      (0.5 + (0.5 * morale) / 100) *
+      (defending
+        ? (hasSkill(g, a.ownerId, 'NAV_T1') ? 1.2 : 1) * (c?.trait === 'IRON_WALL' ? 1.2 : 1)
+        : (c?.trait === 'SEA_WOLF' ? 1.25 : 1) * (nation?.modifiers.navalAttack ?? 1))
+    );
+  }
+  if (p.kind === 'SEA_ZONE') return 0;
+  const crusade = actor && hasReligiousWar(g, actor.id),
+    zeal = actor?.nationId === 'sol_invicto' && crusade;
+  const morale = clamp(
     a.morale *
       coalitionMorale(g, a.ownerId) *
       (zeal ? 1.2 : 1) *
       (actor && actor.moraleBonusUntil >= g.turn ? 1.15 : 1),
   );
-  if (a.isFleet)
-    return (
-      (a.warships * 3 + a.transports * 0.5) *
-      a.training *
-      (0.5 + (0.5 * morale) / 100) *
-      (defending ? 1 : (nation?.modifiers.navalAttack ?? 1))
-    );
-  const cavalryModifier =
-    p.terrain === 'plains' || p.terrain === 'coastal'
-      ? 1.4
-      : p.terrain === 'mountains' || p.terrain === 'forest'
-        ? 0.8
-        : 1;
-  const infantryModifier =
+  const flat = ['plains', 'coastal'].includes(p.terrain),
+    rough = ['forest', 'hills', 'mountains'].includes(p.terrain),
+    pikes = opponents.some((b) => b.infantry > 0 && hasSkill(g, b.ownerId, 'INF_T2A'));
+  const cavalryTerrain = defending
+    ? 1
+    : pikes && flat
+      ? 1
+      : flat
+        ? 1.4
+        : rough
+          ? hasSkill(g, a.ownerId, 'CAV_T2B')
+            ? 1
+            : 0.8
+          : 1;
+  const infantry =
     (actor?.faith === 'SOLAR' && !defending ? 1.15 : 1) *
     (nation?.modifiers.infantry ?? 1) *
-    (1 + Math.min(0.24, resourceCount(g, a.ownerId, 'IRON') * 0.08));
-  const artilleryModifier =
-    (actor?.faith === 'REFORMED' ? 1.2 : 1) * (nation?.modifiers.artillery ?? 1);
+    (1 + Math.min(0.24, resourceCount(g, a.ownerId, 'IRON') * 0.08)) *
+    a.infantryPower *
+    (defending && hasSkill(g, a.ownerId, 'INF_T1') ? 1.12 : 1) *
+    (!defending && hasSkill(g, a.ownerId, 'INF_T2B') ? 1.2 : 1) *
+    (hasSkill(g, a.ownerId, 'INF_T2A') && opponents.some((b) => b.cavalry > 0) ? 1.3 : 1);
+  const cavalry =
+    (nation?.modifiers.cavalry ?? 1) *
+    (1 + Math.min(0.3, resourceCount(g, a.ownerId, 'HORSES') * 0.1)) *
+    cavalryTerrain *
+    (!defending && hasSkill(g, a.ownerId, 'CAV_T1') ? 1.12 : 1) *
+    (!defending && flat && !pikes && hasSkill(g, a.ownerId, 'CAV_T2A') ? 1.3 : 1) *
+    (defending && hasSkill(g, a.ownerId, 'CAV_T2B') ? 1.15 : 1);
+  const artillery =
+    (actor?.faith === 'REFORMED' ? 1.2 : 1) *
+    (nation?.modifiers.artillery ?? 1) *
+    a.artilleryPower *
+    (!defending && hasSkill(g, a.ownerId, 'ART_T1') ? 1.15 : 1) *
+    (hasSkill(g, a.ownerId, 'ART_T2B') ? 1.25 : 1);
   const value =
-    a.infantry * (defending ? 1.2 : 1) * infantryModifier +
-    a.cavalry *
-      (defending ? 1 : cavalryModifier) *
-      (nation?.modifiers.cavalry ?? 1) *
-      (1 + Math.min(0.3, resourceCount(g, a.ownerId, 'HORSES') * 0.1)) +
-    a.artillery * (defending ? 0.6 : 2.2) * artilleryModifier;
-  const home = defending && actor?.faith === 'ANCESTRAL' && p.ownerId === a.ownerId ? 1.2 : 1;
+    a.infantry * (defending ? 1.2 : 1) * infantry +
+    a.cavalry * cavalry +
+    a.artillery * (defending ? 0.6 : 2.2) * artillery;
+  const coastal =
+    p.isCoastal &&
+    g.battalions.some(
+      (f) =>
+        f.isFleet &&
+        f.warships > 0 &&
+        g.provinces.some((q) => q.id === f.provinceId && q.kind === 'SEA_ZONE') &&
+        p.neighbors.includes(f.provinceId) &&
+        hasSkill(g, f.ownerId, 'NAV_T2B') &&
+        (f.ownerId === a.ownerId || getRelation(g, f.ownerId, a.ownerId)?.allied),
+    );
   return (
     value *
     a.training *
+    veteran *
     (0.5 + (0.5 * morale) / 100) *
-    home *
+    (defending && actor?.faith === 'ANCESTRAL' && p.ownerId === a.ownerId ? 1.2 : 1) *
     (zeal && !defending ? 1.2 : 1) *
     (g.globalEvent?.id === 'CRUSADE' && crusade && !defending ? 1.1 : 1) *
     (defending && isCamouflaged(g, a) ? 1.5 : 1) *
-    (defending && a.entrenched ? 1.15 : 1)
+    (defending && a.entrenched ? 1.15 : 1) *
+    (defending && c?.trait === 'IRON_WALL' ? 1.2 : 1) *
+    (!defending &&
+    c?.trait === 'BLITZ_VANGUARD' &&
+    controller(p) !== a.ownerId &&
+    (!p.siege || p.siege.startedTurn === g.turn)
+      ? 1.15
+      : 1) *
+    (rough && c?.trait === 'FOREST_RANGER' ? 1.3 : 1) *
+    (coastal ? 1.15 : 1)
   );
 }
 export function combatPowers(
@@ -87,16 +148,21 @@ export function combatPowers(
   defenders: Battalion[],
   p: Province,
 ) {
+  const naval = attackers[0]?.isFleet ?? p.kind === 'SEA_ZONE';
   const artillery = attackers.reduce((n, a) => n + a.artillery, 0),
-    neutralizedFortLevels = Math.min(p.fortLevel, artillery);
-  const blockadeModifier = isBlockaded(g, p) ? 0.8 : 1;
-  const holy = attackers.some((a) => p.conversionInstigatorId === a.ownerId) ? 1.15 : 1;
-  const attackPower = attackers.reduce((n, a) => n + compositionPower(g, a, p), 0) * holy;
+    master = attackers.some((a) => commanderFor(g, a)?.trait === 'SIEGE_MASTER');
+  const neutralizedFortLevels = naval ? 0 : Math.min(p.fortLevel, artillery + (master ? 1 : 0)),
+    blockadeModifier = naval ? 1 : isBlockaded(g, p) ? 0.8 : 1;
+  const holy = !naval && attackers.some((a) => p.conversionInstigatorId === a.ownerId) ? 1.15 : 1;
+  const attackPower =
+    attackers.reduce((n, a) => n + compositionPower(g, a, p, false, defenders), 0) * holy;
   const defensePower =
-    defenders.reduce((n, a) => n + compositionPower(g, a, p, true), 0) *
-    (p.kind === 'SEA_ZONE' ? 1 : p.terrainDefenseBonus) *
-    (1 + (p.fortLevel - neutralizedFortLevels) * 0.15) *
-    blockadeModifier;
+    defenders.reduce((n, a) => n + compositionPower(g, a, p, true, attackers), 0) *
+    (naval
+      ? 1
+      : p.terrainDefenseBonus *
+        (1 + (p.fortLevel - neutralizedFortLevels) * 0.15) *
+        blockadeModifier);
   return {
     attackPower,
     defensePower,
@@ -155,11 +221,15 @@ export function retreatArmy(
   ratio: number,
   report: TurnResolutionReport,
   pursuit = false,
+  pursuitBonus = 1,
 ) {
   const from = a.provinceId,
     target = safestRetreat(g, a),
     survivors = unitCount(a);
-  if (ratio >= 2.5 || (a.morale === 0 && !target)) {
+  const c = commanderFor(g, a),
+    protectedDefeat = !!(c?.trait === 'IRON_WALL' && !c.lastStandUsed);
+  if (protectedDefeat) c!.lastStandUsed = true;
+  if (!protectedDefeat && (ratio >= 2.5 || (a.morale === 0 && !target))) {
     report.stackwipes.push({
       armyId: a.id,
       ownerId: a.ownerId,
@@ -173,7 +243,8 @@ export function retreatArmy(
   const base = Math.max(1, Math.round(survivors * (0.55 + 0.15 * roll(g, a.id))));
   const regrouped = Math.max(
     1,
-    survivors - Math.min(survivors - 1, Math.ceil((survivors - base) * (pursuit ? 1.25 : 1))),
+    survivors -
+      Math.min(survivors - 1, Math.ceil((survivors - base) * (pursuit ? 1.25 * pursuitBonus : 1))),
   );
   removeUnits(a, survivors - regrouped);
   a.morale = 15;
@@ -202,12 +273,21 @@ const average = (armies: Battalion[], key: 'morale' | 'training') => {
   const n = armies.reduce((n, a) => n + unitCount(a), 0);
   return n ? armies.reduce((n, a) => n + a[key] * unitCount(a), 0) / n : 0;
 };
-function battleLosses(armies: Battalion[], rate: number) {
+function battleLosses(g: GameState, armies: Battalion[], rate: number) {
   const losses = zeroComposition();
   for (const a of armies) {
     const original = compositionOf(a),
       count = unitCount(a);
-    const lost = removeUnits(a, Math.min(count - 1, Math.ceil(count * rate)), true);
+    const lost = removeUnits(
+      a,
+      Math.min(count - 1, Math.ceil(count * rate)),
+      !hasSkill(g, a.ownerId, 'ART_T2B'),
+    );
+    if (hasSkill(g, a.ownerId, 'INF_T3')) {
+      const saved = Math.floor(lost.infantry * 0.25);
+      a.infantry += saved;
+      lost.infantry -= saved;
+    }
     if (unitCount(a) === 0 && count) {
       const restore = UNIT_KEYS.find((k) => original[k] > 0)!;
       a[restore]++;
@@ -217,45 +297,20 @@ function battleLosses(armies: Battalion[], rate: number) {
   }
   return losses;
 }
-export function occupy(g: GameState, a: Battalion, p: Province) {
-  const previous = controller(p);
-  if (
-    a.isFleet ||
-    p.kind === 'SEA_ZONE' ||
-    previous === a.ownerId ||
-    (previous && !atWar(g, a.ownerId, previous))
-  )
-    return;
-  if (!p.ownerId) {
-    p.ownerId = a.ownerId;
-    p.occupierId = null;
-  } else p.occupierId = p.ownerId === a.ownerId ? null : a.ownerId;
-  const actor = playerOf(g, a.ownerId);
-  if (!previous) actor.aggressiveExpansion = clamp(actor.aggressiveExpansion + 4);
-  if (
-    actor.nationId === 'ferro_norte' &&
-    (p.isCoastal ||
-      p.neighbors.some((id) => g.provinces.some((q) => q.id === id && q.ownerId === a.ownerId)))
-  )
-    a.morale = clamp(a.morale + 20);
-  p.pacification = p.religion === actor.faith ? 20 : 0;
-  p.unrest = clamp(p.unrest + 30);
-  p.conversionInstigatorId = null;
-  p.conversion = 0;
-  p.conversionReligion = null;
-  log(g, `${actor.nation} ${p.occupierId ? 'ocupou' : 'incorporou'} ${p.name}.`, 'battle');
-}
+export const occupy = beginSiege;
 export function resolveBattle(
   g: GameState,
   a: Battalion,
   target: Province,
   report: TurnResolutionReport,
 ) {
+  assert(a.isFleet || target.kind === 'LAND', 'Batalhão terrestre não combate em zona marítima.');
   const fortOwner = g.players.find((q) => q.id === target.ownerId);
   if (
     !a.isFleet &&
     target.fortLevel > 0 &&
     fortOwner?.nationId === 'kaldor' &&
+    commanderFor(g, a)?.trait !== 'QUARTERMASTER' &&
     controller(target) === fortOwner.id &&
     fortOwner.id !== a.ownerId &&
     atWar(g, a.ownerId, fortOwner.id) &&
@@ -292,12 +347,17 @@ export function resolveBattle(
     (defendingOwner === a.ownerId || !atWar(g, a.ownerId, defendingOwner))
   )
     return true;
-  if (
-    enemies.length === 0 &&
-    (a.isFleet || unitCount(a) >= Math.max(0, target.fortLevel - a.artillery) * 3)
-  ) {
+  if (enemies.length === 0) {
     occupy(g, a, target);
     return true;
+  }
+  const leaders = [a, ...enemies].map((b) => commanderFor(g, b)).filter((c) => !!c);
+  const naval = a.isFleet;
+  if (!naval) {
+    if (a.artillery > 0 && hasSkill(g, a.ownerId, 'ART_T3'))
+      for (const b of enemies) b.morale = clamp(b.morale - 12);
+    if (enemies.some((b) => b.artillery > 0 && hasSkill(g, b.ownerId, 'ART_T3')))
+      a.morale = clamp(a.morale - 12);
   }
   const powers = combatPowers(g, [a], enemies, target),
     defenderId = enemies[0]?.ownerId === 'NEUTRAL' ? null : (enemies[0]?.ownerId ?? defendingOwner);
@@ -314,7 +374,6 @@ export function resolveBattle(
     beforeD = enemies.reduce((n, b) => n + unitCount(b), 0),
     beforeMoraleA = a.morale,
     beforeMoraleD = average(enemies, 'morale');
-  const neutralized = powers.neutralizedFortLevels;
   const battle: BattleReport = {
     id: nextId(g, 'battle'),
     turn: g.turn,
@@ -329,16 +388,17 @@ export function resolveBattle(
     ...powers,
     attackerTraining: a.training,
     defenderTraining: average(enemies, 'training'),
-    terrainDefenseBonus: target.terrainDefenseBonus,
-    fortLevel: target.fortLevel,
-    infantryModifier: playerOf(g, a.ownerId).faith === 'SOLAR' ? 1.15 : 1,
-    cavalryModifier:
-      target.terrain === 'plains' || target.terrain === 'coastal'
+    terrainDefenseBonus: a.isFleet ? 1 : target.terrainDefenseBonus,
+    fortLevel: a.isFleet ? 0 : target.fortLevel,
+    infantryModifier: !a.isFleet && playerOf(g, a.ownerId).faith === 'SOLAR' ? 1.15 : 1,
+    cavalryModifier: a.isFleet
+      ? 1
+      : target.terrain === 'plains' || target.terrain === 'coastal'
         ? 1.4
         : target.terrain === 'forest' || target.terrain === 'mountains'
           ? 0.8
           : 1,
-    artilleryModifier: playerOf(g, a.ownerId).faith === 'REFORMED' ? 1.2 : 1,
+    artilleryModifier: !a.isFleet && playerOf(g, a.ownerId).faith === 'REFORMED' ? 1.2 : 1,
     attackerCasualties: 0,
     defenderCasualties: 0,
     attackerCompositionLosses: zeroComposition(),
@@ -353,11 +413,6 @@ export function resolveBattle(
     outcome: 'defender_victory',
     naval: a.isFleet,
   };
-  if (!a.isFleet && beforeA < (target.fortLevel - neutralized) * 3) {
-    battle.outcome = 'siege_blocked';
-    report.battles.push(battle);
-    return false;
-  }
   const attackWins = powers.attackPower > powers.defensePower;
   const ratio = attackWins
     ? powers.attackPower / Math.max(1, powers.defensePower)
@@ -366,8 +421,8 @@ export function resolveBattle(
     loseRate = Math.min(0.65, 0.25 + 0.12 * ratio);
   const aArtillery = a.artillery,
     enArtillery = enemies.reduce((n, b) => n + b.artillery, 0);
-  const aLoss = battleLosses([a], attackWins ? winRate : loseRate),
-    dLoss = battleLosses(enemies, attackWins ? loseRate : winRate);
+  const aLoss = battleLosses(g, [a], attackWins ? winRate : loseRate),
+    dLoss = battleLosses(g, enemies, attackWins ? loseRate : winRate);
   a.morale = clamp(
     Math.round(
       a.morale -
@@ -387,6 +442,21 @@ export function resolveBattle(
             (1 + 0.3 * aArtillery),
       ),
     );
+  if (!naval) {
+    if (
+      a.cavalry > 0 &&
+      hasSkill(g, a.ownerId, 'CAV_T2A') &&
+      ['plains', 'coastal'].includes(target.terrain) &&
+      !enemies.some((d) => d.infantry > 0 && hasSkill(g, d.ownerId, 'INF_T2A'))
+    )
+      for (const d of enemies) d.morale = clamp(d.morale - 10);
+    if (
+      enemies.some((d) => d.cavalry > 0 && hasSkill(g, d.ownerId, 'CAV_T2A')) &&
+      ['plains', 'coastal'].includes(target.terrain) &&
+      !(a.infantry > 0 && hasSkill(g, a.ownerId, 'INF_T2A'))
+    )
+      a.morale = clamp(a.morale - 10);
+  }
   battle.attackerCompositionLosses = aLoss;
   battle.defenderCompositionLosses = dLoss;
   battle.attackerCasualties = unitCount(aLoss);
@@ -404,7 +474,21 @@ export function resolveBattle(
   for (const loser of losers) {
     const count = unitCount(loser);
     const wipedComposition = compositionOf(loser);
-    const result = retreatArmy(g, loser, ratio, report, pursuit);
+    const result = retreatArmy(
+      g,
+      loser,
+      ratio,
+      report,
+      pursuit,
+      winners.some(
+        (w) =>
+          w.cavalry > 0 &&
+          w.cavalry >= Math.ceil(unitCount(w) / 2) &&
+          hasSkill(g, w.ownerId, 'CAV_T3'),
+      )
+        ? 1.35
+        : 1,
+    );
     battle.retreatDestinationId ??= result.destination;
     battle.stackwipe ||= result.wiped;
     if (result.wiped) {
@@ -415,6 +499,38 @@ export function resolveBattle(
         : battle.attackerCompositionLosses;
       for (const key of UNIT_KEYS) compositionLosses[key] += wipedComposition[key];
     }
+  }
+  for (const ownerId of new Set(fighters.map((f) => f.ownerId))) {
+    const p = g.players.find((p) => p.id === ownerId);
+    if (p) p.militaryXP += 15;
+  }
+  for (const c of leaders) {
+    c.xp += 20;
+    c.stars = c.xp >= 100 ? 3 : c.xp >= 40 ? 2 : 1;
+  }
+  for (const f of fighters)
+    if (
+      !f.isFleet &&
+      f.infantry > 0 &&
+      hasSkill(g, f.ownerId, 'INF_T3') &&
+      g.battalions.includes(f)
+    )
+      f.morale = clamp(f.morale + 10);
+  const winnerFleet = (attackWins ? [a] : enemies).find(
+    (f) => g.battalions.includes(f) && commanderFor(g, f)?.trait === 'SEA_WOLF',
+  );
+  const lostShips = attackWins
+    ? battle.defenderCompositionLosses.warships
+    : battle.attackerCompositionLosses.warships;
+  if (
+    naval &&
+    winnerFleet &&
+    lostShips > 0 &&
+    roll(g, `capture:${battle.id}:${winnerFleet.id}`) < 0.35
+  ) {
+    winnerFleet.warships++;
+    battle.capturedShips = 1;
+    report.events.push(`${winnerFleet.name} capturou um navio de guerra.`);
   }
   const winner = g.players.find((p) => p.id === battle.winnerId);
   if (winner) winner.wonBattles++;
@@ -474,6 +590,11 @@ export function resolveBattle(
         report.events.push(`Fervor sagrado provocou revolta em ${p.name}.`);
       }
   }
+  battle.attackerMoraleAfter = g.battalions.includes(a) ? a.morale : 0;
+  battle.defenderMoraleAfter = average(
+    enemies.filter((d) => g.battalions.includes(d)),
+    'morale',
+  );
   report.battles.push(battle);
   log(
     g,

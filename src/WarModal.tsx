@@ -9,6 +9,7 @@ export default function WarModal({
   targetId,
   armyId,
   provinceId,
+  bridgeFleetId,
   command,
   close,
 }: {
@@ -17,6 +18,7 @@ export default function WarModal({
   targetId: string;
   armyId?: string;
   provinceId?: string;
+  bridgeFleetId?: string;
   command: Command;
   close: () => void;
 }) {
@@ -98,6 +100,7 @@ export default function WarModal({
                       offensiveAllyIds: allies,
                       battalionId: armyId,
                       targetProvinceId: provinceId,
+                      bridgeFleetId,
                     }
                   : {
                       type: 'DECLARE_WAR',

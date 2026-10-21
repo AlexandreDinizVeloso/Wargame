@@ -104,8 +104,20 @@ test('servidor headless responde sem frontend e recupera a campanha após SIGKIL
   children.push(initial.child);
   const schema = (await fetch(`http://127.0.0.1:${initial.port}/api/schema`).then((r) =>
     r.json(),
-  )) as { protocolVersion: number; map: { terrain: string; path: string }[] };
-  assert.equal(schema.protocolVersion, 4);
+  )) as {
+    protocolVersion: number;
+    map: { terrain: string; path: string }[];
+    orderTypes: string[];
+    skills: unknown[];
+    commanderTraits: Record<string, unknown>;
+    buildings: Record<string, unknown>;
+  };
+  assert.equal(schema.protocolVersion, 5);
+  for (const type of ['BUILD_BUILDING', 'DEMOLISH_BUILDING', 'ASSAULT_SIEGE', 'NAVAL_BRIDGE'])
+    assert.ok(schema.orderTypes.includes(type));
+  assert.equal(schema.skills.length, 16);
+  assert.equal(Object.keys(schema.commanderTraits).length, 6);
+  assert.equal(Object.keys(schema.buildings).length, 6);
   assert.equal(schema.map.filter((p) => p.terrain).length, 69);
   assert.ok(schema.map.every((p) => p.terrain && p.path));
   assert.equal((await fetch(`http://127.0.0.1:${initial.port}/`)).status, 404);

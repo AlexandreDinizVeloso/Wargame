@@ -39,6 +39,9 @@ export interface Battalion extends Composition {
   stranded: boolean;
   movementCredit: number;
   movementPoints: number;
+  autoMerge: boolean;
+  infantryPower: number;
+  artilleryPower: number;
 }
 export type ArmyUnit = Battalion;
 export interface ProvinceRuntimeState {
@@ -50,6 +53,11 @@ export interface ProvinceRuntimeState {
   fortLevel: number;
   portLevel: number;
   marketLevel: number;
+  barracksLevel: number;
+  foundryLevel: number;
+  templeLevel: number;
+  maxBuildingSlots: number;
+  siege: Siege | null;
   conversion: number;
   conversionReligion: ReligionId | null;
   conversionInstigatorId: string | null;
@@ -67,13 +75,16 @@ export interface RecruitBattalionOrder extends Partial<Composition> {
 export type CityOrder =
   | RecruitBattalionOrder
   | { type: 'BUILD_FORT' | 'BUILD_PORT' | 'BUILD_MARKET' | 'PACIFY'; provinceId: string }
-  | { type: 'CONVERT'; targetProvinceId: string };
+  | { type: 'CONVERT'; targetProvinceId: string }
+  | { type: 'BUILD_BUILDING' | 'DEMOLISH_BUILDING'; provinceId: string; building: BuildingType };
 export type BattalionOrder =
   | { type: 'MOVE_BATTALION'; battalionId: string; targetProvinceId?: string; path?: string[] }
   | {
-      type: 'ENTRENCH_BATTALION' | 'TRAIN_BATTALION' | 'RAZE_PROVINCE' | 'MERGE_ALL';
+      type: 'ENTRENCH_BATTALION' | 'TRAIN_BATTALION' | 'RAZE_PROVINCE' | 'ASSAULT_SIEGE';
       battalionId: string;
     }
+  | { type: 'MERGE_ALL'; battalionId: string }
+  | { type: 'NAVAL_BRIDGE'; battalionId: string; fleetId: string; targetProvinceId: string }
   | { type: 'MERGE_BATTALIONS'; battalionId: string; targetBattalionId: string }
   | { type: 'SPLIT_BATTALION'; battalionId: string; composition: Composition; name?: string }
   | {
@@ -191,6 +202,9 @@ export interface Player {
   selectedObjectiveId: string | null;
   objectiveStreak: number;
   originalCapitalId: string | null;
+  militaryXP: number;
+  unlockedSkills: SkillId[];
+  paxStreak: number;
 }
 export interface Relation {
   a: string;
@@ -254,6 +268,7 @@ export interface BattleReport {
   defenderMoraleAfter: number;
   retreatDestinationId: string | null;
   stackwipe: boolean;
+  capturedShips?: number;
   outcome: 'attacker_victory' | 'defender_victory' | 'siege_blocked';
   naval: boolean;
 }
@@ -285,6 +300,7 @@ export interface MovementReport {
   toProvinceId: string;
   isFleet: boolean;
   troops: number;
+  viaSeaId?: string;
 }
 export interface EconomyMetric {
   playerId: string;
@@ -298,6 +314,10 @@ export interface EconomyMetric {
   net: number;
   gold: number;
   warExhaustion: number;
+  industry: number;
+  administration: number;
+  buildingUpkeep: number;
+  plunder: number;
 }
 export interface DietEvent {
   turn: number;
@@ -319,6 +339,14 @@ export interface TurnResolutionReport {
     provinceId: string;
     troops: number;
     reason: 'overwhelming_force' | 'zero_morale_no_escape';
+  }[];
+  sieges: {
+    provinceId: string;
+    attackerOwnerId: string;
+    progress: number;
+    required: number;
+    completed: boolean;
+    assault: boolean;
   }[];
   conversions: {
     provinceId: string;
@@ -365,12 +393,16 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.4.0';
+  createdVersion: '0.5.0';
   enableSecretObjectives: boolean;
-  legacyResult?: { winnerId: string | null; objective: string | null; version: '0.2.0' | '0.3.0' };
+  legacyResult?: {
+    winnerId: string | null;
+    objective: string | null;
+    version: '0.2.0' | '0.3.0' | '0.4.0';
+  };
 }
 export interface GameState {
-  version: 4;
+  version: 5;
   code: string;
   roomName: string;
   isPublic: boolean;
@@ -393,6 +425,7 @@ export interface GameState {
   players: Player[];
   provinces: Province[];
   battalions: Battalion[];
+  commanders: Commander[];
   relations: Relation[];
   offers: Offer[];
   wars: War[];
@@ -420,6 +453,11 @@ export type GameView = Omit<GameState, 'orders' | 'seed' | 'nextId' | 'pendingDi
 };
 export type GameCommand =
   | { type: 'SUBMIT_ORDER'; order: PlayerOrder }
+  | { type: 'INSTANT_ARMY_ACTION'; action: InstantArmyAction }
+  | { type: 'ASSIGN_LEADER'; battalionId: string; commanderId: string | null }
+  | { type: 'RECRUIT_COMMANDER'; name?: string; isAdmiral: boolean; trait: CommanderTrait }
+  | { type: 'UNLOCK_SKILL'; skillId: SkillId }
+  | { type: 'SET_AUTO_MERGE'; battalionId: string; autoMerge: boolean }
   | { type: 'CANCEL_ORDER'; key: string }
   | { type: 'READY'; ready: boolean }
   | { type: 'ANSWER_OFFER'; offerId: string; accept: boolean }
@@ -453,6 +491,7 @@ export type GameCommand =
       offensiveAllyIds?: string[];
       battalionId: string;
       targetProvinceId: string;
+      bridgeFleetId?: string;
     }
   | { type: 'CALL_TO_ARMS'; warId: string; allyId: string };
 export type ClientMessage =
@@ -478,7 +517,7 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'left' };
 export interface MatchTelemetry {
-  schemaVersion: 4;
+  schemaVersion: 5;
   matchConfig: MatchConfig;
   nations: Player[];
   turnByTurnHistory: TurnHistory[];
@@ -489,6 +528,58 @@ export interface MatchTelemetry {
   economyMetrics: EconomyMetric[];
   finalState: Omit<GameView, 'history'>;
 }
+export type BuildingType = 'MARKET' | 'BARRACKS' | 'FORT' | 'FOUNDRY' | 'TEMPLE' | 'PORT';
+export interface Siege {
+  attackerOwnerId: string;
+  progress: number;
+  required: number;
+  turnsUnderSiege: number;
+  startedTurn: number;
+  lastProgressTurn: number;
+}
+export type CommanderTrait =
+  'SIEGE_MASTER' | 'BLITZ_VANGUARD' | 'IRON_WALL' | 'FOREST_RANGER' | 'QUARTERMASTER' | 'SEA_WOLF';
+export interface Commander {
+  id: string;
+  name: string;
+  ownerId: string;
+  isAdmiral: boolean;
+  stars: 1 | 2 | 3;
+  xp: number;
+  trait: CommanderTrait;
+  assignedBattalionId: string | null;
+  lastStandUsed: boolean;
+}
+export type SkillBranch = 'INF' | 'CAV' | 'ART' | 'NAV';
+export type SkillId =
+  | 'INF_T1'
+  | 'INF_T2A'
+  | 'INF_T2B'
+  | 'INF_T3'
+  | 'CAV_T1'
+  | 'CAV_T2A'
+  | 'CAV_T2B'
+  | 'CAV_T3'
+  | 'ART_T1'
+  | 'ART_T2A'
+  | 'ART_T2B'
+  | 'ART_T3'
+  | 'NAV_T1'
+  | 'NAV_T2A'
+  | 'NAV_T2B'
+  | 'NAV_T3';
+export interface SkillDefinition {
+  id: SkillId;
+  branch: SkillBranch;
+  tier: 1 | 2 | 3;
+  cost: number;
+  name: string;
+  description: string;
+}
+export type InstantArmyAction =
+  | Extract<BattalionOrder, { type: 'MERGE_BATTALIONS' | 'SPLIT_BATTALION' }>
+  | { type: 'MERGE_ALL'; battalionId: string }
+  | { type: 'ASSIGN_LEADER'; battalionId: string; commanderId: string | null };
 export type StrategicResource = 'GRAIN' | 'IRON' | 'HORSES' | 'GOLD_MINE' | 'RELIC' | null;
 export type Season = 'SPRING' | 'SUMMER' | 'AUTUMN' | 'WINTER';
 export type GlobalEventId =
@@ -526,7 +617,7 @@ export const OBJECTIVES: Record<Objective, { name: string; description: string }
   DOMINATION: {
     name: 'Dominação / Hegemonia',
     description:
-      'Controle 60% das terras, diretamente ou por vassalos, ou subjugue todos os rivais.',
+      'Controle 75% das terras; vassalos contribuem com metade de suas províncias, ou elimine todos os rivais.',
   },
   SECRET_OBJECTIVE: {
     name: 'Objetivo Secreto',
@@ -540,6 +631,7 @@ export function emptyTurnReport(turn: number, diet: ImperialDiet): TurnResolutio
     movements: [],
     retreats: [],
     stackwipes: [],
+    sieges: [],
     conversions: [],
     rebellions: [],
     diplomaticChanges: [],

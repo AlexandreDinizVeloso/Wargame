@@ -44,7 +44,7 @@ const send = (ws: WebSocket, message: ServerMessage) => {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
 };
 function readCommand(msg: Record<string, unknown>): GameCommand {
-  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 4.');
+  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 5.');
   return parseCommand(msg.command);
 }
 const nationOfMessage = (value: unknown): NationId | undefined => {

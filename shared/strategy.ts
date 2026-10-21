@@ -102,9 +102,9 @@ export function objectiveCards(g: GameState, p: Player): SecretObjective[] {
       kind: 'WEALTH',
       name: 'Senhor das Riquezas',
       requirements: [
-        req('land', 'Províncias controladas', Math.min(12, Math.ceil(n * 0.5))),
-        req('special', 'Minas de Ouro ou Relíquias', Math.min(3, Math.max(1, special))),
-        req('gold', 'Ouro no tesouro', 800),
+        req('land', 'Províncias controladas', Math.max(5, Math.ceil(n * 0.4))),
+        req('special', 'Minas de Ouro ou Relíquias', Math.min(2, Math.max(1, special - 1))),
+        req('gold', 'Ouro no tesouro', g.mode === 'quick' ? 450 : 900),
         req('pacified', 'Todas as províncias pacificadas (≥80)', 1),
       ],
     },
@@ -113,9 +113,10 @@ export function objectiveCards(g: GameState, p: Player): SecretObjective[] {
       kind: 'SEAS',
       name: 'Império dos Mares',
       requirements: [
-        req('coast', 'Províncias costeiras', Math.min(10, Math.max(1, Math.ceil(coast * 0.65)))),
-        req('ports', 'Províncias com porto', Math.min(5, coast)),
+        req('coast', 'Províncias costeiras', Math.max(4, Math.ceil(coast * 0.45))),
+        req('ports', 'Províncias com porto', Math.max(3, Math.ceil(coast * 0.3))),
         req('navy', 'Maior frota naval (sem empate)', 1),
+        req('warships', 'Navios de guerra', 6),
       ],
     },
     {
@@ -125,8 +126,8 @@ export function objectiveCards(g: GameState, p: Player): SecretObjective[] {
       rivalId: rival.id,
       capitalId: rival.originalCapitalId ?? undefined,
       requirements: [
-        req('rival', 'Capital rival conquistada ou rival reduzido a ≤2 terras', 1),
-        req('share', 'Percentual de terras', 35),
+        req('rival', 'Capital original rival ocupada ou anexada', 1),
+        req('share', 'Percentual de terras', 45),
       ],
     },
     {
@@ -135,8 +136,9 @@ export function objectiveCards(g: GameState, p: Player): SecretObjective[] {
       name: 'Pax Hegemônica',
       requirements: [
         req('partners', 'Vassalos ou aliados com confiança ≥30', Math.min(2, g.players.length - 1)),
-        req('share', 'Percentual de terras', 35),
-        req('streak', 'Rodadas com maior exército e sem rebeliões', 3),
+        req('share', 'Percentual de terras', 45),
+        req('streak', 'Rodadas com maior exército e estabilidade ≥85', 3),
+        req('stability', 'Estabilidade', 85),
       ],
     },
   ];
@@ -176,11 +178,7 @@ export function objectiveProgress(
       size(p.id, true) > 0 &&
         g.players.filter((q) => q.id !== p.id).every((q) => size(p.id, true) > size(q.id, true)),
     ),
-    rival: Number(
-      !!card.rivalId &&
-        ((!!card.capitalId && owned.some((q) => q.id === card.capitalId)) ||
-          land.filter((q) => q.ownerId === card.rivalId).length <= 2),
-    ),
+    rival: Number(!!card.rivalId && !!card.capitalId && owned.some((q) => q.id === card.capitalId)),
     share: (owned.length / Math.max(1, land.length)) * 100,
     partners: g.players.filter(
       (q) =>
@@ -188,7 +186,11 @@ export function objectiveProgress(
         (q.subjectOfId === p.id ||
           (getRelation(g, p.id, q.id)?.allied && (getRelation(g, p.id, q.id)?.trust ?? 0) >= 30)),
     ).length,
-    streak: p.objectiveStreak,
+    streak: p.paxStreak,
+    stability: p.stability,
+    warships: g.battalions
+      .filter((a) => a.ownerId === p.id && a.isFleet)
+      .reduce((n, a) => n + a.warships, 0),
   };
   return card.requirements.map((r) => ({
     ...r,
@@ -211,6 +213,7 @@ export function effectiveSupply(
     p.baseSupplyLimit +
     (p.strategicResource === 'GRAIN' ? 6 : 0) +
     p.fortLevel * 3 +
+    (p.isCoastal ? p.portLevel * 4 : 0) +
     (p.pacification >= 80 ? 2 : 0) +
     (ironNorth && p.terrain === 'forest' ? Math.max(0, 18 - p.baseSupplyLimit) : 0);
   return (local + globalSupplyBonus(g, id)) * (winterActive(g) && !ironNorth ? 0.75 : 1);

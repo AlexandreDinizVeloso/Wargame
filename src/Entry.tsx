@@ -100,7 +100,7 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          QUARTA EDIÇÃO <i /> 0.4
+          QUINTA EDIÇÃO <i /> 0.5
         </span>
         <button className="quiet-button" onClick={onHelp}>
           Como jogar <ArrowRight size={14} />
@@ -164,7 +164,7 @@ export function Entry({
             <div>
               <Swords size={19} />
               <span>
-                Dominação Total<small>Subjugue os rivais ou governe 60% das terras.</small>
+                Dominação Total<small>Subjugue os rivais ou governe 75% das terras.</small>
               </span>
             </div>
             <div>

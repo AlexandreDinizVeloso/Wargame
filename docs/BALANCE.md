@@ -1,49 +1,59 @@
-# Validação e balanceamento · v0.4
+# Validação e balanceamento · v0.5
 
 ## Verificações
 
 - `npm run build`: TypeScript e bundle de produção.
-- `npm test`: 94 testes, incluindo as oito nações, recursos, logística sazonal, objetivos, privacidade, First-Ready, listagem de salas, persistência e reinício headless real.
-- `npx tsx scripts/smoke-browser.ts`: três navegadores Chromium, fluxo de lobby público, cartas privadas, três entradas para declarar guerra, marcha por clique esquerdo/direito, cancelamento de seta/HUD, timer, reconexão, mapas, exportações, áudio sintetizado e viewport de celular.
-- `npx tsc --noEmit --noUnusedLocals --noUnusedParameters` e formatação.
+- `npm test`: 138 testes, com 44 cenários da v0.5, além de contratos, privacidade, três clientes WebSocket, migração e recuperação headless após SIGKILL.
+- `npx tsx scripts/smoke-browser.ts`: três Chromium, fusão/divisão instantâneas e nova marcha no mesmo planejamento, troca de líder, seis cartões de edifício, construção de quartel, pesquisa de doutrina, cerco sem ocupação na chegada e conclusão na rodada seguinte. Também verifica salas públicas, cartas privadas, guerra, timer, reconexão, mapas, downloads e celular.
+- `npx tsc --noEmit --noUnusedLocals --noUnusedParameters`, formatação e `git diff --check`.
 
-O smoke inicia seu próprio servidor em porta livre; os screenshots e downloads de diagnóstico ficam em `.local/`.
+A migração foi exercitada sobre sete salas locais v0.4, com 27 jogadores e dez sessões. A cópia `.v4-backup` é criada antes de qualquer gravação v0.5. Arquivos de sessões e telemetria humana ficam fora do Git.
+
+## Telemetria fornecida: rodada 19
+
+O JSON tem 19 rodadas. A batalha naval no Báltico, rodada 7, registra `cavalryModifier:1.4`, apesar de `naval:true`. A v0.5 passa a validar fórmula e relatório navais, com modificadores terrestres sempre neutros. Esse campo incorreto no relatório antigo, isoladamente, não prova que a fórmula v0.4 multiplicou o poder por cavalaria.
+
+O estado final não contém terrestre solto em zona marítima. As duas movimentações terrestres para o Mediterrâneo nas rodadas 12/14 podem corresponder a embarque; o histórico não guarda posições/vínculos de todos os batalhões a cada rodada e não permite afirmar que foram travessias ilegais. A v0.5 rejeita terrestres sem vínculo/capacidade naval e recuos terrestres para o mar independentemente desse diagnóstico.
+
+O maior batalhão final tem 11 unidades e o maior tesouro final é 202,15. Esse arquivo não sustenta uma alegação de 70 tropas numa única formação ou de milhares de ouro. Testes de economia usam cenários sintéticos; os números abaixo vêm de novas simulações.
 
 ## Simulações
 
-Duas sementes independentes, **100 partidas de seis bots por semente**, alternando mundo e teatros Europa/Américas/Ásia. Os arquétipos são distribuídos independentemente das nações para evitar vincular uma facção sempre à mesma personalidade. O corte interno é **60 rodadas**. Ele encerra apenas a coleta do simulador; partidas humanas não recebem limite nem vencedor artificial.
+300 partidas, seis bots, alternando mapa mundial e Europa/Américas/Ásia. Arquétipos e nações variam independentemente. O corte encerra apenas a coleta; partidas humanas continuam sem limite ou resultado artificial.
 
-| Semente   | Dominação | Objetivo secreto | Sem vencedor no corte |
-| --------- | --------: | ---------------: | --------------------: |
-| 20261020  |        37 |               46 |                    17 |
-| 314159265 |        35 |               49 |                    16 |
+| Semente   | Partidas | Corte | Dominação | Carta | Sem vencedor no corte |
+| --------- | -------: | ----: | --------: | ----: | --------------------: |
+| 20261021  |      200 |    60 |        48 |    19 |                   133 |
+| 314159265 |      100 |    80 |        34 |    17 |                    49 |
 
-Total: **72 vitórias por dominação**, **95 por carta secreta** e **33 campanhas ainda sem vencedor no corte**.
+Total: **82 por dominação**, **36 por carta** e **182 sem vencedor no corte**. Foram concluídos 40.746 cercos e desbloqueadas 19.440 doutrinas.
 
-Todas as rodadas validam integridade de batalhões, transporte/carga, guerras formais e exportação completa. Recursos, estações, crises e coalizões estão ativos no mesmo motor usado por humanos.
+Toda rodada verifica snapshots, slots, composição, carga e capacidade naval, modificadores de batalhas navais, guerras formais e exportação integral. Os bots pesquisam doutrinas e preservam sítios em andamento. A negociação busca cessões; Aurélia pode buscar súditos elegíveis para Pax.
 
-## Resultados por nação
+## Limites observados
+
+**O balanceamento ainda exige ajustes.** Os custos e percentuais solicitados foram implementados; eles não garantem o teto de 70 tropas até a rodada 15. O pico por nação (somando formações) foi ≥70 em 60 das 300 partidas; máximo 102. Não foi introduzido um limite oculto de tropas. A renda de saque de Ferro-Norte e a distribuição de exércitos por várias cidades ainda favorecem crescimento.
+
+O mapa mundial teve apenas 9 vitórias em 150 partidas nos cortes. Cercos, requisitos proporcionais e controle direto prolongaram essas campanhas. Estes cortes não medem duração em minutos de partidas humanas.
 
 | Nação         | Participações | Vitórias | Vitórias / participações |
 | ------------- | ------------: | -------: | -----------------------: |
-| `aurelia`     |           148 |        6 |                     4.1% |
-| `ferro_norte` |           148 |       88 |                    59.5% |
-| `vespera`     |           150 |       32 |                    21.3% |
-| `sol_invicto` |           152 |        2 |                     1.3% |
-| `kaldor`      |           152 |       10 |                     6.6% |
-| `turan`       |           152 |        4 |                     2.6% |
-| `sapiencia`   |           150 |       10 |                     6.7% |
-| `veridia`     |           148 |       15 |                    10.1% |
+| `aurelia`     |           224 |        3 |                     1.3% |
+| `ferro_norte` |           224 |       67 |                    29.9% |
+| `vespera`     |           225 |       25 |                    11.1% |
+| `sol_invicto` |           226 |        5 |                     2.2% |
+| `kaldor`      |           226 |        4 |                     1.8% |
+| `turan`       |           226 |        1 |                     0.4% |
+| `sapiencia`   |           225 |        6 |                     2.7% |
+| `veridia`     |           224 |        7 |                     3.1% |
 
-**Ferro-Norte concentrou 88 das 167 vitórias (52,7%)**, um desequilíbrio observado que merece revisão em partidas humanas e futuras iterações de regras.
-
-A taxa usa participações como denominador: cada partida tem seis competidores. Estes resultados não demonstram equilíbrio para jogadores humanos. Os bots têm heurísticas simplificadas e não reproduzem negociação, uso humano de informação oculta ou todas as estratégias especializadas. As constantes numéricas pedidas para as facções foram preservadas; as tabelas registram os resultados observados sem corrigir vencedores depois da resolução.
+Ferro-Norte continua concentrando vitórias; as heurísticas dos bots também limitam nações que dependem de diplomacia ou composição especializada. Esses dados validam execução e registram desequilíbrios, sem demonstrar equilíbrio para humanos.
 
 ## Reprodução
 
 ```sh
-npx tsx scripts/simulate-balance.ts --games=100 --seed=20261020 --max-turns=60 --output=.local/v4-main.json
-npx tsx scripts/simulate-balance.ts --games=100 --seed=314159265 --max-turns=60 --output=.local/v4-holdout.json
+npx tsx scripts/simulate-balance.ts --games=200 --seed=20261021 --max-turns=60 --output=.local/v5-main.json
+npx tsx scripts/simulate-balance.ts --games=100 --seed=314159265 --max-turns=80 --output=.local/v5-holdout.json
 ```
 
-Dados completos: [semente principal](balance/v4-seed-20261020.json) e [segunda semente](balance/v4-seed-314159265.json). Os resultados da [v0.3](BALANCE_V3.md) e [v0.2](BALANCE_V2.md) são históricos, com outras facções e condições de vitória.
+Dados completos: [semente principal](balance/v5-seed-20261021.json) e [segunda semente](balance/v5-seed-314159265.json). Comparação histórica: [v0.4](BALANCE_V4.md), [v0.3](BALANCE_V3.md), [v0.2](BALANCE_V2.md).

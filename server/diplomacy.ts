@@ -1,3 +1,4 @@
+import { subjugationEligible } from '../shared/development';
 import { hegemonicThreat } from '../shared/strategy';
 import type { CasusBelli, DiplomaticOrder, GameState, PeaceTerm, War } from '../shared/types';
 import {
@@ -201,7 +202,7 @@ export function peaceCost(g: GameState, terms: PeaceTerm[]) {
           : t.type === 'HUMILIATE_DISARM'
             ? 25
             : t.type === 'SUBJUGATE'
-              ? 70
+              ? 85
               : 30),
     0,
   );
@@ -229,6 +230,11 @@ function validatePeace(g: GameState, war: War, actorId: string, terms: PeaceTerm
       'Pontuação de guerra insuficiente para esses termos.',
     );
   for (const t of terms) {
+    if (t.type === 'SUBJUGATE')
+      assert(
+        subjugationEligible(g, actorId, sides.targetId),
+        'Subjugação exige até três terras ou capital e 75% das terras ocupadas pelo vencedor.',
+      );
     if (t.type === 'CEDE_PROVINCES') {
       assert(
         t.provinceIds.length > 0 && new Set(t.provinceIds).size === t.provinceIds.length,
@@ -269,6 +275,7 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
         winner.aggressiveExpansion = clamp(winner.aggressiveExpansion + 12);
         p.ownerId = actorId;
         p.occupierId = null;
+        p.siege = null;
       }
     if (t.type === 'WAR_REPARATIONS') {
       const paid = Math.min(loser.gold, t.immediateTribute);
@@ -328,8 +335,10 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
       p.occupierId &&
       ((sides.winnerIds.includes(p.ownerId) && sides.loserIds.includes(p.occupierId)) ||
         (sides.loserIds.includes(p.ownerId) && sides.winnerIds.includes(p.occupierId)))
-    )
+    ) {
       p.occupierId = null;
+      p.siege = null;
+    }
   for (const a of war.attackerIds)
     for (const b of war.defenderIds) {
       const r = getRelation(g, a, b);
@@ -426,7 +435,10 @@ export function answerOffer(g: GameState, id: string, offerId: string, accept: b
       assert(!atWar(g, id, from.id), 'Negocie a paz antes de firmar esse acordo.');
       if (offer.kind === 'vassalage') {
         assert(
-          from.nationId === 'aurelia' && !from.subjectOfId && !to.subjectOfId,
+          from.nationId === 'aurelia' &&
+            !from.subjectOfId &&
+            !to.subjectOfId &&
+            subjugationEligible(g, from.id, to.id),
           'Vassalagem indisponível.',
         );
         for (const p of g.players) if (p.subjectOfId === to.id) p.subjectOfId = from.id;
@@ -468,7 +480,8 @@ export function diplomacy(g: GameState, id: string, o: DiplomaticOrder) {
   const r = getRelation(g, id, target.id)!;
   if (o.action === 'OFFER_VASSALAGE') {
     assert(
-      actor.nationId === 'aurelia' &&
+      subjugationEligible(g, id, target.id) &&
+        actor.nationId === 'aurelia' &&
         !actor.subjectOfId &&
         !target.subjectOfId &&
         !atWar(g, id, target.id),

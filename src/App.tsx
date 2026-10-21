@@ -1,3 +1,5 @@
+import SkillTreeDrawer from './SkillTreeDrawer';
+import { bridgeOptions } from '../shared/naval';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
@@ -91,8 +93,8 @@ function Manual({ close }: { close: () => void }) {
             <Swords size={25} />
             <h3>Dominação Total</h3>
             <p>
-              Elimine ou subjugue todos os demais reinos. Também vence quem controla 60% das terras,
-              incluindo as dos seus vassalos.
+              Controle 75% das terras. Vassalos contribuem com metade de suas terras. Subjugar uma
+              grande potência exige ocupação da capital e de 75% de seu território.
             </p>
           </section>
           <section>
@@ -169,7 +171,7 @@ function Manual({ close }: { close: () => void }) {
 function ArrowIcon() {
   return <span aria-hidden="true">→</span>;
 }
-type Panel = 'province' | 'battalion' | 'diplomacy' | 'world' | 'secret' | 'report';
+type Panel = 'province' | 'battalion' | 'diplomacy' | 'world' | 'secret' | 'skills' | 'report';
 export default function App() {
   const { game, playerId, status, error, setError, send, command, leave } = useGame();
   const camera = useRef<CameraHandle>(null);
@@ -180,6 +182,7 @@ export default function App() {
       targetId: string;
       armyId?: string;
       provinceId?: string;
+      bridgeFleetId?: string;
     } | null>(null),
     [armyId, setArmy] = useState(''),
     [mode, setMode] = useState<MapMode>('POLITICAL'),
@@ -390,7 +393,25 @@ export default function App() {
       !atWar(game, playerId, host) &&
       !canUnitVisit(game, selectedArmy, p)
     ) {
-      setWarRequest({ targetId: host, armyId: selectedArmy.id, provinceId: p.id });
+      setWarRequest({
+        targetId: host,
+        armyId: selectedArmy.id,
+        provinceId: p.id,
+        bridgeFleetId: bridgeOptions(game, selectedArmy, p)[0]?.id,
+      });
+      return;
+    }
+    const bridge = bridgeOptions(game, selectedArmy, p)[0];
+    if (bridge) {
+      command({
+        type: 'SUBMIT_ORDER',
+        order: {
+          type: 'NAVAL_BRIDGE',
+          battalionId: selectedArmy.id,
+          fleetId: bridge.id,
+          targetProvinceId: p.id,
+        },
+      });
       return;
     }
     const path = unitPath(game, selectedArmy, p.id);
@@ -523,7 +544,7 @@ export default function App() {
         >
           <Check size={18} />
           <span>
-            {me.ready ? 'Ordens confirmadas' : 'Confirmar ordens'}
+            {me.ready ? 'Reabrir ordens' : 'Confirmar ordens'}
             <small>
               {ready}/{alive.length} reinos prontos
             </small>
@@ -614,6 +635,9 @@ export default function App() {
           <Crown size={15} />
           Mundo & Coalizões
         </button>
+        <button onClick={() => open('skills')}>
+          🎖️ Doutrinas & Árvore de Tropas · {me.militaryXP} XP
+        </button>
         {game.enableSecretObjectives && (
           <button onClick={() => open('secret')}>🎯 Meu Objetivo Secreto</button>
         )}
@@ -645,7 +669,12 @@ export default function App() {
           <span>
             Dominação
             <strong>
-              {number((owned.length / land.length) * 100)}% <small>/ 60%</small>
+              {number(
+                (owned.reduce((n, p) => n + (controller(p) === playerId ? 1 : 0.5), 0) /
+                  land.length) *
+                  100,
+              )}
+              % <small>/ 75%</small>
             </strong>
           </span>
         </button>
@@ -667,6 +696,20 @@ export default function App() {
           command={command}
           close={() => setWarRequest(null)}
         />
+      )}
+      {panels.includes('skills') && (
+        <FloatingWindow
+          id="skills"
+          active={panels.at(-1) === 'skills'}
+          onActivate={() => open('skills')}
+          title="Doutrinas & Árvore de Tropas"
+          width={660}
+          height={650}
+          anchor="right"
+          onClose={() => close('skills')}
+        >
+          <SkillTreeDrawer game={game} playerId={playerId} command={command} />
+        </FloatingWindow>
       )}
       {panels.includes('secret') && (
         <FloatingWindow

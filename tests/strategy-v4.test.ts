@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { advanceSieges } from '../server/siege';
 import assert from 'node:assert/strict';
 import { setup, army } from './fixtures';
 import {
@@ -176,8 +177,8 @@ test('Aurélia recebe vassalagem consentida, renda e províncias de dominação'
   close(b.gold, before + eco.net - eco.grossIncome * 0.25);
   assert.ok(r.events.some((e) => e.includes('vassalagem')));
   const lands = g.provinces.filter((p) => p.kind === 'LAND');
-  lands.slice(0, 34).forEach((p, i) => {
-    p.ownerId = i < 3 ? a.id : b.id;
+  lands.slice(0, 45).forEach((p, i) => {
+    p.ownerId = i < 43 ? a.id : b.id;
     p.occupierId = null;
   });
   assert.equal(victoryStatus(g)?.winnerId, a.id);
@@ -198,7 +199,13 @@ test('Ferro-Norte recebe oito ouro por baixa inimiga e recupera moral no saque',
   const report = emptyTurnReport(1, g.diet);
   resolveBattle(g, unit, target, report);
   assert.equal(a.gold - before, (report.battles[0].casualtiesByRealm[b.id] ?? 0) * 8);
-  assert.ok(unit.morale > 80);
+  assert.equal(target.occupierId, null);
+  const afterBattle = unit.morale;
+  unit.provinceId = target.id;
+  g.turn++;
+  advanceSieges(g, report);
+  assert.equal(target.occupierId, a.id);
+  assert.ok(unit.morale > afterBattle);
 });
 test('Ferro-Norte atravessa floresta em uma rodada e é imune ao inverno', () => {
   const {
@@ -241,7 +248,7 @@ test('Sol Invicto ganha ouro, Fervor e poder em guerra religiosa', () => {
   assert.ok(r.conversions.length === 1);
   close(a.gold, 75 - 8 + 25 + r.economy.find((e) => e.playerId === a.id)!.net);
 });
-test('Kaldor possui fortes de nível 4, desconto e atrito de cerco de 15% uma vez', () => {
+test('Kaldor possui fortes de nível 3, desconto e atrito de cerco de 15% uma vez', () => {
   const {
     g,
     players: [a, b],
@@ -250,10 +257,10 @@ test('Kaldor possui fortes de nível 4, desconto e atrito de cerco de 15% uma ve
   b.nationId = 'kaldor';
   b.gold = 1000;
   const target = g.provinces.find((p) => p.id === 'castile')!;
-  target.fortLevel = 3;
+  target.fortLevel = 2;
   submitOrder(g, b.id, { type: 'BUILD_FORT', provinceId: target.id });
   resolveTurn(g);
-  assert.equal(target.fortLevel, 4);
+  assert.equal(target.fortLevel, 3);
   assert.ok(validGame(g));
   const normal = orderCost({ type: 'BUILD_FORT', provinceId: target.id }, target, a, g).gold;
   close(orderCost({ type: 'BUILD_FORT', provinceId: target.id }, target, b, g).gold, normal * 0.7);
@@ -291,7 +298,7 @@ test('Turan cavalaria pura percorre duas terras planas e arrasa uma conquista um
   g.provinces.find((p) => p.id === 'korea')!.ownerId = g.players[2].id;
   for (const id of ['castile', 'france']) {
     const p = g.provinces.find((p) => p.id === id)!;
-    p.ownerId = null;
+    p.ownerId = a.id;
     p.terrain = 'plains';
   }
   g.provinces.find((p) => p.id === 'portugal')!.terrain = 'plains';
@@ -303,6 +310,19 @@ test('Turan cavalaria pura percorre duas terras planas e arrasa uma conquista um
   });
   resolveTurn(g);
   assert.equal(unit.provinceId, 'france');
+  const neutral = g.provinces.find((p) => p.id === 'lowlands')!;
+  neutral.ownerId = null;
+  neutral.fortLevel = 0;
+  neutral.terrain = 'plains';
+  submitOrder(g, a.id, {
+    type: 'MOVE_BATTALION',
+    battalionId: unit.id,
+    targetProvinceId: neutral.id,
+  });
+  resolveTurn(g);
+  assert.equal(neutral.ownerId, null);
+  resolveTurn(g);
+  assert.equal(neutral.ownerId, a.id);
   const before = a.gold;
   submitOrder(g, a.id, { type: 'RAZE_PROVINCE', battalionId: unit.id });
   const r = resolveTurn(g);
@@ -443,7 +463,7 @@ test('objetivo secreto vence e é revelado no estado final, sem encerrar antes d
     card = a.secretObjectives.find((c) => c.kind === 'WEALTH')!;
   a.selectedObjectiveId = card.id;
   const lands = g.provinces.filter((p) => p.kind === 'LAND');
-  lands.slice(0, 12).forEach((p, i) => {
+  lands.slice(0, Math.ceil(lands.length * 0.4)).forEach((p, i) => {
     p.ownerId = a.id;
     p.occupierId = null;
     p.pacification = 100;
@@ -453,9 +473,12 @@ test('objetivo secreto vence e é revelado no estado final, sem encerrar antes d
   });
   lands.at(-1)!.ownerId = g.players[1].id;
   lands.at(-2)!.ownerId = g.players[2].id;
-  a.gold = 800;
+  a.gold = 1000;
   assert.ok(objectiveProgress(g, a, card).every((r) => r.progress === 1));
   assert.equal(g.phase, 'planning');
+  resolveTurn(g);
+  assert.equal(g.winnerId, null);
+  assert.equal(a.objectiveStreak, 1);
   resolveTurn(g);
   assert.equal(g.winnerObjective, 'SECRET_OBJECTIVE');
   assert.equal(g.winnerId, a.id);
@@ -497,7 +520,7 @@ test('migração v3 preserva sala e tesouro, desativa objetivos retroativos e ar
   legacy.version = 3;
   legacy.players[0].nationId = 'PORTUGAL';
   const next = migrateV3(legacy);
-  assert.equal(next.version, 4);
+  assert.equal(next.version, 5);
   assert.equal(next.players[0].gold, g.players[0].gold);
   assert.equal(next.players[0].nationId, 'vespera');
   assert.equal(next.enableSecretObjectives, false);
@@ -531,6 +554,7 @@ test('suprimento nacional de trigo reduz atrito e dividir pilhas não aumenta pe
     } = setup();
     const p = g.provinces.find((p) => p.id === 'portugal')!;
     p.baseSupplyLimit = 18;
+    p.portLevel = 0;
     g.turn = 2;
     g.season = 'SUMMER';
     if (grain) {
@@ -557,6 +581,7 @@ test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas pe
     declareWar(g, a.id, b.id, 'CONQUEST');
     const p = g.provinces.find((p) => p.id === 'castile')!;
     p.baseSupplyLimit = 18;
+    p.portLevel = 0;
     p.occupierId = a.id;
     p.pacification = 100;
     p.unrest = 0;

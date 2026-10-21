@@ -1,3 +1,5 @@
+import { SKILLS, TRAITS } from '../shared/military';
+import { BUILDINGS } from '../shared/development';
 import http from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -26,7 +28,7 @@ const server = http.createServer((req, res) => {
   if (req.url?.split('?')[0] === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
-      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.4.0', protocolVersion: 4 }),
+      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.5.0', protocolVersion: 5 }),
     );
     return;
   }
@@ -39,7 +41,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
-        protocolVersion: 4,
+        protocolVersion: 5,
         nations: NATIONS.map((n) => ({ ...n, emblemPath: EMBLEMS[n.emblem] })),
         religions: RELIGIONS,
         holyCities: Object.fromEntries(
@@ -60,6 +62,9 @@ const server = http.createServer((req, res) => {
           ]),
         ),
         objectives: OBJECTIVES,
+        skills: SKILLS,
+        commanderTraits: TRAITS,
+        buildings: BUILDINGS,
         resources: RESOURCES,
         seasons: SEASONS,
         events: EVENTS,
@@ -81,6 +86,10 @@ const server = http.createServer((req, res) => {
           'DIPLOMACY',
           'RAZE_PROVINCE',
           'MERGE_ALL',
+          'BUILD_BUILDING',
+          'DEMOLISH_BUILDING',
+          'ASSAULT_SIEGE',
+          'NAVAL_BRIDGE',
         ],
       }),
     );
