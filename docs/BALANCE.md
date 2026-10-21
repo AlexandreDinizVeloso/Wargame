@@ -1,86 +1,49 @@
-# Validação e balanceamento — v0.3
+# Validação e balanceamento · v0.4
 
-## O que foi executado
+## Verificações
 
-Duas baterias finais de **200 partidas completas**, seis bots por partida, com as regras finais da v0.3. O cenário padrão alterna 100 teatros rápidos, com até 20 rodadas, e 100 campanhas mundiais, com até 40. Os teatros rápidos se alternam entre Europa, Américas e Ásia.
+- `npm run build`: TypeScript e bundle de produção.
+- `npm test`: 94 testes, incluindo as oito nações, recursos, logística sazonal, objetivos, privacidade, First-Ready, listagem de salas, persistência e reinício headless real.
+- `npx tsx scripts/smoke-browser.ts`: três navegadores Chromium, fluxo de lobby público, cartas privadas, três entradas para declarar guerra, marcha por clique esquerdo/direito, cancelamento de seta/HUD, timer, reconexão, mapas, exportações, áudio sintetizado e viewport de celular.
+- `npx tsc --noEmit --noUnusedLocals --noUnusedParameters` e formatação.
 
-Militarist, Merchant, Theocrat e Diplomat têm prioridades distintas. A composição de seis vagas é rotacionada entre partidas, assim como as oito nações. Em cada bateria, cada arquétipo ocupa 300 das 1.200 vagas; cada nação ocupa 150.
+O smoke inicia seu próprio servidor em porta livre; os screenshots e downloads de diagnóstico ficam em `.local/`.
 
-As sementes individuais derivam da semente da bateria e do índice. O simulador usa o motor real, sem navegador, rede ou relógio global. Verifica recursos e formações válidos, reciprocidade/capacidade de transporte, existência de guerra formal em cada batalha contra outro reino e integridade do histórico exportável.
+## Simulações
 
-## Resultados finais
+Duas sementes independentes, **100 partidas de seis bots por semente**, alternando mundo e teatros Europa/Américas/Ásia. Os arquétipos são distribuídos independentemente das nações para evitar vincular uma facção sempre à mesma personalidade. O corte interno é **60 rodadas**. Ele encerra apenas a coleta do simulador; partidas humanas não recebem limite nem vencedor artificial.
 
-Medições em 20/10/2026, após as correções e os testes de regressão da v0.3:
+| Semente   | Dominação | Objetivo secreto | Sem vencedor no corte |
+| --------- | --------: | ---------------: | --------------------: |
+| 20261020  |        37 |               46 |                    17 |
+| 314159265 |        35 |               49 |                    16 |
 
-| Resultado                     | Semente 20261020 | Semente 314159265 |
-| ----------------------------- | ---------------: | ----------------: |
-| Dominação Total               |     0 · **0,0%** |      3 · **1,5%** |
-| Pacificação Imperial          |  114 · **57,0%** |   129 · **64,5%** |
-| Limite sem vencedor           |   86 · **43,0%** |    68 · **34,0%** |
-| Dissolução de todos os reinos |                0 |                 0 |
+Total: **72 vitórias por dominação**, **95 por carta secreta** e **33 campanhas ainda sem vencedor no corte**.
 
-**Essas distribuições não demonstram equilíbrio entre as duas vitórias.** A pacificação imperial predomina, a dominação é rara e há muitas campanhas sem vencedor no limite. Os resultados foram preservados; não se atribuiu vitória por pontuação a uma campanha inconclusa e não se alteraram os limiares de 75%/15%, 60% ou cinco rodadas para produzir uma tabela mais uniforme.
+Todas as rodadas validam integridade de batalhões, transporte/carga, guerras formais e exportação completa. Recursos, estações, crises e coalizões estão ativos no mesmo motor usado por humanos.
 
-A faixa de 10–45% da v0.2 se referia aos quatro legados antigos. Ela não foi reutilizada como critério para as duas condições novas. Os dados históricos permanecem em [BALANCE_V2.md](BALANCE_V2.md).
+## Resultados por nação
 
-| Média por partida                | 20261020 | 314159265 |
-| -------------------------------- | -------: | --------: |
-| Rodadas                          |   20,875 |    20,145 |
-| Batalhas                         |   67,970 |    68,290 |
-| Recuos e repatriações            |   63,940 |    62,960 |
-| Aniquilações                     |   47,015 |    46,715 |
-| Revoltas                         |   34,685 |    35,290 |
-| Guerras declaradas               |    5,925 |     5,795 |
-| Tratados efetivamente concluídos |    5,335 |     5,205 |
-| Batalhas navais                  |    1,105 |     1,285 |
-| Movimentos de formações          |  170,515 |   168,525 |
-| Unidades perdidas por suprimento |   27,030 |    25,700 |
+| Nação         | Participações | Vitórias | Vitórias / participações |
+| ------------- | ------------: | -------: | -----------------------: |
+| `aurelia`     |           148 |        6 |                     4.1% |
+| `ferro_norte` |           148 |       88 |                    59.5% |
+| `vespera`     |           150 |       32 |                    21.3% |
+| `sol_invicto` |           152 |        2 |                     1.3% |
+| `kaldor`      |           152 |       10 |                     6.6% |
+| `turan`       |           152 |        4 |                     2.6% |
+| `sapiencia`   |           150 |       10 |                     6.7% |
+| `veridia`     |           148 |       15 |                    10.1% |
 
-Recuos contam eventos, incluindo reagrupamento de isolados e repatriação por tratado/revolta. Batalhas excluem cercos interrompidos. Aniquilações incluem grupos sem moral e sem rota de fuga. Tratados contam eventos `PEACE`; uma guerra encerrada pela dissolução de um lado não é contada como tratado. Suprimento contabiliza unidades perdidas.
+**Ferro-Norte concentrou 88 das 167 vitórias (52,7%)**, um desequilíbrio observado que merece revisão em partidas humanas e futuras iterações de regras.
 
-### Escopo e arquétipos
+A taxa usa participações como denominador: cada partida tem seis competidores. Estes resultados não demonstram equilíbrio para jogadores humanos. Os bots têm heurísticas simplificadas e não reproduzem negociação, uso humano de informação oculta ou todas as estratégias especializadas. As constantes numéricas pedidas para as facções foram preservadas; as tabelas registram os resultados observados sem corrigir vencedores depois da resolução.
 
-| Partidas com vencedor | 20261020 | 314159265 |
-| --------------------- | -------: | --------: |
-| Rápido, de 100        |       51 |        67 |
-| Mundial, de 100       |       63 |        65 |
-
-| Arquétipo vencedor | 20261020 | 314159265 |
-| ------------------ | -------: | --------: |
-| Militarist         |        0 |         2 |
-| Merchant           |       30 |        35 |
-| Theocrat           |        0 |         5 |
-| Diplomat           |       84 |        90 |
-
-Essas heurísticas não reproduzem negociação humana. Os bots diplomáticos tendem a formar a Dieta, enquanto os militares têm dificuldade de sustentar ocupações e campanhas de vários continentes. A média de revoltas também evidencia o peso de desgaste e integração sobre uma estratégia agressiva. É necessário medir partidas com pessoas e estudar decisões dos bots antes de concluir que os caminhos têm força comparável.
-
-## Regressões detectadas e corrigidas
-
-As baterias exploratórias e os testes adicionais identificaram:
-
-- Guerras que continuavam ativas depois da dissolução de um lado, bloqueando a paz mundial.
-- Desarmamento que podia deixar formações vazias, incompatíveis com um snapshot válido.
-- Frotas/forças já estacionadas na mesma região sem iniciar seu combate após uma declaração.
-- Recuados que recebiam recuperação de moral como se estivessem parados.
-- Reagrupamento de frota isolada que não atualizava a posição do batalhão embarcado.
-
-Cada caso recebeu teste. A semente `3027052489`, partida de índice 60 na primeira bateria, reproduziu o problema da carga naval na rodada 15; a execução final passou com o vínculo e a posição preservados.
-
-## Duas vitórias verificadas
-
-Além da amostra, testes determinísticos verificam os limites de dominação, inclusive um rival acima de 15%, submissão de todos os rivais e encerramento real com estado exportável. A validação do navegador joga uma sala com três participantes até uma vitória imperial na quinta rodada, confirma o vencedor e baixa os relatórios finais JSON/TXT.
-
-A suíte também cobre composição, moral, artilharia exposta, cerco, marinha, bloqueio, desgaste, paz, religião, eleição, Édito, privacidade, migração v2 e recuperação após `SIGKILL` em um processo separado.
-
-## Reproduzir
+## Reprodução
 
 ```sh
-npm run build
-npm test
-npx tsx scripts/simulate-balance.ts --output=.local/v3-main.json
-npx tsx scripts/simulate-balance.ts --seed=314159265 --output=.local/v3-additional.json
+npx tsx scripts/simulate-balance.ts --games=100 --seed=20261020 --max-turns=60 --output=.local/v4-main.json
+npx tsx scripts/simulate-balance.ts --games=100 --seed=314159265 --max-turns=60 --output=.local/v4-holdout.json
 ```
 
-`--mode=quick`, `--mode=campaign` e `--games=` permitem medir escopos separados. A ausência de vencedor é um resultado válido; o script retorna erro para invariantes quebradas, não para uma taxa desfavorável. O teste do simulador compara duas execuções da mesma semente para verificar determinismo.
-
-Os resumos completos, constantes e todas as sementes/vencedores/métricas individuais estão em [v3-seed-20261020.json](balance/v3-seed-20261020.json) e [v3-seed-314159265.json](balance/v3-seed-314159265.json). Fórmulas e escolhas de implementação: [REGRAS_V3.md](REGRAS_V3.md).
+Dados completos: [semente principal](balance/v4-seed-20261020.json) e [segunda semente](balance/v4-seed-314159265.json). Os resultados da [v0.3](BALANCE_V3.md) e [v0.2](BALANCE_V2.md) são históricos, com outras facções e condições de vitória.

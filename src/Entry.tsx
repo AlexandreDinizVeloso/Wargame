@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -10,7 +10,14 @@ import {
   Swords,
   Users,
 } from 'lucide-react';
-import type { ClientMessage, GameMode, GameView, NationId, Theater } from '../shared/types';
+import type {
+  ClientMessage,
+  GameMode,
+  GameView,
+  NationId,
+  Theater,
+  PublicRoom,
+} from '../shared/types';
 import { CONTINENTS, makeMap, THEATERS } from '../shared/map';
 import { NATIONS, RELIGIONS } from '../shared/rules';
 import Atlas from './Atlas';
@@ -64,7 +71,28 @@ export function Entry({
     [code, setCode] = useState(''),
     [mode, setMode] = useState<GameMode>('quick'),
     [theater, setTheater] = useState<Theater>('EUROPE'),
-    [nationId, setNation] = useState<NationId>('PORTUGAL');
+    [nationId, setNation] = useState<NationId>('vespera'),
+    [roomName, setRoomName] = useState(''),
+    [isPublic, setPublic] = useState(true),
+    [secrets, setSecrets] = useState(true),
+    [timer, setTimer] = useState(60),
+    [rooms, setRooms] = useState<PublicRoom[]>([]),
+    [browserError, setBrowserError] = useState('');
+  const refresh = async () => {
+    try {
+      const r = await fetch('/api/rooms');
+      if (!r.ok) throw new Error();
+      setRooms((await r.json()) as PublicRoom[]);
+      setBrowserError('');
+    } catch {
+      setBrowserError('Não foi possível carregar as salas.');
+    }
+  };
+  useEffect(() => {
+    void refresh();
+    const id = setInterval(() => void refresh(), 2000);
+    return () => clearInterval(id);
+  }, []);
   return (
     <main className="entry-viewport">
       <Atlas provinces={world} players={[]} mode="POLITICAL" preview />
@@ -72,7 +100,7 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          TERCEIRA EDIÇÃO <i /> 0.3
+          QUARTA EDIÇÃO <i /> 0.4
         </span>
         <button className="quiet-button" onClick={onHelp}>
           Como jogar <ArrowRight size={14} />
@@ -80,7 +108,7 @@ export function Entry({
       </header>
       <div className={`entry-content ${form ? 'with-form' : ''}`}>
         <section className="hero-copy">
-          <span className="eyebrow">GUERRA, COMÉRCIO & PAZ IMPERIAL</span>
+          <span className="eyebrow">NAÇÕES, CRISES & OBJETIVOS SECRETOS</span>
           <h1>
             O mundo é vasto.
             <br />
@@ -123,7 +151,7 @@ export function Entry({
                     name: 'Estrategista',
                     mode: 'quick',
                     theater: 'EUROPE',
-                    nationId: 'PORTUGAL',
+                    nationId: 'vespera',
                     demo: true,
                   })
                 }
@@ -136,13 +164,13 @@ export function Entry({
             <div>
               <Swords size={19} />
               <span>
-                Dominação Total<small>Subjugue os rivais ou governe 75% das terras.</small>
+                Dominação Total<small>Subjugue os rivais ou governe 60% das terras.</small>
               </span>
             </div>
             <div>
               <Crown size={19} />
               <span>
-                Pacificação Imperial<small>Una a Dieta e sustente cinco rodadas de paz.</small>
+                Objetivos Secretos<small>Escolha seu legado. Partidas sem limite de rodadas.</small>
               </span>
             </div>
           </div>
@@ -154,7 +182,17 @@ export function Entry({
               event.preventDefault();
               send(
                 form === 'create'
-                  ? { type: 'create', name: name.trim() || 'Estrategista', mode, theater, nationId }
+                  ? {
+                      type: 'create',
+                      name: name.trim() || 'Estrategista',
+                      mode,
+                      theater,
+                      nationId,
+                      roomName: roomName.trim() || `Campanha de ${name.trim() || 'Estrategista'}`,
+                      isPublic,
+                      enableSecretObjectives: secrets,
+                      turnTimerSeconds: timer,
+                    }
                   : {
                       type: 'join',
                       name: name.trim() || 'Convidado',
@@ -201,6 +239,41 @@ export function Entry({
               </>
             ) : (
               <>
+                <label>
+                  Nome da sala
+                  <input
+                    value={roomName}
+                    maxLength={60}
+                    onChange={(e) => setRoomName(e.target.value)}
+                    placeholder="Minha campanha"
+                  />
+                </label>
+                <label className="check-label">
+                  <input
+                    type="checkbox"
+                    checked={isPublic}
+                    onChange={(e) => setPublic(e.target.checked)}
+                  />
+                  Sala pública (aparece na lista)
+                </label>
+                <label className="check-label">
+                  <input
+                    type="checkbox"
+                    checked={secrets}
+                    onChange={(e) => setSecrets(e.target.checked)}
+                  />
+                  Ativar Objetivos Secretos (Estilo War)
+                </label>
+                <label>
+                  Timer após o primeiro pronto (segundos)
+                  <input
+                    type="number"
+                    min={15}
+                    max={600}
+                    value={timer}
+                    onChange={(e) => setTimer(Number(e.target.value))}
+                  />
+                </label>
                 <div className="mode-choices">
                   <button
                     type="button"
@@ -210,7 +283,7 @@ export function Entry({
                   >
                     <Swords size={18} />
                     <strong>Teatro continental</strong>
-                    <small>16 terras · até 60 minutos</small>
+                    <small>16 terras · escala rápida</small>
                   </button>
                   <button
                     type="button"
@@ -220,7 +293,7 @@ export function Entry({
                   >
                     <Globe2 size={18} />
                     <strong>Campanha mundial</strong>
-                    <small>56 terras · até 5 horas</small>
+                    <small>56 terras · campanha extensa</small>
                   </button>
                 </div>
                 {mode === 'quick' && (
@@ -236,7 +309,7 @@ export function Entry({
                   </label>
                 )}
                 <div className="field-heading">
-                  Sua nação <span>8 histórias, 2 ideias cada</span>
+                  Sua nação <span>8 estilos de jogo exclusivos</span>
                 </div>
                 <NationCards selected={nationId} onSelect={setNation} />
               </>
@@ -248,6 +321,37 @@ export function Entry({
           </form>
         )}
       </div>
+      <section className="server-browser framed-panel">
+        <div className="section-heading">
+          <h2>🌐 Salas Abertas (Server Browser)</h2>
+          <button onClick={() => void refresh()}>Atualizar salas</button>
+        </div>
+        {browserError && <p role="status">{browserError}</p>}
+        {rooms.length === 0 ? (
+          <p>Nenhuma sala pública aberta. Crie a primeira campanha.</p>
+        ) : (
+          rooms.map((r) => (
+            <article key={r.roomId}>
+              <div>
+                <strong>{r.roomName}</strong>
+                <small>
+                  {r.hostName} · {r.theater} · {r.playersCount}/{r.maxPlayers} ·{' '}
+                  {r.enableSecretObjectives ? '🎯 Objetivos secretos' : 'Dominação'} ·{' '}
+                  {r.status === 'LOBBY' ? 'No lobby' : `Em jogo · rodada ${r.turn}`}
+                </small>
+              </div>
+              <button
+                disabled={!online || r.status !== 'LOBBY' || r.playersCount >= r.maxPlayers}
+                onClick={() =>
+                  send({ type: 'join', code: r.roomId, name: name.trim() || 'Convidado' })
+                }
+              >
+                Entrar na Sala
+              </button>
+            </article>
+          ))
+        )}
+      </section>
       <footer className="entry-footer">
         <span>
           <i className={online ? 'status-dot' : 'status-dot offline'} />
@@ -345,14 +449,87 @@ export function Lobby({
           />
           <div className="lobby-settings">
             <label>
+              Nome da sala
+              <input
+                disabled={!host}
+                value={game.roomName}
+                maxLength={60}
+                onChange={(e) =>
+                  command({
+                    type: 'SET_LOBBY_OPTIONS',
+                    roomName: e.target.value || 'Campanha',
+                    isPublic: game.isPublic,
+                    enableSecretObjectives: game.enableSecretObjectives,
+                    turnTimerSeconds: game.turnSeconds,
+                  })
+                }
+              />
+            </label>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                disabled={!host}
+                checked={game.isPublic}
+                onChange={(e) =>
+                  command({
+                    type: 'SET_LOBBY_OPTIONS',
+                    roomName: game.roomName,
+                    isPublic: e.target.checked,
+                    enableSecretObjectives: game.enableSecretObjectives,
+                    turnTimerSeconds: game.turnSeconds,
+                  })
+                }
+              />
+              Sala pública
+            </label>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                disabled={!host}
+                checked={game.enableSecretObjectives}
+                onChange={(e) =>
+                  command({
+                    type: 'SET_LOBBY_OPTIONS',
+                    roomName: game.roomName,
+                    isPublic: game.isPublic,
+                    enableSecretObjectives: e.target.checked,
+                    turnTimerSeconds: game.turnSeconds,
+                  })
+                }
+              />
+              Ativar Objetivos Secretos (Estilo War)
+            </label>
+            <label>
+              Timer First-Ready
+              <select
+                disabled={!host}
+                value={game.turnSeconds}
+                onChange={(e) =>
+                  command({
+                    type: 'SET_LOBBY_OPTIONS',
+                    roomName: game.roomName,
+                    isPublic: game.isPublic,
+                    enableSecretObjectives: game.enableSecretObjectives,
+                    turnTimerSeconds: Number(e.target.value),
+                  })
+                }
+              >
+                {[15, 30, 60, 90, 120, 180, 300, 600].map((n) => (
+                  <option key={n} value={n}>
+                    {n} segundos após o primeiro pronto
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               Cenário
               <select
                 disabled={!host}
                 value={game.mode}
                 onChange={(e) => command({ type: 'SET_MODE', mode: e.target.value as GameMode })}
               >
-                <option value="quick">Rápido · 20 rodadas de 3 minutos</option>
-                <option value="campaign">Mundial · 40 rodadas de 7,5 minutos</option>
+                <option value="quick">Continental · sem limite de rodadas</option>
+                <option value="campaign">Mundial · sem limite de rodadas</option>
               </select>
             </label>
             {game.mode === 'quick' && (

@@ -4,11 +4,18 @@ export type Continent = 'EUROPE' | 'AMERICAS' | 'MENA_AFRICA' | 'ASIA';
 export type Theater = Exclude<Continent, 'MENA_AFRICA'>;
 export type ReligionId = 'SOLAR' | 'MERCHANT' | 'REFORMED' | 'ANCESTRAL';
 export type ReligiousPolicy = 'INQUISITION' | 'TOLERANCE';
-export type Objective = 'DOMINATION' | 'IMPERIAL_PACIFICATION';
+export type Objective = 'DOMINATION' | 'SECRET_OBJECTIVE';
 export type BotArchetype = 'Militarist' | 'Merchant' | 'Theocrat' | 'Diplomat';
 export type MapMode = 'POLITICAL' | 'RELIGIOUS' | 'ECONOMIC_SUPPLY' | 'DIPLOMATIC' | 'UNREST';
 export type NationId =
-  'PORTUGAL' | 'CASTILE' | 'FRANCE' | 'AUSTRIA' | 'OTTOMANS' | 'MING' | 'JAPAN' | 'INCA';
+  | 'vespera'
+  | 'sol_invicto'
+  | 'kaldor'
+  | 'aurelia'
+  | 'ferro_norte'
+  | 'sapiencia'
+  | 'veridia'
+  | 'turan';
 export interface Composition {
   infantry: number;
   cavalry: number;
@@ -30,6 +37,8 @@ export interface Battalion extends Composition {
   pathQueue: string[];
   isMercenary: boolean;
   stranded: boolean;
+  movementCredit: number;
+  movementPoints: number;
 }
 export type ArmyUnit = Battalion;
 export interface ProvinceRuntimeState {
@@ -61,7 +70,10 @@ export type CityOrder =
   | { type: 'CONVERT'; targetProvinceId: string };
 export type BattalionOrder =
   | { type: 'MOVE_BATTALION'; battalionId: string; targetProvinceId?: string; path?: string[] }
-  | { type: 'ENTRENCH_BATTALION' | 'TRAIN_BATTALION'; battalionId: string }
+  | {
+      type: 'ENTRENCH_BATTALION' | 'TRAIN_BATTALION' | 'RAZE_PROVINCE' | 'MERGE_ALL';
+      battalionId: string;
+    }
   | { type: 'MERGE_BATTALIONS'; battalionId: string; targetBattalionId: string }
   | { type: 'SPLIT_BATTALION'; battalionId: string; composition: Composition; name?: string }
   | {
@@ -77,7 +89,9 @@ export type DiplomacyAction =
   | 'DEMAND_TRIBUTE'
   | 'EMBARGO'
   | 'FUND_REBELS'
-  | 'SEND_SUBSIDY';
+  | 'SEND_SUBSIDY'
+  | 'OFFER_VASSALAGE'
+  | 'BUY_VISION_OR_BRIHC';
 export interface DiplomaticOrder {
   type: 'DIPLOMACY';
   action: DiplomacyAction;
@@ -86,7 +100,7 @@ export interface DiplomaticOrder {
   targetProvinceId?: string;
 }
 export type PlayerOrder = CityOrder | BattalionOrder | DiplomaticOrder;
-export type CasusBelli = 'CONQUEST' | 'IMPERIAL_BAN' | 'HOLY_WAR' | 'HUMILIATION';
+export type CasusBelli = 'CONQUEST' | 'IMPERIAL_BAN' | 'HOLY_WAR' | 'HUMILIATION' | 'COALITION';
 export type PeaceTerm =
   | { type: 'CEDE_PROVINCES'; provinceIds: string[] }
   | { type: 'WAR_REPARATIONS'; immediateTribute: number }
@@ -121,6 +135,8 @@ export interface ImperialDiet {
 }
 export interface NationDefinition {
   id: NationId;
+  style: string;
+  mechanic: string;
   name: string;
   color: string;
   emblem: string;
@@ -169,6 +185,12 @@ export interface Player {
   moraleBonusUntil: number;
   disarmUntil: number;
   armyCap: number;
+  aggressiveExpansion: number;
+  fervor: number;
+  secretObjectives: SecretObjective[];
+  selectedObjectiveId: string | null;
+  objectiveStreak: number;
+  originalCapitalId: string | null;
 }
 export interface Relation {
   a: string;
@@ -185,7 +207,7 @@ export interface Offer {
   id: string;
   from: string;
   to: string;
-  kind: 'alliance' | 'military_access' | 'tribute' | 'call_to_arms' | 'peace';
+  kind: 'alliance' | 'military_access' | 'tribute' | 'call_to_arms' | 'peace' | 'vassalage';
   amount: number;
   warId?: string;
   defensive?: boolean;
@@ -318,6 +340,7 @@ export interface TurnResolutionReport {
   }[];
   economy: EconomyMetric[];
   diet: DietEvent;
+  world: { season: Season; event: GlobalEvent | null; coalitions: Coalition[] };
   events: string[];
 }
 export interface TurnHistory extends TurnResolutionReport {
@@ -342,12 +365,22 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.3.0';
-  legacyResult?: { winnerId: string | null; objective: string | null; version: '0.2.0' };
+  createdVersion: '0.4.0';
+  enableSecretObjectives: boolean;
+  legacyResult?: { winnerId: string | null; objective: string | null; version: '0.2.0' | '0.3.0' };
 }
 export interface GameState {
-  version: 3;
+  version: 4;
   code: string;
+  roomName: string;
+  isPublic: boolean;
+  enableSecretObjectives: boolean;
+  season: Season;
+  globalEvent: GlobalEvent | null;
+  coalitions: Coalition[];
+  visionContracts: { buyerId: string; targetId: string; untilTurn: number }[];
+  firstReadyPlayerName: string | null;
+  turnDeadlineAt: number | null;
   hostId: string;
   phase: 'lobby' | 'planning' | 'finished';
   turn: number;
@@ -404,10 +437,23 @@ export type GameCommand =
       offensiveAllyIds?: string[];
     }
   | { type: 'OFFER_PEACE'; warId: string; terms: PeaceTerm[] }
-  | { type: 'JOIN_DIET' }
-  | { type: 'LEAVE_DIET' }
-  | { type: 'VOTE_EMPEROR'; candidateId: string }
-  | { type: 'ISSUE_IMPERIAL_EDICT' }
+  | { type: 'JOIN_COALITION' | 'DECLARE_COALITION_WAR'; targetRealmId: string }
+  | { type: 'CHOOSE_SECRET_OBJECTIVE'; objectiveId: string }
+  | {
+      type: 'SET_LOBBY_OPTIONS';
+      roomName: string;
+      isPublic: boolean;
+      enableSecretObjectives: boolean;
+      turnTimerSeconds: number;
+    }
+  | {
+      type: 'DECLARE_WAR_AND_MOVE';
+      targetRealmId: string;
+      casusBelli: CasusBelli;
+      offensiveAllyIds?: string[];
+      battalionId: string;
+      targetProvinceId: string;
+    }
   | { type: 'CALL_TO_ARMS'; warId: string; allyId: string };
 export type ClientMessage =
   | {
@@ -417,6 +463,10 @@ export type ClientMessage =
       theater?: Theater;
       nationId?: NationId;
       demo?: boolean;
+      roomName?: string;
+      isPublic?: boolean;
+      enableSecretObjectives?: boolean;
+      turnTimerSeconds?: number;
     }
   | { type: 'join'; code: string; name: string; nationId?: NationId }
   | { type: 'resume'; code: string; playerId: string; token: string }
@@ -428,25 +478,59 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'left' };
 export interface MatchTelemetry {
-  schemaVersion: 3;
+  schemaVersion: 4;
   matchConfig: MatchConfig;
   nations: Player[];
   turnByTurnHistory: TurnHistory[];
   wars: War[];
   battles: BattleReport[];
   dietHistory: DietEvent[];
+  worldHistory: TurnResolutionReport['world'][];
   economyMetrics: EconomyMetric[];
   finalState: Omit<GameView, 'history'>;
 }
+export type StrategicResource = 'GRAIN' | 'IRON' | 'HORSES' | 'GOLD_MINE' | 'RELIC' | null;
+export type Season = 'SPRING' | 'SUMMER' | 'AUTUMN' | 'WINTER';
+export type GlobalEventId =
+  'GOLD_RUSH' | 'HARSH_WINTER' | 'CRUSADE' | 'MERCENARY_CRISIS' | 'REBEL_AGITATORS';
+export interface GlobalEvent {
+  id: GlobalEventId;
+  startedTurn: number;
+  endsTurn: number;
+}
+export interface Coalition {
+  targetId: string;
+  memberIds: string[];
+  warId: string | null;
+}
+export interface SecretObjective {
+  id: string;
+  kind: 'WEALTH' | 'SEAS' | 'RIVALRY' | 'PAX';
+  name: string;
+  requirements: { key: string; label: string; target: number }[];
+  rivalId?: string;
+  capitalId?: string;
+}
+export interface PublicRoom {
+  roomId: string;
+  roomName: string;
+  hostName: string;
+  theater: 'Mapa-Múndi' | 'Europa' | 'Américas' | 'Ásia';
+  enableSecretObjectives: boolean;
+  playersCount: number;
+  maxPlayers: number;
+  status: 'LOBBY' | 'IN_GAME';
+  turn: number;
+}
 export const OBJECTIVES: Record<Objective, { name: string; description: string }> = {
   DOMINATION: {
-    name: 'Dominação Total',
-    description: 'Subjugue os demais reinos ou controle 75% das terras, sem rival acima de 15%.',
-  },
-  IMPERIAL_PACIFICATION: {
-    name: 'Pacificação Imperial',
+    name: 'Dominação / Hegemonia',
     description:
-      'Como Imperador, reúna 60% das nações vivas e preserve cinco rodadas sem guerras no mundo.',
+      'Controle 60% das terras, diretamente ou por vassalos, ou subjugue todos os rivais.',
+  },
+  SECRET_OBJECTIVE: {
+    name: 'Objetivo Secreto',
+    description: 'Cumpra todos os requisitos da sua carta de comandante.',
   },
 };
 export function emptyTurnReport(turn: number, diet: ImperialDiet): TurnResolutionReport {
@@ -462,6 +546,7 @@ export function emptyTurnReport(turn: number, diet: ImperialDiet): TurnResolutio
     attritionLosses: [],
     economy: [],
     diet: { turn, ...structuredClone(diet) },
+    world: { season: 'SPRING', event: null, coalitions: [] },
     events: [],
   };
 }

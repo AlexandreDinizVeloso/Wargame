@@ -7,13 +7,11 @@ import {
   applyPeace,
   declareWar,
   diplomacy,
-  issueEdict,
-  joinDiet,
   offerPeace,
   updateWarScores,
 } from '../server/diplomacy';
-import { executeCommand, resolveTurn, submitOrder, viewFor } from '../server/game';
-import { coalitionMorale, createBattalion, removeUnits } from '../server/state';
+import { resolveTurn, submitOrder, viewFor } from '../server/game';
+import { createBattalion, removeUnits } from '../server/state';
 import {
   armyUpkeep,
   atWar,
@@ -265,39 +263,6 @@ test('guerra santa solar não cobra estabilidade e exige outra fé', () => {
   const before = a.stability;
   declareWar(g, a.id, b.id, 'HOLY_WAR');
   assert.equal(a.stability, before);
-});
-test('édito aplica banimento, convoca todos os membros e reduz manutenção defensiva', () => {
-  const {
-    g,
-    players: [a, b, c],
-  } = setup();
-  joinDiet(g, b.id);
-  joinDiet(g, c.id);
-  g.diet.votes[c.id] = b.id;
-  g.diet.emperorId = b.id;
-  issueEdict(g, b.id);
-  const war = declareWar(g, a.id, b.id, 'CONQUEST');
-  assert.ok(war.defenderIds.includes(c.id));
-  assert.equal(war.imperialBanAgainstId, a.id);
-  assert.ok(g.diet.bannedRealmIds.includes(a.id));
-  close(coalitionMorale(g, c.id), 1.2);
-  army(g, c.id, 'france', { infantry: 4 });
-  close(realmEconomy(g, c.id).upkeep, 0.35 * 4 * 0.75);
-});
-test('eleição usa votos, depois prestígio; guerra mundial zera contador de paz', () => {
-  const {
-    g,
-    players: [a, b, c],
-  } = setup();
-  joinDiet(g, a.id);
-  joinDiet(g, b.id);
-  b.prestige = 30;
-  let next = executeCommand(g, a.id, { type: 'VOTE_EMPEROR', candidateId: b.id });
-  assert.equal(next.diet.emperorId, b.id);
-  next.diet.peaceTurnsCounter = 4;
-  declareWar(next, c.id, a.id, 'CONQUEST');
-  resolveTurn(next);
-  assert.equal(next.diet.peaceTurnsCounter, 0);
 });
 test('desgaste cresce 4 em guerra, penaliza renda e revolta; paz recupera 12', () => {
   const {
@@ -560,7 +525,7 @@ test('dissolução encerra guerras sem lado vivo e permite a paz mundial', () =>
     g.battalions.some((a) => a.ownerId === b.id),
     false,
   );
-  assert.equal(g.diet.peaceTurnsCounter, 1);
+  assert.equal(g.season, 'SUMMER');
 });
 test('ocupação completa do líder causa capitulação real e permite impor submissão', () => {
   const {
@@ -575,17 +540,15 @@ test('ocupação completa do líder causa capitulação real e permite impor sub
   assert.equal(w.active, false);
   assert.equal(b.subjectOfId, a.id);
 });
-test('dominação de 75% exige que nenhum rival ultrapasse 15%', () => {
+test('dominação atinge exatamente 60% sem restrição sobre tamanho rival', () => {
   const {
     g,
     players: [a, b, c],
   } = setup();
   const land = g.provinces.filter((p) => p.kind === 'LAND');
-  land.forEach((p, i) => {
-    p.ownerId = i < 42 ? a.id : i < 51 ? b.id : c.id;
-  });
+  land.forEach((p, i) => (p.ownerId = i < 33 ? a.id : i < 50 ? b.id : c.id));
   assert.equal(victoryStatus(g), null);
-  land[50].ownerId = c.id;
+  land[33].ownerId = a.id;
   assert.equal(victoryStatus(g)?.objective, 'DOMINATION');
 });
 test('subjugar todos os demais é uma vitória mesmo abaixo de 75% de terras', () => {

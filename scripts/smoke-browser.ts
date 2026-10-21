@@ -1,8 +1,45 @@
 import { chromium, type Page } from 'playwright-core';
 import assert from 'node:assert/strict';
-import { mkdir, readFile } from 'node:fs/promises';
-import type { GameView } from '../shared/types';
-const base = process.env.BASE_URL ?? 'http://127.0.0.1:3000';
+import { fork, type ChildProcess } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import type { GameView, PublicRoom } from '../shared/types';
+let child: ChildProcess | undefined;
+const temp = await mkdtemp(path.join(os.tmpdir(), 'concordia-browser-v4-'));
+let base = process.env.BASE_URL;
+if (!base) {
+  child = fork(path.resolve('server/index.ts'), ['--production'], {
+    execArgv: ['--import', 'tsx'],
+    silent: true,
+    env: {
+      ...process.env,
+      PORT: '0',
+      HOST: '127.0.0.1',
+      ROOMS_STATE_FILE: path.join(temp, 'rooms.json'),
+    },
+  });
+  let diagnostics = '';
+  child.stderr?.on('data', (b) => (diagnostics += String(b)));
+  const port = await new Promise<number>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Servidor não iniciou: ${diagnostics}`)),
+      15000,
+    );
+    child!.on('message', (m) => {
+      if (m && typeof m === 'object' && 'port' in m) {
+        clearTimeout(timer);
+        resolve(Number(m.port));
+      }
+    });
+    child!.once('exit', (code) => {
+      clearTimeout(timer);
+      reject(new Error(`Servidor encerrou ${code}: ${diagnostics}`));
+    });
+  });
+  base = `http://127.0.0.1:${port}`;
+}
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH ?? '/usr/bin/chromium',
   headless: true,
@@ -15,11 +52,11 @@ function observe(page: Page) {
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(m.text());
   });
-  page.on('websocket', (socket) =>
-    socket.on('framereceived', (event) => {
+  page.on('websocket', (s) =>
+    s.on('framereceived', (e) => {
       try {
-        const m = JSON.parse(String(event.payload));
-        if (m.type === 'state') state = m.state;
+        const m = JSON.parse(String(e.payload));
+        if (m.type === 'state') state = m.state as GameView;
       } catch {}
     }),
   );
@@ -28,336 +65,226 @@ function observe(page: Page) {
       assert.ok(state);
       return state;
     },
-    async until(predicate: (g: GameView) => boolean) {
-      const end = Date.now() + 8000;
+    until: async (predicate: (g: GameView) => boolean) => {
+      const end = Date.now() + 10000;
       while (Date.now() < end) {
         if (state && predicate(state)) return state;
-        await new Promise((r) => setTimeout(r, 25));
+        await new Promise((r) => setTimeout(r, 30));
       }
-      throw new Error('Estado esperado não recebido do servidor.');
+      throw new Error(`Estado esperado não recebido (rodada ${state?.turn}).`);
     },
   };
 }
 async function viewport(page: Page) {
-  const v = await page.evaluate(() => ({
-    w: document.documentElement.scrollWidth,
-    h: document.documentElement.scrollHeight,
-    vw: innerWidth,
-    vh: innerHeight,
-  }));
-  assert.ok(v.w <= v.vw + 1 && v.h <= v.vh + 1, `Viewport rolou: ${JSON.stringify(v)}`);
+  assert.ok(
+    await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth <= innerWidth + 1 &&
+        document.documentElement.scrollHeight <= innerHeight + 1,
+    ),
+    'Viewport com rolagem externa.',
+  );
 }
-async function drag(
-  page: Page,
-  x: number,
-  y: number,
-  dx: number,
-  dy: number,
-  button: 'left' | 'middle' | 'right' = 'left',
-) {
-  await page.mouse.move(x, y);
-  await page.mouse.down({ button });
-  await page.mouse.move(x + dx, y + dy, { steps: 10 });
-  await page.mouse.up({ button });
+async function closeWindows(page: Page) {
+  const buttons = page.locator('.window-controls button[aria-label^="Fechar"]');
+  while (await buttons.count()) await buttons.last().click();
 }
-async function savedDownload(page: Page, button: ReturnType<Page['getByRole']>, filename: string) {
-  const downloading = page.waitForEvent('download');
-  await button.click();
-  const file = await downloading;
+async function selectProvince(page: Page, id: string) {
+  await page.locator(`.province-shape[data-province="${id}"]`).press('Enter');
+}
+async function saveDownload(page: Page, label: string, filename: string) {
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: label, exact: true }).click();
+  const file = await downloaded;
   await file.saveAs(filename);
   return readFile(filename, 'utf8');
 }
 try {
   await mkdir('.local/screenshots', { recursive: true });
   await mkdir('.local/exports', { recursive: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
-  const page = await context.newPage(),
-    state = observe(page);
+  const contexts = await Promise.all(
+    [0, 1, 2].map(() => browser.newContext({ viewport: { width: 1440, height: 960 } })),
+  );
+  const pages = await Promise.all(contexts.map((c) => c.newPage())),
+    states = pages.map(observe),
+    page = pages[0];
   await page.addInitScript(() => {
-    const native = AudioContext.prototype.createOscillator;
+    const original = AudioContext.prototype.createOscillator;
     AudioContext.prototype.createOscillator = function () {
       const w = window as unknown as { audioNodes: number };
       w.audioNodes = (w.audioNodes ?? 0) + 1;
-      return native.call(this);
+      return original.call(this);
     };
   });
   await page.goto(base);
-  await page.getByRole('button', { name: 'Jogar demonstração' }).waitFor();
-  await viewport(page);
-  await page.screenshot({ path: '.local/screenshots/v3-inicio.png' });
-  await page.getByRole('button', { name: 'Jogar demonstração' }).click();
-  await state.until((g) => g.phase === 'planning');
-  await page.getByRole('button', { name: 'Confirmar ordens', exact: false }).waitFor();
-  await viewport(page);
-  assert.equal(state.get().version, 3);
-  assert.equal(state.get().provinces.filter((p) => p.kind === 'LAND').length, 16);
-  for (const [i, mode] of [
-    'POLITICAL',
-    'RELIGIOUS',
-    'ECONOMIC_SUPPLY',
-    'DIPLOMATIC',
-    'UNREST',
-  ].entries()) {
-    await page.keyboard.press(String(i + 1));
-    await page.waitForFunction(
-      (m) => document.querySelector('.map-stage')?.getAttribute('data-mode') === m,
-      mode,
-    );
+  await page.getByRole('button', { name: 'Criar uma sala', exact: true }).click();
+  await page.getByLabel('Como devemos chamar você?').fill('Capitã');
+  await page.getByLabel('Nome da sala', { exact: true }).fill('Fronteiras v0.4');
+  await page.getByLabel('Timer após o primeiro pronto').fill('15');
+  await page.getByRole('button', { name: 'Reunir o conselho' }).click();
+  await states[0].until((g) => g.phase === 'lobby');
+  const room = states[0].get().code;
+  const listed = (await fetch(`${base}/api/rooms`).then((r) => r.json())) as PublicRoom[];
+  assert.ok(listed.some((r) => r.roomId === room && r.roomName === 'Fronteiras v0.4'));
+  await page.getByRole('button', { name: /Ordem do Sol Invicto/ }).click();
+  await states[0].until((g) => g.players[0].nationId === 'sol_invicto');
+  for (let i = 1; i < 3; i++) {
+    await pages[i].goto(base);
+    await pages[i].getByRole('heading', { name: '🌐 Salas Abertas (Server Browser)' }).waitFor();
+    const card = pages[i].locator('.server-browser article').filter({ hasText: 'Fronteiras v0.4' });
+    await card.getByRole('button', { name: 'Entrar na Sala', exact: true }).click();
+    await states[i].until((g) => g.players.length === i + 1);
   }
-  await page.keyboard.press('1');
-  await page.mouse.move(950, 430);
-  await page.mouse.wheel(0, -10000);
-  await page.waitForFunction(
-    () => document.querySelector('.map-stage')?.getAttribute('data-zoom') === '3.500',
-  );
-  await page.mouse.wheel(0, 10000);
-  await page.waitForFunction(
-    () => document.querySelector('.map-stage')?.getAttribute('data-zoom') === '0.800',
-  );
-  await page.getByRole('button', { name: 'Resetar câmera' }).click();
-  for (const button of ['middle', 'right'] as const) {
-    const before = await page.locator('.map-stage').getAttribute('data-camera-x');
-    await drag(page, 950, 430, 65, 25, button);
-    assert.notEqual(await page.locator('.map-stage').getAttribute('data-camera-x'), before);
-  }
-  await page.getByRole('button', { name: 'Resetar câmera' }).click();
-  await page.evaluate(() => {
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-  });
-  const spaceBefore = await page.locator('.map-stage').getAttribute('data-camera-x');
-  await page.keyboard.down('Space');
-  await drag(page, 950, 430, 65, 25);
-  await page.keyboard.up('Space');
-  assert.notEqual(await page.locator('.map-stage').getAttribute('data-camera-x'), spaceBefore);
-  await page.getByRole('button', { name: 'Resetar câmera' }).click();
-  await page.getByRole('button', { name: 'Província', exact: true }).click();
-  const city = page.getByRole('region', { name: 'Inspeção de Província' });
-  await city.waitFor();
-  assert.ok(await city.getByRole('heading', { name: 'Portugal', exact: true }).isVisible());
-  await city.getByRole('button', { name: 'Desanexar Inspeção de Província' }).click();
-  assert.equal(await city.getAttribute('data-docked'), 'false');
-  let box = (await city.boundingBox())!;
-  await drag(page, box.x + 100, box.y + 20, 80, 20);
-  const moved = (await city.boundingBox())!;
-  assert.ok(moved.x > box.x + 60);
-  const resize = await city
-    .getByRole('button', { name: 'Redimensionar Inspeção de Província' })
-    .boundingBox();
-  assert.ok(resize);
-  await drag(page, resize.x + resize.width / 2, resize.y + resize.height / 2, 45, 20);
-  box = (await city.boundingBox())!;
-  assert.ok(box.width > 360);
-  const geometry = { x: box.x, y: box.y, width: box.width };
-  await city.getByRole('button', { name: 'Minimizar Inspeção de Província' }).click();
-  assert.ok((await city.boundingBox())!.height < 50);
-  await city.getByRole('button', { name: 'Fechar Inspeção de Província' }).click();
-  await page.getByRole('button', { name: 'Província', exact: true }).click();
-  assert.ok((await city.boundingBox())!.height < 50);
-  await city.getByRole('button', { name: 'Restaurar Inspeção de Província' }).click();
-  await page.reload();
-  await state.until((g) => g.phase === 'planning');
-  await page.getByRole('button', { name: 'Província', exact: true }).click();
-  await city.waitFor();
-  const persisted = (await city.boundingBox())!;
-  assert.equal(persisted.x, geometry.x);
-  assert.equal(persisted.width, geometry.width);
-  await city.getByRole('button', { name: /Construir mercado/ }).click();
-  await state.until((g) => g.plannedOrders.some((o) => o.type === 'BUILD_MARKET'));
-  await city.getByRole('button', { name: 'Fechar Inspeção de Província' }).click();
-  await page.locator('[data-battalion="army-1"]').click();
-  const army = page.getByRole('region', { name: 'Comando de Batalhão' });
-  await army.waitFor();
-  assert.equal(await city.count(), 0);
-  await army.getByRole('button', { name: /Treinar · 6 ouro/ }).click();
-  await state.until((g) => g.plannedOrders.length === 2);
-  assert.ok(
-    state.get().plannedOrders.some((o) => o.type === 'BUILD_MARKET') &&
-      state.get().plannedOrders.some((o) => o.type === 'TRAIN_BATTALION'),
-  );
-  await page.getByRole('button', { name: 'Diplomacia', exact: true }).click();
-  const diplomacy = page.getByRole('region', { name: 'Diplomacia & Guerras' });
-  await diplomacy.locator('.realm-row').filter({ hasText: 'Coroa de Castela' }).click();
-  await diplomacy.locator('summary').filter({ hasText: 'Declaração formal de guerra' }).click();
-  await diplomacy.getByRole('button', { name: 'Declarar guerra', exact: true }).click();
-  await state.until((g) => g.wars.some((w) => w.active));
-  await diplomacy.getByRole('button', { name: 'Fechar Diplomacia & Guerras' }).click();
-  await page
-    .locator('path.province-shape[data-province="castile"]')
-    .click({ button: 'right', force: true });
-  await state.until((g) => g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION'));
-  await page.locator('.planned-route').waitFor();
-  assert.equal(state.get().plannedOrders.length, 2);
-  await page.screenshot({ path: '.local/screenshots/v3-ordens.png' });
-  await army.getByRole('button', { name: 'Fechar Comando de Batalhão' }).click();
-  await page.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
-  await state.until((g) => g.turn === 2);
-  await page.locator('.turn-replay').waitFor();
-  assert.ok(state.get().lastReport!.battles.length > 0);
-  await page.locator('.battle-burst').first().waitFor({ timeout: 5000 });
-  assert.match((await page.locator('.casualty-badge').first().textContent()) ?? '', /−\d+ tropas/);
-  await page.screenshot({ path: '.local/screenshots/v3-replay.png' });
-  await page.locator('.turn-replay').waitFor({ state: 'hidden', timeout: 7000 });
-  await page
-    .locator('.footer-tabs')
-    .getByRole('button', { name: /Relatórios/ })
+  await page.getByRole('button', { name: 'Iniciar campanha' }).click();
+  await Promise.all(states.map((s) => s.until((g) => g.phase === 'planning')));
+  let g = states[0].get();
+  assert.equal(g.version, 4);
+  assert.equal(g.turnDeadlineAt, null);
+  assert.equal(g.players[0].secretObjectives.length, 2);
+  assert.ok(g.players.slice(1).every((p) => p.secretObjectives.length === 0));
+  await viewport(page);
+  await page.getByText('Aguardando o 1º jogador finalizar', { exact: false }).waitFor();
+  for (const name of ['Político', 'Religião', 'Economia', 'Diplomacia', 'Estabilidade'])
+    await page.getByRole('button', { name: `Mapa ${name}`, exact: true }).click();
+  assert.ok((await page.locator('.resource-badge').count()) > 0);
+  await page.getByRole('button', { name: 'Mapa Economia', exact: true }).click();
+  assert.ok((await page.locator('.resource-badge.emphasized').count()) > 0);
+  await page.getByRole('button', { name: '🎯 Meu Objetivo Secreto', exact: true }).click();
+  const secret = page.getByRole('region', { name: 'Meu Objetivo Secreto', exact: true });
+  await secret.getByRole('button', { name: 'Escolher esta carta' }).first().click();
+  await states[0].until((g) => g.players[0].selectedObjectiveId !== null);
+  await closeWindows(page);
+  const target = g.players[1];
+  await page.getByRole('button', { name: `Diplomacia com ${target.nation}`, exact: true }).click();
+  const dip = page.getByRole('region', { name: 'Diplomacia & Guerras', exact: true });
+  await dip
+    .getByRole('button', { name: `⚔️ Declarar Guerra a ${target.nation}`, exact: true })
     .click();
-  const report = page.getByRole('region', { name: 'Relatório do Turno' });
-  await report.locator('.battle-report summary').first().click();
-  await page.screenshot({ path: '.local/screenshots/v3-relatorio.png' });
-  await report.getByRole('button', { name: 'Rever Animação do Turno' }).click();
-  await page.locator('.turn-replay').waitFor();
-  await page.getByRole('button', { name: 'Encerrar animação' }).click();
-  await report.getByRole('button', { name: 'Fechar Relatório do Turno' }).click();
-  const data = JSON.parse(
-    await savedDownload(
-      page,
-      page.getByRole('button', { name: 'Baixar Relatório (.JSON)', exact: true }),
-      '.local/exports/v3-match.json',
-    ),
-  );
-  assert.equal(data.schemaVersion, 3);
-  assert.equal(data.turnByTurnHistory.length, 1);
-  for (const key of [
-    'matchConfig',
-    'nations',
-    'wars',
-    'battles',
-    'dietHistory',
-    'economyMetrics',
-    'finalState',
-  ])
-    assert.ok(key in data);
-  assert.equal('seed' in data.finalState, false);
-  const txt = await savedDownload(
-    page,
-    page.getByRole('button', { name: 'Baixar Crônica (.TXT)', exact: true }),
-    '.local/exports/v3-chronicle.txt',
-  );
-  assert.ok(txt.includes('RODADA 1') && txt.includes('ESTATÍSTICAS FINAIS'));
-  await page.getByRole('button', { name: 'Silenciar som' }).click();
-  const muted = await page.evaluate(() => (window as unknown as { audioNodes: number }).audioNodes);
-  await page.getByRole('button', { name: 'Mapa Religião', exact: true }).click();
-  assert.equal(
-    await page.evaluate(() => (window as unknown as { audioNodes: number }).audioNodes),
-    muted,
-  );
-  assert.equal(await page.locator('.game-viewport').getAttribute('data-audio-muted'), 'true');
-  await page.getByRole('button', { name: 'Ativar som' }).click();
-  await page.getByRole('button', { name: 'Mapa Político', exact: true }).click();
-  assert.ok(
-    (await page.evaluate(() => (window as unknown as { audioNodes: number }).audioNodes)) > muted,
-  );
-  await page.getByRole('button', { name: 'Conselho público' }).click();
-  await page.getByLabel('Mensagem ao conselho').fill('Que a paz dure cinco rodadas.');
-  await page.getByRole('button', { name: 'Enviar mensagem' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await closeWindows(page);
+  const targetProvince = g.provinces.find((p) => p.ownerId === target.id)!;
+  await selectProvince(page, targetProvince.id);
+  const province = page.getByRole('region', { name: 'Inspeção de Província', exact: true });
+  await province
+    .getByRole('button', { name: `⚔️ Declarar Guerra a ${target.nation}`, exact: true })
+    .click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await closeWindows(page);
+  const own = g.battalions.find((a) => a.ownerId === g.players[0].id && !a.isFleet)!;
+  await page.locator(`[data-battalion="${own.id}"]`).press('Enter');
+  await closeWindows(page);
+  await page.getByRole('region', { name: 'HUD tática de batalhão' }).waitFor();
+  assert.ok((await page.locator('[data-destination]').count()) > 0);
   await page
-    .locator('.chat-messages p')
-    .filter({ hasText: 'Que a paz dure cinco rodadas.' })
+    .locator(`.province-shape[data-province="${targetProvince.id}"]`)
+    .dispatchEvent('contextmenu');
+  // The right-button gesture exercises the tactical handler through the real map pointer sequence.
+  const position = await page
+    .locator(`.province-shape[data-province="${targetProvince.id}"]`)
+    .evaluate(
+      (el, p) => {
+        const q = new DOMPoint(p.x, p.y).matrixTransform(
+          (el as SVGGraphicsElement).getScreenCTM()!,
+        );
+        return { x: q.x, y: q.y };
+      },
+      { x: targetProvince.x, y: targetProvince.y },
+    );
+  await page.mouse.click(position.x, position.y, { button: 'right' });
+  const modal = page.getByRole('dialog', { name: `Ato de Guerra contra ${target.nation}` });
+  await modal.waitFor();
+  await modal.getByRole('button', { name: '⚔️ Declarar Guerra e Marchar!', exact: true }).click();
+  await states[0].until(
+    (g) => g.wars.some((w) => w.active) && g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION'),
+  );
+  await page
+    .getByRole('button', { name: `Cancelar movimento de ${own.name}`, exact: true })
+    .press('Enter');
+  await states[0].until((g) => !g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION'));
+  const destination = page.locator('[data-destination]').first();
+  const destinationId = await destination.getAttribute('data-province');
+  const neighbor = states[0].get().provinces.find((p) => p.id === destinationId)!;
+  const neighborPoint = await destination.evaluate(
+    (el, p) => {
+      const point = new DOMPoint(p.x, p.y).matrixTransform(
+        (el as SVGGraphicsElement).getScreenCTM()!,
+      );
+      for (const dy of [-18, -25, 18, 25, 0])
+        for (const dx of [0, -18, 18, -28, 28]) {
+          const x = point.x + dx,
+            y = point.y + dy,
+            hit = document.elementFromPoint(x, y);
+          if (
+            hit?.classList.contains('province-shape') &&
+            hit.getAttribute('data-province') === el.getAttribute('data-province')
+          )
+            return { x, y };
+        }
+      throw new Error('Sem superfície de província disponível para clique.');
+    },
+    { x: neighbor.x, y: neighbor.y },
+  );
+  await page.mouse.click(neighborPoint.x, neighborPoint.y);
+  await states[0].until((g) =>
+    g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION' || o.type === 'EMBARK_BATTALION'),
+  );
+  await page.getByRole('button', { name: '❌ Cancelar Ordem Atual', exact: true }).click();
+  await states[0].until((g) => g.plannedOrders.length === 0);
+  await page.getByRole('button', { name: '🏰 Entrincheirar (+Defesa)', exact: true }).click();
+  await states[0].until((g) => g.plannedOrders.some((o) => o.type === 'ENTRENCH_BATTALION'));
+  await page.screenshot({ path: '.local/screenshots/v4-comando.png' });
+  await page.getByRole('button', { name: 'Desmarcar batalhão', exact: true }).click();
+  await page.getByRole('button', { name: 'Mundo & Coalizões', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Mundo & Coalizões', exact: true })
+    .getByRole('heading', { name: 'Ameaça e contenção' })
     .waitFor();
-  await page.getByRole('button', { name: 'Fechar Relatório do Turno' }).click();
-  await page.getByRole('button', { name: 'Dieta Imperial', exact: true }).click();
-  const diet = page.getByRole('region', { name: 'Dieta Imperial' });
-  await diet.getByRole('button', { name: 'Ingressar na Dieta' }).click();
-  await state.until((g) => g.diet.memberRealmIds.includes(g.players[0].id));
-  await page.screenshot({ path: '.local/screenshots/v3-dieta.png' });
-  await diet.getByRole('button', { name: 'Fechar Dieta Imperial' }).click();
-  await page.getByRole('button', { name: 'Abrir menu' }).click();
-  await page.getByLabel('Política religiosa').selectOption('INQUISITION');
-  await state.until((g) => g.players[0].religiousPolicy === 'INQUISITION');
-  await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Como jogar', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Manual de campanha' }).waitFor();
-  await page.keyboard.press('Escape');
+  await closeWindows(page);
+  await page.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
+  await Promise.all(states.map((s) => s.until((g) => g.turnDeadlineAt !== null)));
+  assert.equal(states[0].get().firstReadyPlayerName, 'Capitã');
+  assert.ok((await page.locator('.first-ready-banner.counting').count()) > 0);
+  assert.ok(
+    await page.evaluate(() => ((window as unknown as { audioNodes?: number }).audioNodes ?? 0) > 0),
+    'Áudio sintetizado não foi acionado.',
+  );
+  await pages[1].getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
+  await pages[2].getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
+  await Promise.all(states.map((s) => s.until((g) => g.turn === 2)));
+  assert.equal(states[0].get().turnDeadlineAt, null);
+  await page.getByRole('button', { name: 'Encerrar animação', exact: true }).click();
+  const json = JSON.parse(
+    await saveDownload(page, 'Baixar Relatório (.JSON)', '.local/exports/v4-browser.json'),
+  );
+  assert.equal(json.schemaVersion, 4);
+  assert.equal(json.turnByTurnHistory.length, 1);
+  assert.ok(json.worldHistory.length === 1);
+  assert.ok(!('seed' in json.finalState));
+  const txt = await saveDownload(page, 'Baixar Crônica (.TXT)', '.local/exports/v4-browser.txt');
+  assert.match(txt, /RODADA 1/);
+  await page.reload();
+  await states[0].until((g) => g.turn === 2);
+  await viewport(page);
+  assert.equal(states[0].get().turnDeadlineAt, null);
   await page.setViewportSize({ width: 390, height: 844 });
   await viewport(page);
-  const ready = (await page
-    .getByRole('button', { name: 'Confirmar ordens', exact: false })
-    .boundingBox())!;
-  assert.ok(ready.x >= 0 && ready.x + ready.width <= 391);
-  await page.getByRole('button', { name: 'Província', exact: true }).click();
-  await city.waitFor();
-  const mobile = (await city.boundingBox())!;
-  assert.ok(mobile.x >= 0 && mobile.x + mobile.width <= 391 && mobile.y + mobile.height <= 845);
-  await page.screenshot({ path: '.local/screenshots/v3-celular.png' });
-  await context.close();
-  const contexts = await Promise.all(
-      [0, 1, 2].map(() => browser.newContext({ viewport: { width: 1280, height: 900 } })),
-    ),
-    pages = await Promise.all(contexts.map((c) => c.newPage())),
-    states = pages.map(observe);
-  await Promise.all(pages.map((p) => p.goto(base)));
-  const host = pages[0];
-  await host.getByRole('button', { name: 'Criar uma sala', exact: true }).click();
-  assert.equal(await host.locator('.entry-form .nation-card').count(), 8);
-  await host.getByLabel('Como devemos chamar você?').fill('Ana');
-  await host.getByLabel('Teatro da partida').selectOption('AMERICAS');
-  await host.getByRole('button', { name: 'Reunir o conselho' }).click();
-  await host.getByRole('heading', { name: 'Reúna o conselho.' }).waitFor();
-  const code = await host.locator('.room-invite strong').innerText();
-  assert.equal(states[0].get().theater, 'AMERICAS');
-  for (const [i, guest] of pages.slice(1).entries()) {
-    await guest.getByRole('button', { name: 'Entrar na campanha', exact: true }).click();
-    await guest.getByLabel('Como devemos chamar você?').fill(i === 0 ? 'Bruno' : 'Clara');
-    await guest.getByLabel('Código da sala').fill(code);
-    await guest.getByRole('button', { name: 'Entrar na sala', exact: true }).click();
-    await guest.getByRole('heading', { name: 'Reúna o conselho.' }).waitFor();
-  }
-  await host.getByRole('button', { name: /Império Ming/ }).click();
-  await states[0].until((g) => g.players[0].nationId === 'MING');
-  await host.getByLabel('Cenário').selectOption('campaign');
-  await states[0].until((g) => g.provinces.filter((p) => p.kind === 'LAND').length === 56);
-  await host.getByRole('button', { name: 'Iniciar campanha', exact: true }).click();
-  await Promise.all(states.map((s) => s.until((g) => g.phase === 'planning')));
-  for (const [i, p] of pages.entries()) {
-    await p.getByRole('button', { name: 'Dieta Imperial', exact: true }).click();
-    const d = p.getByRole('region', { name: 'Dieta Imperial' });
-    await d.getByRole('button', { name: 'Ingressar na Dieta' }).click();
-    await states[i].until((g) => g.diet.memberRealmIds.includes(g.players[i].id));
-    if (i > 0) {
-      await d.getByRole('button', { name: 'Votar em Império Ming', exact: true }).click();
-    }
-    await d.getByRole('button', { name: 'Fechar Dieta Imperial' }).click();
-  }
-  for (const p of pages)
-    await p.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
-  await Promise.all(states.map((s) => s.until((g) => g.turn === 2)));
-  await pages[2].close();
-  await host.getByRole('button', { name: 'Diplomacia', exact: true }).click();
-  const hd = host.getByRole('region', { name: 'Diplomacia & Guerras' });
-  await hd.locator('.realm-row').filter({ hasText: 'Clara' }).click();
-  await hd.getByRole('button', { name: 'Substituir ausente por bot' }).click();
-  await states[0].until((g) => g.players.find((p) => p.name === 'Clara')?.bot === true);
-  await hd.getByRole('button', { name: 'Fechar Diplomacia & Guerras' }).click();
-  for (let turn = 2; turn <= 5; turn++) {
-    for (const p of pages.slice(0, 2))
-      await p.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
-    await states[0].until((g) => (turn === 5 ? g.phase === 'finished' : g.turn === turn + 1));
-  }
-  const final = await states[0].until((g) => g.phase === 'finished');
-  assert.equal(final.winnerObjective, 'IMPERIAL_PACIFICATION');
-  assert.equal(final.winnerId, final.players[0].id);
-  const result = host.getByRole('dialog', { name: 'Resultado da campanha' });
-  await result.waitFor();
-  const endData = JSON.parse(
-    await savedDownload(
-      host,
-      result.getByRole('button', { name: 'Baixar Relatório (.JSON)', exact: true }),
-      '.local/exports/v3-final.json',
-    ),
-  );
-  assert.equal(endData.turnByTurnHistory.length, 5);
-  assert.equal(endData.finalState.winnerObjective, 'IMPERIAL_PACIFICATION');
-  const endTxt = await savedDownload(
-    host,
-    result.getByRole('button', { name: 'Baixar Crônica (.TXT)', exact: true }),
-    '.local/exports/v3-final.txt',
-  );
-  assert.ok(endTxt.includes('RODADA 5'));
-  await host.screenshot({ path: '.local/screenshots/v3-vitoria.png' });
-  assert.deepEqual(errors, [], 'Não deve haver erros no navegador.');
+  await page.screenshot({ path: '.local/screenshots/v4-celular.png' });
+  const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const mobilePage = await mobile.newPage();
+  await mobilePage.goto(base);
+  await viewport(mobilePage);
+  await mobilePage.getByRole('heading', { name: '🌐 Salas Abertas (Server Browser)' }).waitFor();
+  await mobilePage.screenshot({ path: '.local/screenshots/v4-inicio-celular.png' });
+  assert.deepEqual(errors, []);
   console.log(
-    'v0.3 verificada: mapa orgânico, 5 modos, pan/zoom, janelas móveis/redimensionáveis/persistentes, ordens separadas, guerra formal, marcha, replay, áudio/mute, JSON/TXT, Dieta, celular, 3 jogadores e vitória imperial em cinco rodadas.',
+    'Smoke v0.4 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, três acessos à guerra, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
 } finally {
   await browser.close();
+  if (child && child.exitCode === null) {
+    const ended = once(child, 'exit');
+    child.kill('SIGTERM');
+    await ended;
+  }
+  await rm(temp, { recursive: true, force: true });
 }

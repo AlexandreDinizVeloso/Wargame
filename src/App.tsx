@@ -27,6 +27,9 @@ import {
 import type { Battalion, GameView, MapMode, Province, TurnResolutionReport } from '../shared/types';
 import { OBJECTIVES } from '../shared/types';
 import {
+  atWar,
+  canUnitVisit,
+  getRelation,
   chronicle,
   controller,
   landProvinces,
@@ -42,9 +45,13 @@ import { useGame } from './useGame';
 import Atlas, { MAP_MODES, type CameraHandle } from './Atlas';
 import { Entry, Lobby } from './Entry';
 import ProvinceDrawer from './ProvinceDrawer';
-import BattalionDrawer from './BattalionDrawer';
+import BattalionDrawer, { TacticalBar } from './BattalionDrawer';
 import DiplomacyDrawer from './DiplomacyDrawer';
-import ImperialDrawer from './ImperialDrawer';
+import WorldDrawer from './WorldDrawer';
+import SecretDrawer from './SecretDrawer';
+import WarModal from './WarModal';
+import FirstReadyBanner from './FirstReadyBanner';
+import { SEASONS, hegemonicThreat, globalSupplyBonus } from '../shared/strategy';
 import TurnPanel, { type ReportTab } from './TurnPanel';
 import { FloatingWindow } from './FloatingWindow';
 import { audio } from './audio';
@@ -84,16 +91,16 @@ function Manual({ close }: { close: () => void }) {
             <Swords size={25} />
             <h3>Dominação Total</h3>
             <p>
-              Elimine ou subjugue todos os demais reinos. Também vence quem controla 75% das terras,
-              sem que outro reino controle mais de 15%.
+              Elimine ou subjugue todos os demais reinos. Também vence quem controla 60% das terras,
+              incluindo as dos seus vassalos.
             </p>
           </section>
           <section>
             <Crown size={25} />
-            <h3>Pacificação Imperial</h3>
+            <h3>Objetivos Secretos</h3>
             <p>
-              Ingresse na Dieta, conquiste votos e torne-se Imperador. Reúna 60% das nações vivas e
-              mantenha cinco rodadas consecutivas sem guerras no mundo.
+              Escolha uma carta secreta no primeiro turno. Cumpra todos os seus requisitos para
+              vencer, mesmo sem dominar o mundo.
             </p>
           </section>
         </div>
@@ -130,8 +137,8 @@ function Manual({ close }: { close: () => void }) {
         <h3>O preço da guerra</h3>
         <p>
           Desgaste cresce com os combates e reduz renda e recuperação de moral. Tratados podem
-          exigir terras, reparações, desarmamento, religião, ingresso na Dieta ou submissão. Sem
-          alcançar uma das duas vitórias até o limite, a partida termina sem vencedor.
+          exigir terras, reparações, desarmamento, religião ou submissão. A partida segue sem limite
+          de rodadas até uma vitória.
         </p>
         <h3>Seu conselho, sua mesa</h3>
         <p>
@@ -162,12 +169,18 @@ function Manual({ close }: { close: () => void }) {
 function ArrowIcon() {
   return <span aria-hidden="true">→</span>;
 }
-type Panel = 'province' | 'battalion' | 'diplomacy' | 'diet' | 'report';
+type Panel = 'province' | 'battalion' | 'diplomacy' | 'world' | 'secret' | 'report';
 export default function App() {
   const { game, playerId, status, error, setError, send, command, leave } = useGame();
   const camera = useRef<CameraHandle>(null);
   const [panels, setPanels] = useState<Panel[]>([]),
     [provinceId, setProvince] = useState(''),
+    [diplomacyTarget, setDiplomacyTarget] = useState(''),
+    [warRequest, setWarRequest] = useState<{
+      targetId: string;
+      armyId?: string;
+      provinceId?: string;
+    } | null>(null),
     [armyId, setArmy] = useState(''),
     [mode, setMode] = useState<MapMode>('POLITICAL'),
     [referenceId, setReference] = useState(''),
@@ -182,6 +195,14 @@ export default function App() {
       progress: number;
       nonce: number;
     } | null>(null);
+  const firstReadySound = useRef('');
+  useEffect(() => {
+    const key = game?.firstReadyPlayerName ? `${game.code}:${game.turn}` : '';
+    if (key && firstReadySound.current !== key) {
+      firstReadySound.current = key;
+      audio.play('war');
+    }
+  }, [game?.code, game?.turn, game?.firstReadyPlayerName]);
   const seenReport = useRef(''),
     seenWars = useRef(new Set<string>()),
     seenWinner = useRef('');
@@ -248,7 +269,9 @@ export default function App() {
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (manual) setManual(false);
+        setArmy('');
+        if (warRequest) setWarRequest(null);
+        else if (manual) setManual(false);
         else if (menu) setMenu(false);
         else if (endOpen) setEndOpen(false);
         else setPanels((v) => v.slice(0, -1));
@@ -260,7 +283,7 @@ export default function App() {
     };
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
-  }, [manual, menu, endOpen]);
+  }, [manual, menu, endOpen, warRequest]);
   const currentCode = game?.code;
   useEffect(() => {
     setPanels([]);
@@ -297,8 +320,11 @@ export default function App() {
     eco = realmEconomy(game, playerId),
     alive = livingPlayers(game),
     land = landProvinces(game),
-    owned = land.filter((p) => controller(p) === playerId),
-    emperor = game.players.find((p) => p.id === game.diet.emperorId);
+    owned = land.filter(
+      (p) =>
+        controller(p) === playerId ||
+        game.players.find((q) => q.id === controller(p))?.subjectOfId === playerId,
+    );
   const troopTotal = game.battalions
       .filter((a) => a.ownerId === playerId)
       .reduce((n, a) => n + unitCount(a), 0),
@@ -308,7 +334,7 @@ export default function App() {
           controller(p) === playerId ||
           game.battalions.some((a) => a.ownerId === playerId && a.provinceId === p.id),
       )
-      .reduce((n, p) => n + supplyLimit(p), 0);
+      .reduce((n, p) => n + supplyLimit(p), globalSupplyBonus(game, playerId));
   const remaining = game.deadline ? Math.max(0, Math.ceil((game.deadline - now) / 1000)) : null;
   const ready = alive.filter((p) => p.ready || p.bot).length;
   const focus = (id: string) => {
@@ -329,8 +355,42 @@ export default function App() {
       setError('Selecione uma ficha de batalhão ou frota antes de preparar a rota.');
       return;
     }
+    const host = controller(p);
     if (selectedArmy.embarkedOnId) {
-      setError('Desembarque o batalhão pelo comando de transporte.');
+      command({
+        type: 'SUBMIT_ORDER',
+        order: {
+          type: 'EMBARK_BATTALION',
+          battalionId: selectedArmy.id,
+          disembarkProvinceId: p.id,
+        },
+      });
+      return;
+    }
+    if (!selectedArmy.isFleet && p.kind === 'SEA_ZONE') {
+      const fleet = game.battalions.find(
+        (a) =>
+          a.ownerId === playerId &&
+          a.isFleet &&
+          !a.embarkedArmyId &&
+          a.provinceId === p.id &&
+          a.transports * 4 >= unitCount(selectedArmy),
+      );
+      if (fleet) {
+        command({
+          type: 'SUBMIT_ORDER',
+          order: { type: 'EMBARK_BATTALION', battalionId: selectedArmy.id, fleetId: fleet.id },
+        });
+        return;
+      }
+    }
+    if (
+      host &&
+      host !== playerId &&
+      !atWar(game, playerId, host) &&
+      !canUnitVisit(game, selectedArmy, p)
+    ) {
+      setWarRequest({ targetId: host, armyId: selectedArmy.id, provinceId: p.id });
       return;
     }
     const path = unitPath(game, selectedArmy, p.id);
@@ -347,15 +407,8 @@ export default function App() {
     setReportTab(tab);
     open('report');
   };
-  const imperialShare =
-    game.diet.memberRealmIds.filter((id) => alive.some((p) => p.id === id)).length /
-    Math.max(1, alive.length);
   return (
-    <div
-      className={`game-viewport ${game.diet.retaliationEdictActive ? 'has-edict' : ''}`}
-      onClickCapture={rootClick}
-      data-audio-muted={muted}
-    >
+    <div className="game-viewport" onClickCapture={rootClick} data-audio-muted={muted}>
       <Atlas
         ref={camera}
         provinces={game.provinces}
@@ -369,6 +422,9 @@ export default function App() {
         onSelect={selectProvince}
         onSelectArmy={selectArmy}
         onTactical={tactical}
+        onCancelOrder={(id) => command({ type: 'CANCEL_ORDER', key: `army:${id}` })}
+        onDeselect={() => setArmy('')}
+        viewerId={playerId}
         replay={replay}
       />
       <header className="top-bar framed-panel">
@@ -435,17 +491,20 @@ export default function App() {
             <Swords size={15} />
             <span>
               <strong>{number(me.warExhaustion)}%</strong>
-              <small>DESGASTE DE GUERRA</small>
+              <small>
+                DESGASTE · AMEAÇA {me.aggressiveExpansion}%
+                {me.nationId === 'sol_invicto' ? ` · FERVOR ${me.fervor}` : ''}
+              </small>
             </span>
           </div>
         </div>
         <div className="turn-status">
           <strong>
-            Rodada {String(game.turn).padStart(2, '0')} <small>/ {game.maxTurns}</small>
+            Rodada {String(game.turn).padStart(2, '0')} <small>∞</small>
           </strong>
           <span>
-            {1550 + Math.floor((game.turn - 1) / 4)} ·{' '}
-            {['Primavera', 'Verão', 'Outono', 'Inverno'][(game.turn - 1) % 4]}
+            {1550 + Math.floor((game.turn - 1) / 4)} · {SEASONS[game.season].icon}{' '}
+            {SEASONS[game.season].name}
           </span>
           <small>
             {game.phase === 'finished'
@@ -453,7 +512,7 @@ export default function App() {
               : game.paused
                 ? 'Campanha pausada'
                 : remaining === null
-                  ? 'Demonstração · sem prazo'
+                  ? 'Planejamento livre'
                   : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')} para resolver`}
           </small>
         </div>
@@ -488,6 +547,38 @@ export default function App() {
           </button>
         </div>
       </header>
+      <div className="nation-ribbon" aria-label="Nações da campanha">
+        {game.players.map((p) => {
+          const r = getRelation(game, playerId, p.id);
+          const status = p.subjectOfId
+            ? '👑'
+            : r?.atWar
+              ? '⚔️'
+              : r?.allied
+                ? '🤝'
+                : r && r.truceUntil >= game.turn
+                  ? '🕊️'
+                  : hegemonicThreat(game, p.id)
+                    ? '🔥'
+                    : '•';
+          return (
+            <button
+              key={p.id}
+              disabled={p.id === playerId}
+              title={`${p.nation} · ${status}`}
+              aria-label={`Diplomacia com ${p.nation}`}
+              onClick={() => {
+                setDiplomacyTarget(p.id);
+                open('diplomacy');
+              }}
+            >
+              <CoatOfArms nationId={p.nationId} size={25} />
+              <small>{status}</small>
+            </button>
+          );
+        })}
+      </div>
+      <FirstReadyBanner game={game} />
       <nav className="hud-navigation">
         <button
           onClick={() => {
@@ -516,10 +607,16 @@ export default function App() {
           <Handshake size={15} />
           Diplomacia
         </button>
-        <button onClick={() => open('diet')} className={panels.includes('diet') ? 'selected' : ''}>
+        <button
+          onClick={() => open('world')}
+          className={panels.includes('world') ? 'selected' : ''}
+        >
           <Crown size={15} />
-          Dieta Imperial
+          Mundo & Coalizões
         </button>
+        {game.enableSecretObjectives && (
+          <button onClick={() => open('secret')}>🎯 Meu Objetivo Secreto</button>
+        )}
         <button aria-label="Como jogar" onClick={() => setManual(true)}>
           <BookOpen size={16} />
         </button>
@@ -548,29 +645,56 @@ export default function App() {
           <span>
             Dominação
             <strong>
-              {number((owned.length / land.length) * 100)}% <small>/ 75%</small>
+              {number((owned.length / land.length) * 100)}% <small>/ 60%</small>
             </strong>
           </span>
         </button>
-        <button onClick={() => open('diet')}>
-          <Crown size={14} />
-          <span>
-            {emperor?.nation ?? 'Trono vago'}
-            <strong>
-              {game.diet.peaceTurnsCounter}/5 paz{' '}
-              <small>· {number(imperialShare * 100)}% membros</small>
-            </strong>
-          </span>
-        </button>
+        {game.enableSecretObjectives && (
+          <button onClick={() => open('secret')}>
+            🎯
+            <span>
+              {me.secretObjectives.find((c) => c.id === me.selectedObjectiveId)?.name ??
+                'Escolha seu objetivo secreto'}
+            </span>
+          </button>
+        )}
       </div>
-      {game.diet.retaliationEdictActive && (
-        <div className="imperial-banner">
-          <Shield size={17} />
-          <span>
-            Édito de Paz Imperial em vigor
-            <strong>Qualquer agressor enfrentará toda a Dieta.</strong>
-          </span>
-        </div>
+      {warRequest && (
+        <WarModal
+          game={game}
+          playerId={playerId}
+          {...warRequest}
+          command={command}
+          close={() => setWarRequest(null)}
+        />
+      )}
+      {panels.includes('secret') && (
+        <FloatingWindow
+          id="secret"
+          active={panels.at(-1) === 'secret'}
+          onActivate={() => open('secret')}
+          title="Meu Objetivo Secreto"
+          icon={<Flag size={15} />}
+          anchor="right"
+          width={390}
+          height={590}
+          onClose={() => close('secret')}
+        >
+          <SecretDrawer game={game} playerId={playerId} command={command} />
+        </FloatingWindow>
+      )}
+      {selectedArmy?.ownerId === playerId && (
+        <TacticalBar
+          game={game}
+          army={selectedArmy}
+          playerId={playerId}
+          command={command}
+          onRecruit={() =>
+            selectProvince(game.provinces.find((p) => p.id === selectedArmy.provinceId)!)
+          }
+          onDetails={() => open('battalion')}
+          onDeselect={() => setArmy('')}
+        />
       )}
       {replay && (
         <div className="replay-indicator">
@@ -607,6 +731,11 @@ export default function App() {
             command={command}
             onSelectArmy={selectArmy}
             onFocus={() => focus(selected.id)}
+            onDiplomacy={(id) => {
+              setDiplomacyTarget(id);
+              open('diplomacy');
+            }}
+            onDeclareWar={(id) => setWarRequest({ targetId: id })}
           />
         </FloatingWindow>
       )}
@@ -648,22 +777,28 @@ export default function App() {
           height={620}
           onClose={() => close('diplomacy')}
         >
-          <DiplomacyDrawer game={game} playerId={playerId} command={command} />
+          <DiplomacyDrawer
+            game={game}
+            playerId={playerId}
+            command={command}
+            focusedRealmId={diplomacyTarget}
+            onDeclareWar={(id) => setWarRequest({ targetId: id })}
+          />
         </FloatingWindow>
       )}
-      {panels.includes('diet') && (
+      {panels.includes('world') && (
         <FloatingWindow
-          id="diet"
-          active={panels.at(-1) === 'diet'}
-          onActivate={() => open('diet')}
-          title="Dieta Imperial"
+          id="world"
+          active={panels.at(-1) === 'world'}
+          onActivate={() => open('world')}
+          title="Mundo & Coalizões"
           icon={<Crown size={15} />}
           anchor="right"
           width={374}
           height={620}
-          onClose={() => close('diet')}
+          onClose={() => close('world')}
         >
-          <ImperialDrawer game={game} playerId={playerId} command={command} />
+          <WorldDrawer game={game} playerId={playerId} command={command} />
         </FloatingWindow>
       )}
       {panels.includes('report') && (
@@ -775,7 +910,7 @@ export default function App() {
       )}
       <div className="map-hint">
         {selectedArmy?.ownerId === playerId
-          ? `${selectedArmy.name} · clique direito para traçar rota`
+          ? `${selectedArmy.name} · clique em um destino iluminado`
           : 'Selecione uma cidade ou uma ficha de batalhão'}
         <span>Espaço + arraste · scroll para zoom</span>
       </div>
@@ -881,11 +1016,39 @@ export default function App() {
               {game.winnerObjective
                 ? OBJECTIVES[game.winnerObjective].name
                 : game.finishReason === 'legacy_finished'
-                  ? 'Resultado preservado da v0.2'
+                  ? `Resultado preservado da v${game.matchConfig.legacyResult?.version ?? '0.3.0'}`
                   : game.finishReason === 'realm_collapse'
                     ? 'Os reinos se dissolveram'
                     : 'Limite de rodadas alcançado'}
             </h3>
+            {game.winnerObjective === 'SECRET_OBJECTIVE' && (
+              <section className="secret-card">
+                <h3>
+                  🎯 Carta revelada:{' '}
+                  {
+                    game.players
+                      .find((p) => p.id === game.winnerId)
+                      ?.secretObjectives.find(
+                        (c) =>
+                          c.id ===
+                          game.players.find((p) => p.id === game.winnerId)?.selectedObjectiveId,
+                      )?.name
+                  }
+                </h3>
+                {game.players
+                  .find((p) => p.id === game.winnerId)
+                  ?.secretObjectives.find(
+                    (c) =>
+                      c.id ===
+                      game.players.find((p) => p.id === game.winnerId)?.selectedObjectiveId,
+                  )
+                  ?.requirements.map((r) => (
+                    <p key={r.key}>
+                      ✓ {r.label}: {r.target}
+                    </p>
+                  ))}
+              </section>
+            )}
             <p>
               {game.winnerObjective
                 ? OBJECTIVES[game.winnerObjective].description

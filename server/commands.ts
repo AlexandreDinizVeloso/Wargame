@@ -66,7 +66,12 @@ export function parseOrder(value: unknown): PlayerOrder {
       ? { type, battalionId: string(o.battalionId), path: strings(o.path) }
       : { type, battalionId: string(o.battalionId), targetProvinceId: string(o.targetProvinceId) };
   }
-  if (type === 'ENTRENCH_BATTALION' || type === 'TRAIN_BATTALION')
+  if (
+    type === 'ENTRENCH_BATTALION' ||
+    type === 'TRAIN_BATTALION' ||
+    type === 'RAZE_PROVINCE' ||
+    type === 'MERGE_ALL'
+  )
     return { type, battalionId: string(o.battalionId) };
   if (type === 'MERGE_BATTALIONS')
     return {
@@ -105,6 +110,8 @@ export function parseOrder(value: unknown): PlayerOrder {
         'EMBARGO',
         'FUND_REBELS',
         'SEND_SUBSIDY',
+        'OFFER_VASSALAGE',
+        'BUY_VISION_OR_BRIHC',
       ].includes(action),
       'Ação diplomática inválida.',
     );
@@ -116,7 +123,7 @@ export function parseOrder(value: unknown): PlayerOrder {
       ...(o.targetProvinceId !== undefined ? { targetProvinceId: string(o.targetProvinceId) } : {}),
     };
   }
-  throw new Error('Ordem desconhecida para o protocolo 3.');
+  throw new Error('Ordem desconhecida para o protocolo 4.');
 }
 export function parseTerms(value: unknown): PeaceTerm[] {
   assert(Array.isArray(value) && value.length <= 5, 'Termos de paz inválidos.');
@@ -128,7 +135,7 @@ export function parseTerms(value: unknown): PeaceTerm[] {
       return { type, immediateTribute: integer(t.immediateTribute, 0, 100) };
     if (type === 'HUMILIATE_DISARM' || type === 'SUBJUGATE') return { type };
     if (type === 'FORCE_EMPIRE_OR_RELIGION') {
-      assert(t.choice === 'EMPIRE' || t.choice === 'RELIGION', 'Exigência inválida.');
+      assert(t.choice === 'RELIGION', 'Exigência inválida.');
       return { type, choice: t.choice };
     }
     throw new Error('Termo de paz desconhecido.');
@@ -142,9 +149,9 @@ export function parseCommand(value: unknown): GameCommand {
   if (type === 'READY') return { type, ready: boolean(c.ready) };
   if (type === 'ANSWER_OFFER')
     return { type, offerId: string(c.offerId), accept: boolean(c.accept) };
-  if (['START_GAME', 'ADD_BOT', 'JOIN_DIET', 'LEAVE_DIET', 'ISSUE_IMPERIAL_EDICT'].includes(type))
+  if (['START_GAME', 'ADD_BOT'].includes(type))
     return {
-      type: type as 'START_GAME' | 'ADD_BOT' | 'JOIN_DIET' | 'LEAVE_DIET' | 'ISSUE_IMPERIAL_EDICT',
+      type: type as 'START_GAME' | 'ADD_BOT',
     };
   if (type === 'SET_MODE') {
     assert(c.mode === 'quick' || c.mode === 'campaign', 'Modo inválido.');
@@ -174,11 +181,31 @@ export function parseCommand(value: unknown): GameCommand {
   }
   if (type === 'REPLACE_WITH_BOT') return { type, playerId: string(c.playerId) };
   if (type === 'CHAT') return { type, text: string(c.text, 280) };
-  if (type === 'VOTE_EMPEROR') return { type, candidateId: string(c.candidateId) };
+  if (type === 'JOIN_COALITION' || type === 'DECLARE_COALITION_WAR')
+    return { type, targetRealmId: string(c.targetRealmId) };
+  if (type === 'CHOOSE_SECRET_OBJECTIVE') return { type, objectiveId: string(c.objectiveId) };
+  if (type === 'SET_LOBBY_OPTIONS')
+    return {
+      type,
+      roomName: string(c.roomName, 60).trim(),
+      isPublic: boolean(c.isPublic),
+      enableSecretObjectives: boolean(c.enableSecretObjectives),
+      turnTimerSeconds: integer(c.turnTimerSeconds, 15, 600),
+    };
+  if (type === 'DECLARE_WAR_AND_MOVE') {
+    const war = parseCommand({ ...c, type: 'DECLARE_WAR' });
+    if (war.type !== 'DECLARE_WAR') throw new Error('Declaração inválida.');
+    return {
+      ...war,
+      type,
+      battalionId: string(c.battalionId),
+      targetProvinceId: string(c.targetProvinceId),
+    };
+  }
   if (type === 'CALL_TO_ARMS') return { type, warId: string(c.warId), allyId: string(c.allyId) };
   if (type === 'DECLARE_WAR') {
     assert(
-      ['CONQUEST', 'HOLY_WAR', 'IMPERIAL_BAN', 'HUMILIATION'].includes(String(c.casusBelli)),
+      ['CONQUEST', 'HOLY_WAR', 'HUMILIATION', 'COALITION'].includes(String(c.casusBelli)),
       'Casus belli inválido.',
     );
     return {
@@ -191,5 +218,5 @@ export function parseCommand(value: unknown): GameCommand {
     };
   }
   if (type === 'OFFER_PEACE') return { type, warId: string(c.warId), terms: parseTerms(c.terms) };
-  throw new Error('Comando desconhecido para o protocolo 3.');
+  throw new Error('Comando desconhecido para o protocolo 4.');
 }

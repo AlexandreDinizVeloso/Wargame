@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Anchor, ArrowUpRight, Merge, Shield, Split, Swords, Target } from 'lucide-react';
 import type { Battalion, Composition, GameView, PlayerOrder } from '../shared/types';
-import { canTransit, compositionOf, UNIT_KEYS, unitCount, unitPath } from '../shared/rules';
+import {
+  canTransit,
+  compositionOf,
+  UNIT_KEYS,
+  unitCount,
+  splitHalf,
+  unitPath,
+  controller,
+} from '../shared/rules';
 import { Empty, Meter, number, type Command } from './ui';
 export default function BattalionDrawer({
   game,
@@ -361,5 +369,105 @@ export default function BattalionDrawer({
         </details>
       )}
     </div>
+  );
+}
+
+export function TacticalBar({
+  game,
+  army,
+  playerId,
+  command,
+  onRecruit,
+  onDetails,
+  onDeselect,
+}: {
+  game: GameView;
+  army: Battalion;
+  playerId: string;
+  command: Command;
+  onRecruit: () => void;
+  onDetails: () => void;
+  onDeselect: () => void;
+}) {
+  const actor = game.players.find((p) => p.id === playerId)!,
+    p = game.provinces.find((p) => p.id === army.provinceId)!;
+  const active = game.phase === 'planning' && !army.stranded && !army.embarkedOnId;
+  const send = (order: PlayerOrder) => command({ type: 'SUBMIT_ORDER', order });
+  const half = splitHalf(army);
+  const compatible = game.battalions.some(
+    (b) =>
+      b.id !== army.id &&
+      b.provinceId === army.provinceId &&
+      b.ownerId === playerId &&
+      b.isFleet === army.isFleet &&
+      b.isMercenary === army.isMercenary &&
+      !b.embarkedOnId &&
+      !b.embarkedArmyId,
+  );
+  return (
+    <section className="tactical-hud framed-panel" aria-label="HUD tática de batalhão">
+      <header>
+        <strong>{army.name}</strong>
+        <span>{p.name} · 👣 destinos iluminados</span>
+        <button aria-label="Desmarcar batalhão" onClick={onDeselect}>
+          ✕
+        </button>
+      </header>
+      <div className="tactical-composition">
+        <b>🛡️ {army.infantry}</b>
+        <b>🐎 {army.cavalry}</b>
+        <b>💣 {army.artillery}</b>
+        <b>⛵ {army.warships + army.transports}</b>
+        <span>Moral {Math.round(army.morale)}%</span>
+        <span>Treinamento {army.training.toFixed(2)}×</span>
+      </div>
+      <Meter label="Moral" value={army.morale} />
+      <div className="tactical-actions">
+        <button className="selected" onClick={onDetails}>
+          👣 Mover / Escolher Destino no Mapa
+        </button>
+        <button
+          disabled={!active || !!army.embarkedArmyId || !unitCount(half)}
+          onClick={() => send({ type: 'SPLIT_BATTALION', battalionId: army.id, composition: half })}
+        >
+          ➗ Dividir Batalhão (50/50)
+        </button>
+        <button
+          disabled={!active || !!army.embarkedArmyId || !compatible}
+          onClick={() => send({ type: 'MERGE_ALL', battalionId: army.id })}
+        >
+          🔗 Juntar Todos na Província
+        </button>
+        <button disabled={game.phase !== 'planning' || p.ownerId !== playerId} onClick={onRecruit}>
+          ➕ Reforçar / Recrutar Aqui
+        </button>
+        <button
+          disabled={!active || army.isFleet}
+          onClick={() => send({ type: 'ENTRENCH_BATTALION', battalionId: army.id })}
+        >
+          🏰 Entrincheirar (+Defesa)
+        </button>
+        {['turan', 'ferro_norte'].includes(actor.nationId) && (
+          <button
+            disabled={
+              !active ||
+              army.isFleet ||
+              controller(p) !== playerId ||
+              p.pacification > 35 ||
+              p.razedTurn !== null
+            }
+            onClick={() => send({ type: 'RAZE_PROVINCE', battalionId: army.id })}
+          >
+            🔥 Arrasar Província
+          </button>
+        )}
+        <button
+          disabled={game.phase !== 'planning'}
+          onClick={() => command({ type: 'CANCEL_ORDER', key: `army:${army.id}` })}
+        >
+          ❌ Cancelar Ordem Atual
+        </button>
+      </div>
+    </section>
   );
 }

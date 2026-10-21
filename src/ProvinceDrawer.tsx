@@ -11,6 +11,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { Battalion, Composition, GameView, PlayerOrder, Province } from '../shared/types';
+import { effectiveSupply, RESOURCES } from '../shared/strategy';
 import { TERRAIN_LABELS } from '../shared/map';
 import {
   compositionOf,
@@ -23,7 +24,6 @@ import {
   orderKey,
   RELIGIONS,
   reservedResources,
-  supplyLimit,
   unitCount,
 } from '../shared/rules';
 import { Empty, Meter, number, type Command } from './ui';
@@ -38,7 +38,7 @@ export function budgetFor(game: GameView, id: string, order: PlayerOrder) {
           ? order.targetProvinceId
           : ''),
   );
-  const cost = orderCost(order, p, actor),
+  const cost = orderCost(order, p, actor, game),
     reserved = reservedResources(
       { ...game, orders: { [id]: game.plannedOrders } },
       id,
@@ -59,6 +59,8 @@ export default function ProvinceDrawer({
   command,
   onSelectArmy,
   onFocus,
+  onDiplomacy,
+  onDeclareWar,
 }: {
   game: GameView;
   playerId: string;
@@ -66,6 +68,8 @@ export default function ProvinceDrawer({
   command: Command;
   onSelectArmy: (a: Battalion) => void;
   onFocus: () => void;
+  onDiplomacy: (id: string) => void;
+  onDeclareWar: (id: string) => void;
 }) {
   const me = game.players.find((p) => p.id === playerId)!,
     owner = game.players.find((p) => p.id === province.ownerId),
@@ -75,7 +79,7 @@ export default function ProvinceDrawer({
     active = game.phase === 'planning';
   const armies = game.battalions.filter((a) => a.provinceId === province.id && !a.embarkedOnId),
     total = armies.reduce((n, a) => n + unitCount(a), 0),
-    limit = supplyLimit(province);
+    limit = effectiveSupply(game, playerId, province);
   const [kind, setKind] = useState<'regular' | 'mercenary' | 'fleet'>('regular'),
     [values, setValues] = useState<Composition>({
       infantry: 3,
@@ -144,6 +148,51 @@ export default function ProvinceDrawer({
     (!ruler || ruler.id === me.id || !getRelation(game, me.id, ruler.id)?.allied);
   return (
     <div className="province-ledger">
+      {owner && owner.id !== playerId && (
+        <section className="foreign-realm-card">
+          <h3>{owner.nation}</h3>
+          {getRelation(game, playerId, owner.id)?.atWar ? (
+            <button className="primary" onClick={() => onDiplomacy(owner.id)}>
+              🕊️ Propor Tratado de Paz (Warscore:{' '}
+              {game.wars.find(
+                (w) =>
+                  w.active &&
+                  [...w.attackerIds, ...w.defenderIds].includes(playerId) &&
+                  [...w.attackerIds, ...w.defenderIds].includes(owner.id),
+              )?.warScore ?? 0}
+              %)
+            </button>
+          ) : (
+            <>
+              <button className="danger-button" onClick={() => onDeclareWar(owner.id)}>
+                ⚔️ Declarar Guerra a {owner.nation}
+              </button>
+              <button
+                onClick={() =>
+                  command({
+                    type: 'SUBMIT_ORDER',
+                    order: {
+                      type: 'DIPLOMACY',
+                      action: 'PROPOSE_ALLIANCE',
+                      targetRealmId: owner.id,
+                    },
+                  })
+                }
+              >
+                🤝 Propor Aliança
+              </button>
+              <button onClick={() => onDiplomacy(owner.id)}>🕵️ Ações Encobertas / Suborno</button>
+            </>
+          )}
+        </section>
+      )}
+
+      {province.strategicResource && (
+        <p className="success-box">
+          {RESOURCES[province.strategicResource].icon} {RESOURCES[province.strategicResource].name}{' '}
+          · {RESOURCES[province.strategicResource].effect}
+        </p>
+      )}
       <div className="region-heading">
         <div>
           <span className="eyebrow" style={{ color: ruler?.color }}>
@@ -231,7 +280,10 @@ export default function ProvinceDrawer({
           <div className="building-levels">
             <span>
               <Castle size={14} />
-              Forte <b>{province.fortLevel}/3</b>
+              Forte{' '}
+              <b>
+                {province.fortLevel}/{ruler?.nationId === 'kaldor' ? 4 : 3}
+              </b>
             </span>
             <span>
               <Anchor size={14} />
@@ -287,7 +339,7 @@ export default function ProvinceDrawer({
             'BUILD_FORT',
             'Construir forte',
             '+15% defesa e +3 suprimento por nível.',
-            !legalOwn || province.fortLevel >= 3,
+            !legalOwn || province.fortLevel >= (me.nationId === 'kaldor' ? 4 : 3),
             <Castle size={17} />,
           )}
           {build(
@@ -430,7 +482,10 @@ export default function ProvinceDrawer({
                   !price.affordable ||
                   unitCount(composition) < 1 ||
                   unitCount(composition) > 50 ||
-                  (isMercenary && province.capitalOf !== playerId && province.pacification < 80)
+                  (isMercenary &&
+                    (me.nationId === 'vespera'
+                      ? province.portLevel < 1 && province.marketLevel < 1
+                      : province.capitalOf !== playerId && province.pacification < 80))
                 }
                 onClick={() => command({ type: 'SUBMIT_ORDER', order: recruit })}
               >
@@ -447,7 +502,7 @@ export default function ProvinceDrawer({
                   ? 'Contratação imediata · sem reservas · manutenção 2,2×.'
                   : isFleet
                     ? 'Cada transporte embarca até 4 unidades.'
-                    : 'Recrutamento na resolução; consome reservas e começa com treinamento 1,00.'}
+                    : `Recrutamento na resolução; consome reservas e começa com treinamento ${me.nationId === 'sapiencia' ? '1,20' : '1,00'}.`}
               </p>
             </div>
           )}

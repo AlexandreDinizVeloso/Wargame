@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulateBalance } from '../scripts/simulate-balance';
-test('simulador v3 repete resultados e verifica batalhões, guerras, duas vitórias e exportação', () => {
+test('simulador v4 repete resultados e verifica batalhões, guerras, duas vitórias e exportação', () => {
   const first = simulateBalance(8, 123456),
     second = simulateBalance(8, 123456);
   assert.deepEqual(first, second);

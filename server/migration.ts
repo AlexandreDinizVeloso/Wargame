@@ -102,6 +102,9 @@ export function migrateV2(value: unknown): GameState {
   if (old.version !== 2 || !Array.isArray(old.players) || !Array.isArray(old.provinces))
     throw new Error('Campanha v2 inválida.');
   const g = createGame(old.code, old.mode, old.demo, old.seed);
+  g.isPublic = false;
+  g.enableSecretObjectives = false;
+  g.matchConfig.enableSecretObjectives = false;
   g.matchConfig.mapId = 'legacy-v2-32-regions';
   old.players.forEach((p, i) => {
     const n = addPlayer(g, p.name, p.bot, NATIONS[i].id, p.botArchetype);
@@ -134,8 +137,8 @@ export function migrateV2(value: unknown): GameState {
     };
   }
   g.turn = old.turn;
-  g.maxTurns = old.maxTurns;
-  g.matchConfig.maxTurns = old.maxTurns;
+  g.maxTurns = 0;
+  g.matchConfig.maxTurns = 0;
   g.log = old.log ?? [];
   g.chat = old.chat ?? [];
   g.provinces = old.provinces.map((p) => {
@@ -156,6 +159,8 @@ export function migrateV2(value: unknown): GameState {
       y: p.y,
       isCoastal: p.terrain === 'coastal',
       resource: p.resource,
+      strategicResource: null,
+      razedTurn: null,
       ownerId: p.ownerId,
       occupierId: null,
       religion: faith(p.religion),
@@ -256,7 +261,109 @@ export function migrateV2(value: unknown): GameState {
     }
   log(
     g,
-    'Campanha migrada para v0.3: tropas viraram batalhões, cidades mantiveram controle e tesouro. O tabuleiro legado foi preservado. Marchas antigas foram canceladas; relatórios originais permanecem no backup v2.',
+    'Campanha migrada para v0.4: tropas viraram batalhões, cidades mantiveram controle e tesouro. O tabuleiro legado foi preservado. Marchas antigas foram canceladas; relatórios originais permanecem no backup v2.',
+  );
+  return g;
+}
+
+export function migrateV3(value: unknown): GameState {
+  const g = structuredClone(value) as GameState;
+  if ((g as unknown as { version: number }).version !== 3) throw new Error('Campanha v3 inválida.');
+  const legacy: Record<string, Player['nationId']> = {
+    PORTUGAL: 'vespera',
+    CASTILE: 'sol_invicto',
+    FRANCE: 'kaldor',
+    AUSTRIA: 'aurelia',
+    OTTOMANS: 'ferro_norte',
+    MING: 'sapiencia',
+    JAPAN: 'veridia',
+    INCA: 'turan',
+  };
+  const upgradePlayer = (p: Player) => {
+    p.nationId = legacy[p.nationId] ?? p.nationId;
+    const n = NATIONS.find((n) => n.id === p.nationId);
+    if (!n) throw new Error('Nação legada desconhecida.');
+    p.nation = n.name;
+    p.color = n.color;
+    p.aggressiveExpansion = 0;
+    p.fervor = 0;
+    p.secretObjectives = [];
+    p.selectedObjectiveId = null;
+    p.objectiveStreak = 0;
+    p.originalCapitalId = g.provinces.find((q) => q.capitalOf === p.id)?.id ?? null;
+  };
+  g.players.forEach(upgradePlayer);
+  g.history.forEach((h) => {
+    h.nations.forEach(upgradePlayer);
+    h.world = {
+      season: (['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'] as const)[(h.turn - 1) % 4],
+      event: null,
+      coalitions: [],
+    };
+  });
+  for (const r of [...g.reports, ...(g.lastReport ? [g.lastReport] : [])])
+    r.world = {
+      season: (['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'] as const)[(r.turn - 1) % 4],
+      event: null,
+      coalitions: [],
+    };
+  g.offers = g.offers.filter(
+    (o) => !o.terms?.some((t) => t.type === 'FORCE_EMPIRE_OR_RELIGION' && t.choice === 'EMPIRE'),
+  );
+  if (g.phase === 'finished') {
+    g.matchConfig.legacyResult = {
+      winnerId: g.winnerId,
+      objective: g.winnerObjective,
+      version: '0.3.0',
+    };
+    g.finishReason = 'legacy_finished';
+  }
+  g.version = 4;
+  g.roomName = `Campanha ${g.code}`;
+  g.isPublic = false;
+  g.enableSecretObjectives = false;
+  g.maxTurns = 0;
+  g.matchConfig = {
+    ...g.matchConfig,
+    maxTurns: 0,
+    createdVersion: '0.4.0',
+    enableSecretObjectives: false,
+  };
+  g.season = (['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'] as const)[(g.turn - 1) % 4];
+  g.globalEvent = null;
+  g.coalitions = [];
+  g.visionContracts = [];
+  g.deadline = null;
+  g.turnDeadlineAt = null;
+  g.firstReadyPlayerName = null;
+  for (const [i, p] of g.provinces.entries()) {
+    p.strategicResource =
+      p.kind === 'LAND'
+        ? (['GRAIN', 'IRON', 'HORSES', 'GOLD_MINE', 'RELIC', null] as const)[i % 6]
+        : null;
+    p.razedTurn = null;
+    if (p.strategicResource === 'GOLD_MINE') p.baseTax += 5;
+  }
+  for (const a of g.battalions) {
+    a.movementCredit = 0;
+    a.movementPoints = 1;
+  }
+  if ((g.winnerObjective as string) === 'IMPERIAL_PACIFICATION') {
+    g.winnerObjective = null;
+    g.finishReason = 'legacy_finished';
+  }
+  g.diet = {
+    emperorId: null,
+    imperialAuthority: 0,
+    memberRealmIds: [],
+    peaceTurnsCounter: 0,
+    retaliationEdictActive: false,
+    votes: {},
+    bannedRealmIds: [],
+  };
+  log(
+    g,
+    'Campanha migrada para v0.4: objetivos secretos desativados para preservar a partida iniciada.',
   );
   return g;
 }

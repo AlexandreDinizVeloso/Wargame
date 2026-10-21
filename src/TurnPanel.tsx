@@ -1,3 +1,4 @@
+import FirstReadyBanner from './FirstReadyBanner';
 import { useEffect, useState } from 'react';
 import { ArrowRight, Coins, MessageSquare, Play, ScrollText, Swords, X } from 'lucide-react';
 import type { GameView, TurnResolutionReport } from '../shared/types';
@@ -29,6 +30,7 @@ export default function TurnPanel({
   const me = game.players.find((p) => p.id === playerId)!;
   return (
     <div className="turn-panel">
+      <FirstReadyBanner game={game} />
       <div className="panel-tabs">
         <button className={tab === 'orders' ? 'selected' : ''} onClick={() => setTab('orders')}>
           <ScrollText size={14} />
@@ -213,7 +215,7 @@ export default function TurnPanel({
               <details className="command-details">
                 <summary>
                   <Coins size={15} />
-                  Economia e Dieta
+                  Economia e mundo
                 </summary>
                 <div className="table-scroll">
                   <table>
@@ -238,8 +240,8 @@ export default function TurnPanel({
                   </table>
                 </div>
                 <p className="fine-print">
-                  Paz mundial {report.diet.peaceTurnsCounter}/5 · autoridade{' '}
-                  {number(report.diet.imperialAuthority)}.
+                  Estações e crises alteram suprimento, moral e renda. Coalizões contêm a expansão
+                  agressiva.
                 </p>
               </details>
               <details className="command-details">

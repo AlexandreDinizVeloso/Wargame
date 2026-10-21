@@ -1,5 +1,7 @@
 # Regras e decisões matemáticas — v0.3
 
+> Arquivo histórico da v0.3. Para a versão atual, consulte [regras v0.4](REGRAS_V4.md) e [validação v0.4](BALANCE.md).
+
 As regras seguintes completam os coeficientes e as decisões de resolução que não tinham valores fechados no pedido. São constantes do motor, compartilhadas com a interface quando há prévia de custo. O servidor decide o resultado de todos os comandos.
 
 ## Configuração

@@ -30,16 +30,21 @@ interface MatchResult {
   navalBattles: number;
   movements: number;
   attritionLosses: number;
-  dietMembers: number;
+  coalitions: number;
+  globalCrises: number;
+  winnerNation: string | null;
   telemetryTurns: number;
 }
 export function simulateBalance(
   games = 200,
   seed = 20261020,
   scenario: 'mixed' | 'quick' | 'campaign' = 'mixed',
+  maxTurns = 40,
 ) {
   if (!Number.isInteger(games) || games < 1 || games > 10000 || !Number.isSafeInteger(seed))
     throw new Error('Use 1–10000 partidas e uma semente inteira.');
+  if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 1000)
+    throw new Error('Limite interno deve ser 1–1000.');
   const matches: MatchResult[] = [];
   for (let i = 0; i < games; i++) {
     const gameSeed = (seed + Math.imul(i + 1, 2654435761)) >>> 0,
@@ -47,7 +52,7 @@ export function simulateBalance(
       theater = (['EUROPE', 'AMERICAS', 'ASIA'] as const)[Math.floor(i / 2) % 3];
     const g = createGame(`SIM${i.toString().padStart(4, '0')}`, mode, true, gameSeed, theater);
     for (let seat = 0; seat < 6; seat++) {
-      const archetype = ARCHETYPES[(seat + i) % 4];
+      const archetype = ARCHETYPES[(seat + Math.floor(i / 8)) % 4];
       addPlayer(g, `${archetype} ${seat + 1}`, true, NATIONS[(seat + i) % 8].id, archetype);
     }
     startGame(g, 0);
@@ -69,10 +74,12 @@ export function simulateBalance(
       navalBattles: 0,
       movements: 0,
       attritionLosses: 0,
-      dietMembers: 0,
+      coalitions: 0,
+      globalCrises: 0,
+      winnerNation: null,
       telemetryTurns: 0,
     };
-    while (g.phase === 'planning') {
+    while (g.phase === 'planning' && g.history.length < maxTurns) {
       const r = resolveTurn(g, g.turn * g.turnSeconds * 1000);
       if (!validGame(g)) throw new Error(`Estado inválido: semente ${gameSeed}, rodada ${r.turn}.`);
       for (const a of g.battalions) {
@@ -116,17 +123,19 @@ export function simulateBalance(
     result.winnerId = g.winnerId;
     result.winnerArchetype = winner?.botArchetype ?? null;
     result.condition = g.winnerObjective;
-    result.finishReason = g.finishReason;
-    result.turns = g.turn;
+    result.finishReason = g.finishReason ?? (g.history.length >= maxTurns ? 'turn_limit' : null);
+    result.turns = g.history.length;
     result.wars = g.wars.length;
     result.peaceTreaties = g.history
       .flatMap((h) => h.diplomaticChanges)
       .filter((c) => c.action === 'PEACE').length;
-    result.dietMembers = g.diet.memberRealmIds.length;
+    result.coalitions = g.coalitions.length;
+    result.globalCrises = g.history.filter((h) => h.world.event?.startedTurn === h.turn).length;
+    result.winnerNation = winner?.nationId ?? null;
     result.telemetryTurns = g.history.length;
     matches.push(result);
   }
-  const conditions = (['DOMINATION', 'IMPERIAL_PACIFICATION'] as Objective[]).map((id) => ({
+  const conditions = (['DOMINATION', 'SECRET_OBJECTIVE'] as Objective[]).map((id) => ({
     id,
     name: OBJECTIVES[id].name,
     wins: matches.filter((m) => m.condition === id).length,
@@ -146,8 +155,9 @@ export function simulateBalance(
       | 'attritionLosses',
   ) => matches.reduce((n, m) => n + m[key], 0) / games;
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     games,
+    maxTurns,
     seed,
     scenario,
     balance: structuredClone(BALANCE),
@@ -156,6 +166,13 @@ export function simulateBalance(
     archetypes: ARCHETYPES.map((archetype) => ({
       archetype,
       wins: matches.filter((m) => m.winnerArchetype === archetype).length,
+    })),
+    nations: NATIONS.map((n) => ({
+      nation: n.id,
+      appearances: matches.filter((_, i) =>
+        Array.from({ length: 6 }, (_, seat) => NATIONS[(seat + i) % 8].id).includes(n.id),
+      ).length,
+      wins: matches.filter((m) => m.winnerNation === n.id).length,
     })),
     means: {
       turns: mean('turns'),
@@ -182,9 +199,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     Number(argument('games') ?? 200),
     Number(argument('seed') ?? 20261020),
     scenario as 'mixed' | 'quick' | 'campaign',
+    Number(argument('max-turns') ?? 40),
   );
   console.log(
-    `\nConcórdia v0.3 · ${result.games} partidas reais do motor · 6 bots · cenário ${scenario} · semente ${result.seed}`,
+    `\nConcórdia v0.4 · ${result.games} partidas reais do motor · 6 bots · cenário ${scenario} · semente ${result.seed}`,
   );
   console.table([
     ...result.conditions.map((c) => ({
@@ -193,7 +211,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       'Taxa (%)': c.rate.toFixed(1),
     })),
     {
-      Condição: 'Campanhas sem vencedor',
+      Condição: 'Sem vencedor no corte interno',
       Vitórias: result.draws,
       'Taxa (%)': ((result.draws / result.games) * 100).toFixed(1),
     },
@@ -207,6 +225,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.log(`Resultados completos: ${output}`);
   }
   console.log(
-    'Validados: batalhões, cargas navais, guerras formais, duas condições de vitória e histórico exportável. Empates são preservados; não há vitória artificial por pontuação.',
+    'Validados: batalhões, cargas navais, guerras formais, duas condições de vitória e histórico exportável. O corte interno não encerra partidas humanas; não há vitória artificial por pontuação.',
   );
 }

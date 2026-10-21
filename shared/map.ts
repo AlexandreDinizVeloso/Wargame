@@ -1,5 +1,5 @@
 import geometry from './world-geometry.json';
-import type { Continent, GameMode, Province, Theater } from './types';
+import type { Continent, GameMode, Province, Theater, StrategicResource } from './types';
 export type Terrain = 'plains' | 'forest' | 'hills' | 'mountains' | 'coastal';
 export interface ProvinceStaticData {
   id: string;
@@ -16,6 +16,8 @@ export interface ProvinceStaticData {
   x: number;
   y: number;
   isCoastal: boolean;
+  strategicResource: StrategicResource;
+  razedTurn: number | null;
   resource: 'grain' | 'trade' | 'iron' | 'shrine';
 }
 export const TERRAIN_DEFENSE: Record<Terrain, number> = {
@@ -168,7 +170,9 @@ export function makeStaticMap(
       isCoastal,
       terrain,
       terrainDefenseBonus: TERRAIN_DEFENSE[terrain],
-      baseTax: [4, 5, 3, 4][i % 4],
+      baseTax: [4, 5, 3, 4][i % 4] + (i % 6 === 3 ? 5 : 0),
+      strategicResource: (['GRAIN', 'IRON', 'HORSES', 'GOLD_MINE', 'RELIC', null] as const)[i % 6],
+      razedTurn: null,
       baseSupplyLimit: terrain === 'mountains' ? 10 : terrain === 'forest' ? 12 : 18,
       resource,
     };
@@ -205,6 +209,8 @@ export function makeStaticMap(
         x: (w + e + 360) * 2,
         y: (170 - n - s) * 2,
         resource: 'trade',
+        strategicResource: null,
+        razedTurn: null,
       };
     },
   );

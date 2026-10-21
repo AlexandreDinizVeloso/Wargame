@@ -1,11 +1,19 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
-import type { GameCommand, GameState, NationId, ServerMessage, Theater } from '../shared/types';
+import type {
+  GameCommand,
+  GameState,
+  NationId,
+  ServerMessage,
+  Theater,
+  PublicRoom,
+} from '../shared/types';
 import { NATIONS } from '../shared/rules';
 import { parseCommand } from './commands';
 import {
   addPlayer,
+  allReady,
   assert,
   createGame,
   executeCommand,
@@ -36,7 +44,7 @@ const send = (ws: WebSocket, message: ServerMessage) => {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
 };
 function readCommand(msg: Record<string, unknown>): GameCommand {
-  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 3.');
+  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 4.');
   return parseCommand(msg.command);
 }
 const nationOfMessage = (value: unknown): NationId | undefined => {
@@ -60,6 +68,7 @@ export function attachRooms(server: Server, options: Options = {}) {
       if (saved.game.phase === 'planning') {
         saved.game.paused = true;
         saved.game.deadline = null;
+        saved.game.turnDeadlineAt = null;
       }
       rooms.set(saved.game.code, {
         game: saved.game,
@@ -145,6 +154,7 @@ export function attachRooms(server: Server, options: Options = {}) {
               ? room.remainingMs
               : Math.max(0, room.game.deadline - clock());
           room.game.deadline = null;
+          room.game.turnDeadlineAt = null;
           room.game.paused = true;
         }
         persist();
@@ -162,7 +172,10 @@ export function attachRooms(server: Server, options: Options = {}) {
       if (!room.game.players.find((p) => p.id === room.game.hostId)?.online) room.game.hostId = id;
       if (room.game.phase === 'planning' && room.game.paused) {
         room.game.paused = false;
-        room.game.deadline = room.game.demo ? null : clock() + Math.max(15_000, room.remainingMs);
+        room.game.deadline = room.game.firstReadyPlayerName
+          ? clock() + Math.max(1000, room.remainingMs)
+          : null;
+        room.game.turnDeadlineAt = room.game.deadline;
       }
       if (old && old !== ws) old.close(4001, 'Sessão aberta em outra conexão.');
       persist();
@@ -197,6 +210,22 @@ export function attachRooms(server: Server, options: Options = {}) {
               ? (msg.theater as Theater)
               : 'EUROPE',
           );
+          g.roomName =
+            typeof msg.roomName === 'string' && msg.roomName.trim()
+              ? msg.roomName.trim().slice(0, 60)
+              : `Campanha ${code}`;
+          g.isPublic = msg.isPublic !== false;
+          g.enableSecretObjectives = msg.enableSecretObjectives !== false;
+          if (msg.turnTimerSeconds !== undefined)
+            assert(
+              Number.isInteger(msg.turnTimerSeconds) &&
+                Number(msg.turnTimerSeconds) >= 15 &&
+                Number(msg.turnTimerSeconds) <= 600,
+              'Timer deve ser 15–600 segundos.',
+            );
+          g.turnSeconds = Number(msg.turnTimerSeconds ?? 60);
+          g.matchConfig.turnSeconds = g.turnSeconds;
+          g.matchConfig.enableSecretObjectives = g.enableSecretObjectives;
           g.persistenceEnabled = !!options.stateFile;
           const p = addPlayer(
             g,
@@ -301,8 +330,7 @@ export function attachRooms(server: Server, options: Options = {}) {
       if (
         room.game.phase === 'planning' &&
         !room.game.paused &&
-        room.game.deadline !== null &&
-        clock() >= room.game.deadline
+        ((room.game.deadline !== null && clock() >= room.game.deadline) || allReady(room.game))
       ) {
         const previous = room.game,
           next = structuredClone(previous);
@@ -315,6 +343,7 @@ export function attachRooms(server: Server, options: Options = {}) {
           room.game = previous;
           room.game.paused = true;
           room.game.deadline = null;
+          room.game.turnDeadlineAt = null;
           for (const s of room.sessions.values())
             if (s.socket)
               send(s.socket, {
@@ -346,6 +375,27 @@ export function attachRooms(server: Server, options: Options = {}) {
   timer.unref();
   return {
     rooms,
+    listPublicRooms: (): PublicRoom[] =>
+      [...rooms.values()]
+        .filter((r) => r.game.isPublic && r.game.phase !== 'finished')
+        .map(({ game: g }) => ({
+          roomId: g.code,
+          roomName: g.roomName,
+          hostName: g.players.find((p) => p.id === g.hostId)?.name ?? 'Anfitrião',
+          theater:
+            g.mode === 'campaign'
+              ? 'Mapa-Múndi'
+              : g.theater === 'EUROPE'
+                ? 'Europa'
+                : g.theater === 'AMERICAS'
+                  ? 'Américas'
+                  : 'Ásia',
+          enableSecretObjectives: g.enableSecretObjectives,
+          playersCount: g.players.length,
+          maxPlayers: 8,
+          status: g.phase === 'lobby' ? 'LOBBY' : 'IN_GAME',
+          turn: g.turn,
+        })),
     wss,
     persist,
     tick,

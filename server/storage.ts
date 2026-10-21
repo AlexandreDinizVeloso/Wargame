@@ -13,7 +13,7 @@ import path from 'node:path';
 import type { GameState } from '../shared/types';
 import { UNIT_KEYS, unitCount } from '../shared/rules';
 import { parseOrder } from './commands';
-import { migrateV2 } from './migration';
+import { migrateV2, migrateV3 } from './migration';
 export interface SavedRoom {
   game: GameState;
   sessions: { playerId: string; tokenHash: string }[];
@@ -21,7 +21,7 @@ export interface SavedRoom {
   remainingMs: number;
 }
 interface Snapshot {
-  schemaVersion: 3;
+  schemaVersion: 4;
   savedAt: number;
   rooms: SavedRoom[];
 }
@@ -29,7 +29,7 @@ export function validGame(g: GameState): boolean {
   try {
     if (
       !g ||
-      g.version !== 3 ||
+      g.version !== 4 ||
       typeof g.code !== 'string' ||
       !['lobby', 'planning', 'finished'].includes(g.phase) ||
       !Array.isArray(g.players) ||
@@ -45,6 +45,12 @@ export function validGame(g: GameState): boolean {
       !Array.isArray(g.offers) ||
       !g.diet ||
       !g.orders ||
+      !Array.isArray(g.coalitions) ||
+      !Array.isArray(g.visionContracts) ||
+      typeof g.enableSecretObjectives !== 'boolean' ||
+      typeof g.isPublic !== 'boolean' ||
+      typeof g.roomName !== 'string' ||
+      !['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'].includes(g.season) ||
       !Number.isFinite(g.seed) ||
       !Number.isInteger(g.nextId) ||
       g.nextId < 1
@@ -62,9 +68,17 @@ export function validGame(g: GameState): boolean {
       return false;
     for (const p of g.players)
       if (
-        ![p.gold, p.manpower, p.influence, p.prestige, p.warExhaustion, p.stability].every(
-          Number.isFinite,
-        ) ||
+        ![
+          p.gold,
+          p.manpower,
+          p.influence,
+          p.prestige,
+          p.warExhaustion,
+          p.stability,
+          p.aggressiveExpansion,
+          p.fervor,
+          p.objectiveStreak,
+        ].every(Number.isFinite) ||
         p.gold < 0 ||
         p.manpower < 0 ||
         p.influence < 0 ||
@@ -89,9 +103,10 @@ export function validGame(g: GameState): boolean {
         p.pacification > 100 ||
         p.unrest < 0 ||
         p.unrest > 100 ||
-        [p.fortLevel, p.portLevel, p.marketLevel].some(
-          (v) => !Number.isInteger(v) || v < 0 || v > 3,
-        ) ||
+        !Number.isInteger(p.fortLevel) ||
+        p.fortLevel < 0 ||
+        p.fortLevel > 4 ||
+        [p.portLevel, p.marketLevel].some((v) => !Number.isInteger(v) || v < 0 || v > 3) ||
         (p.ownerId !== null && !ids.has(p.ownerId)) ||
         (p.occupierId !== null && !ids.has(p.occupierId)) ||
         !Array.isArray(p.rings) ||
@@ -150,14 +165,19 @@ function decode(value: unknown): SavedRoom[] {
   const snapshot = value as { schemaVersion: number; rooms: SavedRoom[] };
   if (
     !snapshot ||
-    ![2, 3].includes(snapshot.schemaVersion) ||
+    ![2, 3, 4].includes(snapshot.schemaVersion) ||
     !Array.isArray(snapshot.rooms) ||
     snapshot.rooms.length > 200
   )
     throw new Error('Snapshot inválido.');
   const rooms = snapshot.rooms.map((room) => ({
     ...room,
-    game: snapshot.schemaVersion === 2 ? migrateV2(room.game) : room.game,
+    game:
+      snapshot.schemaVersion === 2
+        ? migrateV2(room.game)
+        : snapshot.schemaVersion === 3
+          ? migrateV3(room.game)
+          : room.game,
   }));
   for (const room of rooms) {
     if (
@@ -189,6 +209,11 @@ export function readSnapshot(filename: string): SavedRoom[] {
         !existsSync(`${filename}.v2-backup`)
       )
         copyFileSync(candidate, `${filename}.v2-backup`);
+      if (
+        (raw as { schemaVersion: number }).schemaVersion === 3 &&
+        !existsSync(`${filename}.v3-backup`)
+      )
+        copyFileSync(candidate, `${filename}.v3-backup`);
       return rooms;
     } catch {
       continue;
@@ -201,7 +226,7 @@ export function readSnapshot(filename: string): SavedRoom[] {
   return [];
 }
 export function writeSnapshot(filename: string, rooms: SavedRoom[], now: number) {
-  const snapshot: Snapshot = { schemaVersion: 3, savedAt: now, rooms };
+  const snapshot: Snapshot = { schemaVersion: 4, savedAt: now, rooms };
   decode(snapshot);
   const temporary = `${filename}.tmp`;
   mkdirSync(path.dirname(filename), { recursive: true });
