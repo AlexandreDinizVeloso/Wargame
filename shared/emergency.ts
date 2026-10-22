@@ -1,3 +1,5 @@
+import { getNationAuthority } from './economy';
+import { verticalRules } from './fogOfWar';
 import { goldRules } from './factions';
 import type { GameState } from './types';
 export function levyReason(
@@ -17,7 +19,8 @@ export function levyReason(
     !g.provinces.some((q) => q.ownerId === id && (q.siege !== null || !!q.occupierId))
   )
     return 'Exige uma província perdida, ocupada ou sob cerco.';
-  if (p.gold < 50 || p.stability < 15) return 'Custa 50 ouro e 15 estabilidade.';
+  if (p.gold < 50 || (verticalRules(g) ? getNationAuthority(p) < 15 : p.stability < 15))
+    return verticalRules(g) ? 'Custa 50 ouro e 15 Autoridade.' : 'Custa 50 ouro e 15 estabilidade.';
   if (
     !g.provinces.some(
       (q) =>

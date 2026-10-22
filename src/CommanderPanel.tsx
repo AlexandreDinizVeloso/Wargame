@@ -1,3 +1,5 @@
+import { getNationAuthority } from '../shared/economy';
+import { verticalRules } from '../shared/fogOfWar';
 import { useState } from 'react';
 import type { Battalion, CommanderTrait, GameView } from '../shared/types';
 import { commanderFor, TRAITS } from '../shared/military';
@@ -92,11 +94,11 @@ export default function CommanderPanel({
           locked ||
           game.commanders.filter((c) => c.ownerId === playerId).length >= 3 ||
           me.gold - reserved.gold < 60 ||
-          me.influence - reserved.influence < 15
+          (verticalRules(game) ? getNationAuthority(me) : me.influence) - reserved.influence < 15
         }
         onClick={() => command({ type: 'RECRUIT_COMMANDER', isAdmiral: army.isFleet, trait })}
       >
-        Recrutar líder · 60 ouro + 15 influência
+        Recrutar líder · 60 ouro + 15 Autoridade
       </button>
       <small>
         {game.commanders.filter((c) => c.ownerId === playerId).length}/3 líderes ·{' '}

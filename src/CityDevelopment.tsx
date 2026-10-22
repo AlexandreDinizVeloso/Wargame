@@ -49,8 +49,8 @@ export default function CityDevelopment({
         </b>
       </div>
       <p className="fine-print">
-        Níveis compartilham o slot. Administração: custo de construção ×
-        {imperialInflation(game, playerId).toFixed(2)}.
+        Níveis compartilham o slot. Administração: +
+        {Math.round((imperialInflation(game, playerId) - 1) * 100)}% no custo de construção.
       </p>
       <div className="building-grid">
         {(Object.keys(BUILDINGS) as BuildingType[]).map((b) => {
@@ -75,7 +75,7 @@ export default function CityDevelopment({
                   onClick={() => command({ type: 'SUBMIT_ORDER', order })}
                 >
                   {level ? 'Melhorar' : 'Construir'} {data.name.split(' / ')[0]} ·{' '}
-                  {cost.gold.toFixed(0)} ouro
+                  {Math.round(cost.gold)} ouro
                 </button>
                 {level > 0 && (
                   <button

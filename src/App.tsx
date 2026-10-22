@@ -1,3 +1,7 @@
+import TurnResolutionSequencer, { CINEMATIC_DURATION } from './TurnResolutionSequencer';
+import TacticalBattleModal from './TacticalBattleModal';
+import { getNationAuthority } from '../shared/economy';
+import { verticalRules } from '../shared/fogOfWar';
 import { useStrategistProfile } from './useStrategistProfile';
 const StrategistProfileModal = lazy(() => import('./StrategistProfileModal'));
 import CampaignSaveControls from './CampaignSaveControls';
@@ -28,7 +32,6 @@ import {
   Download,
   Flag,
   Handshake,
-  Landmark,
   Menu,
   MessageSquare,
   Minus,
@@ -295,6 +298,10 @@ export default function App() {
     [manual, setManual] = useState(false),
     [menu, setMenu] = useState(false),
     [endOpen, setEndOpen] = useState(false),
+    [fogEnabled, setFogEnabled] = useState(true),
+    [tacticalBattle, setTacticalBattle] = useState<import('../shared/types').BattleReport | null>(
+      null,
+    ),
     [muted, setMuted] = useState(audio.muted),
     [now, setNow] = useState(Date.now()),
     [replay, setReplay] = useState<{
@@ -446,27 +453,51 @@ export default function App() {
       setWarRequest(null);
     }
   }, [endOpen]);
-  const playReplay = useCallback(
-    (report: TurnResolutionReport) => setReplay({ report, progress: 0, nonce: performance.now() }),
-    [],
-  );
+  const playReplay = useCallback((report: TurnResolutionReport) => {
+    setTacticalBattle(null);
+    setReplay({ report, progress: 0, nonce: performance.now() });
+  }, []);
   useEffect(() => {
     if (!replay) return;
-    const started = performance.now();
-    if (replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
-    if (replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
-    const finish = setTimeout(() => setReplay(null), 4000);
-    const cannon = setTimeout(() => {
-        if (replay.report.battles.length) audio.playCombatSound();
-      }, 1450),
+    const started = performance.now(),
+      cinematic = verticalRules(game),
+      duration = cinematic ? CINEMATIC_DURATION : 4000;
+    if (cinematic) audio.play('horn');
+    if (!cinematic && replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
+    if (!cinematic && replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
+    const finish = setTimeout(() => {
+      setReplay(null);
+      if (cinematic) setTacticalBattle(null);
+    }, duration);
+    const marching = setTimeout(() => {
+      if (cinematic) {
+        if (replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
+        if (replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
+      }
+    }, 1500);
+    const cannon = setTimeout(
+        () => {
+          if (cinematic) {
+            const battles = [...replay.report.battles].sort(
+              (a, b) => b.attackerTroops + b.defenderTroops - (a.attackerTroops + a.defenderTroops),
+            );
+            const chosen =
+              battles.find((b) => b.attackerId === playerId || b.defenderId === playerId) ??
+              battles[0];
+            if (chosen) setTacticalBattle(chosen);
+          } else if (replay.report.battles.length) audio.playCombatSound();
+        },
+        cinematic ? 3500 : 1450,
+      ),
       peace = setTimeout(() => {
         if (replay.report.diplomaticChanges.some((c) => c.action === 'PEACE')) audio.play('peace');
       }, 2900);
     let frame = 0;
     const tick = (t: number) => {
-      const progress = Math.min(1, (t - started) / 4000);
+      const progress = Math.min(1, (t - started) / duration);
       if (progress === 1) {
         setReplay(null);
+        if (cinematic) setTacticalBattle(null);
         return;
       }
       setReplay((r) => (r ? { ...r, progress } : null));
@@ -477,9 +508,11 @@ export default function App() {
       cancelAnimationFrame(frame);
       clearTimeout(finish);
       clearTimeout(cannon);
+      clearTimeout(marching);
       clearTimeout(peace);
     };
   }, [replay?.nonce]);
+  const closeTacticalBattle = useCallback(() => setTacticalBattle(null), []);
   const replayTurn = useRef<{ code: string; turn: number } | null>(null);
   useEffect(() => {
     if (!game) return;
@@ -540,6 +573,7 @@ export default function App() {
     setProvince('');
     setReference('');
     setReplay(null);
+    setTacticalBattle(null);
   }, [currentCode]);
   const rootClick = (event: React.MouseEvent) => {
     if (event.target instanceof Element && event.target.closest('button')) {
@@ -744,11 +778,19 @@ export default function App() {
         onCancelOrder={(id) => command({ type: 'CANCEL_ORDER', key: `army:${id}` })}
         onDeselect={() => setArmy('')}
         viewerId={playerId}
+        fogEnabled={fogEnabled}
+        onBattle={setTacticalBattle}
         replay={replay}
         pings={pings}
         onPing={signal}
       />
-      <MapLensSelector mode={mode} onChange={setMode} />
+      <MapLensSelector
+        mode={mode}
+        onChange={setMode}
+        fogAvailable={verticalRules(game)}
+        fogEnabled={fogEnabled}
+        onToggleFog={() => setFogEnabled((v) => !v)}
+      />
       <OutlinerDock
         game={game}
         playerId={playerId}
@@ -772,8 +814,8 @@ export default function App() {
                 : nationOf(me.nationId).ideas
               ).join(' · ')}
             >
-              {goldRules(game) ? FACTION_TRAITS[me.nationId].name : 'Campanha clássica'} · {me.name}{' '}
-              · prestígio {number(me.prestige)}
+              {goldRules(game) ? FACTION_TRAITS[me.nationId].name : 'Campanha clássica'} ·{' '}
+              {me.name}{' '}
             </small>
           </span>
           <ChevronDown size={12} />
@@ -795,45 +837,36 @@ export default function App() {
               </small>
             </span>
           </div>
-          <div className="hud-stat">
-            <Users size={16} />
+          <div
+            className="hud-stat reserves-stat"
+            title="Recrutas disponíveis / teto da reserva. Recuperação por rodada indicada abaixo."
+          >
+            <Users size={18} />
             <span>
               <strong>
-                {troopTotal}
-                <em> / {eco.armyCap}</em>
+                {number(me.manpower)} / {number(eco.manpowerCap)}
               </strong>
-              <small>FORÇAS / LIMITE DO EXÉRCITO</small>
-            </span>
-          </div>
-          <div className="hud-stat reserves-stat">
-            <Flag size={15} />
-            <span>
-              <strong>
-                {number(me.manpower)} / {number(eco.manpowerCap, 1)}
-                <em> / {number(me.influence)}</em>
-              </strong>
-              <small>RESERVAS / TETO · INFLUÊNCIA</small>
-            </span>
-          </div>
-          <div className="hud-stat faith-stat" title={RELIGIONS[me.faith].tenet}>
-            <Landmark size={16} />
-            <span>
-              <strong>{RELIGIONS[me.faith].name}</strong>
               <small>
-                {me.religiousPolicy === 'TOLERANCE' ? 'ÉDITO DE TOLERÂNCIA' : 'INQUISIÇÃO'}
+                RECRUTAS <b className="positive">+{number(eco.manpower)}/rod.</b>
               </small>
             </span>
           </div>
           <div
-            className="hud-stat exhaustion-stat"
-            title="Desgaste reduz receita, recuperação de moral e eleva revolta."
+            className="hud-stat authority-stat"
+            title="Autoridade reúne influência, prestígio e experiência militar. Nas novas campanhas paga doutrinas, líderes, diplomacia e Defesa da Pátria. Batalhas e decisões alteram a previsão básica."
           >
-            <Swords size={15} />
+            <Crown size={18} />
             <span>
-              <strong>{number(me.warExhaustion)}%</strong>
+              <strong data-testid="authority">{getNationAuthority(me)}</strong>
               <small>
-                DESGASTE · AMEAÇA {me.aggressiveExpansion}%
-                {me.nationId === 'sol_invicto' ? ` · FERVOR ${me.fervor}` : ''}
+                AUTORIDADE{' '}
+                <b className="positive">
+                  +
+                  {number(
+                    Math.max(0, Math.min(2, 50 - me.influence)) + (eco.owned.length ? 10 : 0),
+                  )}
+                  /rod.
+                </b>
               </small>
             </span>
           </div>
@@ -1078,7 +1111,24 @@ export default function App() {
           {panels[0] === 'analytics' && <PostGameAnalytics game={game} playerId={playerId} />}
         </TopBarModal>
       )}
-      {replay && (
+      {tacticalBattle && (
+        <TacticalBattleModal game={game} battle={tacticalBattle} onClose={closeTacticalBattle} />
+      )}
+      {replay && verticalRules(game) && (
+        <TurnResolutionSequencer
+          report={replay.report}
+          progress={replay.progress}
+          onSkip={() => {
+            setReplay(null);
+            setTacticalBattle(null);
+          }}
+          onReplay={() => {
+            setTacticalBattle(null);
+            playReplay(replay.report);
+          }}
+        />
+      )}
+      {replay && !verticalRules(game) && (
         <div className="replay-indicator">
           <Play size={13} />
           Resolução da rodada {replay.report.turn}
@@ -1150,7 +1200,7 @@ export default function App() {
                   .filter((o) => 'battalionId' in o && o.battalionId === selectedArmy.id)
                   .map((o) =>
                     o.type === 'AUTO_TRANSPORT'
-                      ? `Destino: ${game.provinces.find((p) => p.id === o.targetProvinceId)?.name} · ${o.fleetId ? 'ponte naval grátis' : `fretamento ${goldRules(game) && me.nationId === 'vespera' ? '7,5' : '15'} ouro`}`
+                      ? `Destino: ${game.provinces.find((p) => p.id === o.targetProvinceId)?.name} · ${o.fleetId ? 'ponte naval grátis' : `fretamento ${goldRules(game) && me.nationId === 'vespera' ? '8' : '15'} ouro`}`
                       : o.type === 'MOVE_BATTALION'
                         ? `Marcha: ${game.provinces.find((p) => p.id === (o.path?.at(-1) ?? o.targetProvinceId))?.name}`
                         : null,
@@ -1270,6 +1320,7 @@ export default function App() {
             playerId={playerId}
             command={command}
             tab={reportTab}
+            onBattle={setTacticalBattle}
             onReplay={playReplay}
             onFocus={focus}
           />
@@ -1387,6 +1438,10 @@ export default function App() {
               Relevo cartográfico 2,5D
             </label>
             <PlayerNameForm name={me.name} command={command} />
+            <p>
+              Forças: {troopTotal} / {eco.armyCap} · {RELIGIONS[me.faith].name} · desgaste{' '}
+              {number(me.warExhaustion)}%
+            </p>
             <section className="faction-trait-card">
               <h3>{goldRules(game) ? FACTION_TRAITS[me.nationId].name : 'Tradições nacionais'}</h3>
               <ul>

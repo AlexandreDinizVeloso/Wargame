@@ -73,7 +73,7 @@ export default function StrategistProfileModal({
             Vitórias: profile.stats.wins,
             'Batalhas vencidas': profile.stats.battles,
             'Províncias conquistadas': profile.stats.conquests,
-            'Ouro acumulado': profile.stats.gold.toFixed(1),
+            'Ouro acumulado': Math.round(profile.stats.gold),
           }).map(([name, value]) => (
             <div key={name}>
               <small>{name}</small>
@@ -92,9 +92,7 @@ export default function StrategistProfileModal({
                   {a.icon} {a.name}
                 </strong>
                 <p>{a.description}</p>
-                <small>
-                  {done ? 'Desbloqueada' : `${value.toFixed(value % 1 ? 1 : 0)} / ${a.target}`}
-                </small>
+                <small>{done ? 'Desbloqueada' : `${Math.round(value)} / ${a.target}`}</small>
                 <progress value={value} max={a.target} />
               </article>
             );

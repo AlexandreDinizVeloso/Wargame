@@ -8,7 +8,7 @@ export const FACTION_TRAITS: Record<NationId, FactionTrait> = {
     name: 'Talassocracia Mercante',
     effects: [
       'Portos adjacentes: +50% poder nos nós marítimos',
-      'Fretamento por 7,5 ouro',
+      'Fretamento pela metade (aprox. 8 ouro)',
       'Mercado: +1 recrutamento de infantaria/mercenários',
     ],
   },

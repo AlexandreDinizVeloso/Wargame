@@ -1,6 +1,8 @@
+import { integerEventText } from '../shared/economy';
 import type { GameNotification, GameState } from '../shared/types';
 import { nextId } from './state';
 export function notify(g: GameState, data: Omit<GameNotification, 'id' | 'turn'>) {
+  data = { ...data, text: integerEventText(data.text) };
   const ids = [...new Set(data.involvesPlayerIds)].filter((id) =>
     g.players.some((p) => p.id === id),
   );

@@ -1,3 +1,5 @@
+import { computeVisibleProvinces, visionPartners, verticalRules } from '../shared/fogOfWar';
+import { integerEventText, getNationAuthority, spendNationAuthority } from '../shared/economy';
 import { SCENARIOS } from '../shared/scenarios';
 import { eraTransition, botThreat } from './goldWorld';
 import { goldRules } from '../shared/factions';
@@ -754,7 +756,8 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
   assert(
     actor.gold - reserved.gold >= cost.gold &&
       actor.manpower - reserved.manpower >= cost.manpower &&
-      actor.influence - reserved.influence >= cost.influence,
+      (verticalRules(g) ? getNationAuthority(actor) : actor.influence) - reserved.influence >=
+        cost.influence,
     'Recursos livres insuficientes.',
   );
 }
@@ -803,7 +806,9 @@ export function submitOrder(g: GameState, id: string, raw: PlayerOrder) {
     return;
   }
   if (o.type === 'DIPLOMACY') {
+    const authorityCost = orderCost(o, undefined, playerOf(g, id), g).influence;
     diplomacy(g, id, o);
+    if (verticalRules(g)) spendNationAuthority(playerOf(g, id), authorityCost);
     return;
   }
   if (o.type === 'RECRUIT_BATTALION' && o.isMercenary) {
@@ -839,7 +844,11 @@ function resolveLocal(
   const actor = playerOf(g, id),
     p = g.provinces.find((p) => p.id === orderProvinceId(o, g));
   const cost = orderCost(o, p, actor, g);
-  if (actor.gold < cost.gold || actor.manpower < cost.manpower || actor.influence < cost.influence)
+  if (
+    actor.gold < cost.gold ||
+    actor.manpower < cost.manpower ||
+    (verticalRules(g) ? getNationAuthority(actor) : actor.influence) < cost.influence
+  )
     return;
   if (
     o.type === 'DIPLOMACY' ||
@@ -990,7 +999,8 @@ function resolveLocal(
   } else return;
   actor.gold = roundMoney(actor.gold - cost.gold);
   actor.manpower -= cost.manpower;
-  actor.influence -= cost.influence;
+  if (verticalRules(g)) spendNationAuthority(actor, cost.influence);
+  else actor.influence -= cost.influence;
 }
 function recoverAndRepatriate(
   g: GameState,
@@ -1615,6 +1625,7 @@ export function resolveTurn(g: GameState, _now = 0) {
       focusProvinceId: r.provinceId,
     });
   report.notifications = g.notifications.filter((n) => !startNoticeIds.has(n.id));
+  report.events = report.events.map(integerEventText);
   g.lastReport = report;
   g.reports = [...g.reports, report].slice(-8);
   g.history.push({
@@ -2342,6 +2353,12 @@ export function viewFor(g: GameState, id: string): GameView {
     ...publicState
   } = g;
   const result = structuredClone(publicState);
+  for (const report of [
+    ...result.history,
+    ...result.reports,
+    ...(result.lastReport ? [result.lastReport] : []),
+  ])
+    report.events = report.events.map(integerEventText);
   const redact = (report: TurnResolutionReport) => {
     report.notifications = report.notifications.filter((n) => canSeeNotification(n, id));
     for (const c of report.diplomaticChanges) if (c.covert && c.actorId !== id) c.actorId = null;
@@ -2353,6 +2370,7 @@ export function viewFor(g: GameState, id: string): GameView {
     finished = g.phase === 'finished';
   const shared = new Set([
     id,
+    ...(verticalRules(g) ? visionPartners(g, id) : []),
     ...g.players.filter((p) => p.subjectOfId === id).map((p) => p.id),
     ...g.visionContracts
       .filter((v) => v.buyerId === id && v.untilTurn >= g.turn)
@@ -2398,6 +2416,69 @@ export function viewFor(g: GameState, id: string): GameView {
               : a.pathQueue;
       } else a.pathQueue = [];
     }
+  if (verticalRules(g) && !finished && g.winnerId === null) {
+    const visible = computeVisibleProvinces(g, id),
+      partners = visionPartners(g, id);
+    const intelligenceText = (text: string) =>
+      !g.provinces.some(
+        (p) =>
+          !visible.has(p.id) &&
+          text.includes(p.name) &&
+          /baixa|tropa|ataque|defesa|infantaria|cavalaria|artilharia|frota|navio|exército|cerco/i.test(
+            text,
+          ),
+      );
+    result.notifications = result.notifications.filter((n) => intelligenceText(n.text));
+    const canSee = (owner: string, province: string) =>
+      partners.has(owner) || visible.has(province);
+    result.battalions = result.battalions.filter((a) => canSee(a.ownerId, a.provinceId));
+    const ids = new Set(result.battalions.map((a) => a.id));
+    result.commanders = result.commanders.filter(
+      (c) => partners.has(c.ownerId) || (c.assignedBattalionId && ids.has(c.assignedBattalionId)),
+    );
+    const filterReport = (report: TurnResolutionReport) => {
+      report.notifications = report.notifications.filter((n) => intelligenceText(n.text));
+      report.movements = report.movements.filter(
+        (m) =>
+          partners.has(m.ownerId) || visible.has(m.fromProvinceId) || visible.has(m.toProvinceId),
+      );
+      report.battles = report.battles.filter(
+        (b) =>
+          partners.has(b.attackerId) ||
+          partners.has(b.defenderId ?? '') ||
+          visible.has(b.provinceId),
+      );
+      report.attritionLosses = report.attritionLosses.filter((a) =>
+        canSee(a.ownerId, a.provinceId),
+      );
+      report.desertions = report.desertions.filter((a) => canSee(a.ownerId, a.provinceId));
+      report.encirclements = report.encirclements.filter((a) => canSee(a.ownerId, a.provinceId));
+      report.stackwipes = report.stackwipes.filter((a) => canSee(a.ownerId, a.provinceId));
+      report.sieges = report.sieges.filter((s) => canSee(s.attackerOwnerId, s.provinceId));
+      report.rebellions = report.rebellions.filter((r) => canSee(r.previousOwnerId, r.provinceId));
+      report.retreats = report.retreats.filter((a) => canSee(a.ownerId, a.fromProvinceId));
+      report.events = report.events.filter(
+        (text) =>
+          !g.provinces.some(
+            (p) =>
+              !visible.has(p.id) &&
+              text.includes(p.name) &&
+              /baixa|tropa|ataque|defesa|infantaria|cavalaria|artilharia|frota|navio|exército|cerco/i.test(
+                text,
+              ),
+          ),
+      );
+    };
+    if (result.lastReport) filterReport(result.lastReport);
+    result.reports.forEach(filterReport);
+    result.history.forEach(filterReport);
+    result.log = result.log.filter(
+      (entry) =>
+        entry.kind !== 'battle' ||
+        !g.provinces.some((p) => !visible.has(p.id) && entry.text.includes(p.name)),
+    );
+    for (const province of result.provinces) if (!visible.has(province.id)) province.siege = null;
+  }
   return {
     ...result,
     readNotificationIds: structuredClone(g.notificationReads[id] ?? []),

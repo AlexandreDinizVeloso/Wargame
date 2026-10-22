@@ -1,9 +1,10 @@
+import { integerValue } from '../shared/economy';
 import { Crown } from 'lucide-react';
 import type { GameCommand, NationId } from '../shared/types';
 import { EMBLEMS, nationOf } from '../shared/rules';
 export type Command = (command: GameCommand) => void;
-export const number = (value: number, digits = 0) =>
-  new Intl.NumberFormat('pt-BR', { maximumFractionDigits: digits }).format(value);
+export const number = (value: number, _digits = 0) =>
+  new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(integerValue(value));
 export function CoatOfArms({ nationId, size = 36 }: { nationId: NationId; size?: number }) {
   const n = nationOf(nationId);
   return (

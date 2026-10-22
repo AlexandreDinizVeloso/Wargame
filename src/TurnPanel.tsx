@@ -12,12 +12,14 @@ export default function TurnPanel({
   command,
   tab,
   onReplay,
+  onBattle,
   onFocus,
 }: {
   game: GameView;
   playerId: string;
   command: Command;
   tab: ReportTab;
+  onBattle?: (battle: import('../shared/types').BattleReport) => void;
   onReplay: (r: TurnResolutionReport) => void;
   onFocus: (id: string) => void;
 }) {
@@ -179,6 +181,9 @@ export default function TurnPanel({
                     <b>−{b.attackerCasualties + b.defenderCasualties}</b>
                   </summary>
                   <div className="battle-detail">
+                    <button onClick={() => onBattle?.(b)}>
+                      ⚔️ Rever confronto no Palco Tático
+                    </button>
                     <div className="ledger-grid">
                       <div>
                         <small>PODER OFENSIVO</small>

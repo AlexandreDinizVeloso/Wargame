@@ -189,3 +189,11 @@ O sinal dura seis segundos, não prepara ordens, não altera recursos/turno e n�
 `OFFER_PEACE` aceita `concession` e termos Gold `WHITE_PEACE`, `CEDE_PROVINCES`, `WAR_REPARATIONS`, `HUMILIATE_DEMILITARIZE`, `SUBJUGATE_VASSAL`. A soma é validada pelo servidor na criação e aceitação. `CAST_IMPERIAL_VOTE` registra voto na Dieta do cenário Coroa Continental.
 
 Eventos opcionais de era, metadados do tratado e estados dos cenários permanecem serializáveis/headless. O cliente calcula conquistas locais a partir da visão autorizada, sem enviar incrementos de dinheiro ou estatísticas ao servidor.
+
+## Extensões v0.99 (protocolo 7)
+
+`matchConfig.verticalSlice: true` ativa Autoridade e névoa nas novas salas; `createdVersion: 0.99.0` identifica a origem. A ausência do campo preserva as regras anteriores.
+
+`BattleReport.attackerCompositionBefore` e `defenderCompositionBefore` são opcionais e registram forças antes das baixas. Nenhum campo legado foi removido. A visão do cliente filtra forças, comandantes e detalhes de relatórios sem reconhecimento. O snapshot autoritativo e o Save JSON completo conservam o estado integral.
+
+`GET /api/audio-assets` retorna a lista dos arquivos opcionais disponíveis, sem exigir assets de áudio para iniciar o servidor. Shared/server continuam independentes do DOM e de src.

@@ -3,7 +3,13 @@ import type { MapMode } from '../shared/types';
 export default function MapLensSelector({
   mode,
   onChange,
+  fogAvailable = true,
+  fogEnabled = true,
+  onToggleFog,
 }: {
+  fogAvailable?: boolean;
+  fogEnabled?: boolean;
+  onToggleFog?: () => void;
   mode: MapMode;
   onChange: (mode: MapMode) => void;
 }) {
@@ -28,6 +34,19 @@ export default function MapLensSelector({
           </button>
         ))}
       </nav>
+      <button
+        className="fog-toggle"
+        aria-pressed={fogAvailable && fogEnabled}
+        disabled={!fogAvailable}
+        title={
+          fogAvailable
+            ? 'Alterna a camada visual. Tropas desconhecidas continuam ocultas pelo servidor.'
+            : 'Campanha anterior à v0.99: visão clássica preservada.'
+        }
+        onClick={onToggleFog}
+      >
+        👁️ {fogAvailable ? `Névoa ${fogEnabled ? 'Ativa' : 'Oculta'}` : 'Visão Clássica'}
+      </button>
       <small data-map-legend={mode}>{lens.legend}</small>
     </aside>
   );

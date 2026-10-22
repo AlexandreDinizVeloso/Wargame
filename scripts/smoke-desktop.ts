@@ -27,7 +27,7 @@ try {
   const page = await app.firstWindow();
   await page.getByRole('button', { name: 'Criar uma sala', exact: true }).waitFor();
   const health = await page.evaluate(() => fetch('/api/health').then((r) => r.json()));
-  assert.equal(health.version, '0.98.0');
+  assert.equal(health.version, '0.99.0');
   const preferences = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].webContents.getLastWebPreferences(),
   );

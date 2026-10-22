@@ -21,17 +21,28 @@ const mime: Record<string, string> = {
   '.png': 'image/png',
   '.woff2': 'font/woff2',
   '.json': 'application/json',
+  '.ogg': 'audio/ogg',
+  '.mp3': 'audio/mpeg',
 };
 const server = http.createServer((req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
+  if (req.method === 'GET' && req.url?.split('?')[0] === '/api/audio-assets') {
+    const folder = path.join(root, production ? 'dist' : 'public', 'assets', 'sfx');
+    const files = ['cannon', 'march', 'sail', 'horn', 'coin']
+      .flatMap((name) => ['ogg', 'mp3'].map((ext) => `${name}.${ext}`))
+      .filter((name) => existsSync(path.join(folder, name)));
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+    res.end(JSON.stringify(files));
+    return;
+  }
   if (req.url?.split('?')[0] === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
         status: 'ok',
         game: 'concordia',
-        version: '0.98.0',
+        version: '0.99.0',
         protocolVersion: 7,
       }),
     );
