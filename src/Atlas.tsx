@@ -13,6 +13,7 @@ import { ArmyCrestToken, FleetShipToken, SeaZoneCompassNode, MiniatureDefs } fro
 import { seaTradeNodes, SEA_TRADE_VALUE } from '../shared/maritime';
 import {
   CartographicDefs,
+  GeographyLayers,
   ProvinceRelief,
   ProvinceShading,
   InfrastructureSymbols,
@@ -834,6 +835,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             </g>
           );
         })}
+        <GeographyLayers provinces={provinces} />
         {fogActive &&
           provinces
             .filter((p) => !visible.has(p.id))

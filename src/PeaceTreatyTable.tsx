@@ -119,8 +119,8 @@ export default function PeaceTreatyTable({
           checked={humiliate}
           onChange={(e) => setHumiliate(e.target.checked)}
         />
-        Desmilitarização & Humilhação · 30 pontos — 15 prestígio, quatro rodadas desarmado e seis de
-        trégua
+        Desmilitarização & Humilhação · 30 pontos — 15 Autoridade, quatro rodadas desarmado e seis
+        de trégua
       </label>
       <label className="check-label">
         <input type="checkbox" checked={vassal} onChange={(e) => setVassal(e.target.checked)} />

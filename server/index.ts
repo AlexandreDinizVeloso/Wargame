@@ -5,7 +5,14 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachRooms } from './rooms';
-import { makeMap, makeStaticMap } from '../shared/map';
+import {
+  makeMap,
+  makeStaticMap,
+  WORLD_RIVERS,
+  riverCrossings,
+  impassableFeatures,
+} from '../shared/map';
+import { DILEMMAS } from '../shared/dilemmas';
 import { NATIONS, RELIGIONS, EMBLEMS, holyCityId } from '../shared/rules';
 import { EVENTS, RESOURCES, SEASONS } from '../shared/strategy';
 import { OBJECTIVES } from '../shared/types';
@@ -21,6 +28,7 @@ const mime: Record<string, string> = {
   '.png': 'image/png',
   '.woff2': 'font/woff2',
   '.json': 'application/json',
+  '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
   '.mp3': 'audio/mpeg',
 };
@@ -30,7 +38,7 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url?.split('?')[0] === '/api/audio-assets') {
     const folder = path.join(root, production ? 'dist' : 'public', 'assets', 'sfx');
     const files = ['cannon', 'march', 'sail', 'horn', 'coin']
-      .flatMap((name) => ['ogg', 'mp3'].map((ext) => `${name}.${ext}`))
+      .flatMap((name) => ['wav', 'ogg', 'mp3'].map((ext) => `${name}.${ext}`))
       .filter((name) => existsSync(path.join(folder, name)));
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
     res.end(JSON.stringify(files));
@@ -42,15 +50,20 @@ const server = http.createServer((req, res) => {
       JSON.stringify({
         status: 'ok',
         game: 'concordia',
-        version: '0.99.0',
+        version: '1.0.0',
         protocolVersion: 7,
       }),
     );
     return;
   }
-  if (req.method === 'GET' && req.url?.split('?')[0] === '/api/rooms') {
+  if (
+    req.method === 'GET' &&
+    ['/api/rooms', '/api/rooms/public'].includes(req.url?.split('?')[0] ?? '')
+  ) {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify(roomService.listPublicRooms()));
+    res.end(
+      JSON.stringify(roomService.listPublicRooms(req.url?.split('?')[0] === '/api/rooms/public')),
+    );
     return;
   }
   if (req.url?.split('?')[0] === '/api/schema') {
@@ -78,6 +91,10 @@ const server = http.createServer((req, res) => {
           ]),
         ),
         objectives: OBJECTIVES,
+        dilemmas: DILEMMAS,
+        rivers: WORLD_RIVERS,
+        riverCrossings,
+        impassableFeatures,
         skills: SKILLS,
         commanderTraits: TRAITS,
         buildings: BUILDINGS,

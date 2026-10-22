@@ -1,3 +1,4 @@
+import { hasRiverCrossing } from './map';
 import { goldRules, hasFoundry } from './factions';
 import type { Battalion, Province, GameState, GameView } from './types';
 import { commanderFor, hasSkill } from './military';
@@ -161,8 +162,23 @@ export function combatPowers(
       ? 0.85
       : 1;
   const holy = !naval && attackers.some((a) => p.conversionInstigatorId === a.ownerId) ? 1.15 : 1;
-  const attackPower =
-    attackers.reduce((n, a) => n + compositionPower(g, a, p, false, defenders), 0) * holy;
+  const crossing = (a: Battalion) =>
+    !naval &&
+    hasRiverCrossing(
+      a.provinceId !== p.id
+        ? a.provinceId
+        : a.lastMovedTurn === g.turn
+          ? (a.previousProvinceId ?? p.id)
+          : p.id,
+      p.id,
+    );
+  const baseAttack = attackers.reduce((n, a) => n + compositionPower(g, a, p, false, defenders), 0);
+  const crossedAttack = attackers.reduce(
+    (n, a) => n + compositionPower(g, a, p, false, defenders) * (crossing(a) ? 0.85 : 1),
+    0,
+  );
+  const riverCrossingModifier = baseAttack > 0 ? crossedAttack / baseAttack : 1;
+  const attackPower = crossedAttack * holy;
   const defensePower =
     defenders.reduce((n, a) => n + compositionPower(g, a, p, true, attackers), 0) *
     (naval
@@ -178,6 +194,7 @@ export function combatPowers(
         bombardmentModifier);
   return {
     attackPower,
+    riverCrossingModifier,
     defensePower,
     ratio: attackPower / Math.max(1, defensePower),
     neutralizedFortLevels,

@@ -148,7 +148,9 @@ try {
   await states[0].until((g) => g.players[0].nationId === 'sol_invicto');
   for (let i = 1; i < 3; i++) {
     await pages[i].goto(base);
-    await pages[i].getByRole('heading', { name: '🌐 Salas Abertas (Server Browser)' }).waitFor();
+    await pages[i]
+      .getByRole('heading', { name: '🌐 Salas Abertas (Entrar em 1 Clique)' })
+      .waitFor();
     const card = pages[i].locator('.server-browser article').filter({ hasText: 'Fronteiras v0.6' });
     await card.getByRole('button', { name: 'Entrar na Sala', exact: true }).click();
     await states[i].until((g) => g.players.length === i + 1);
@@ -464,7 +466,9 @@ try {
   const mobilePage = await mobile.newPage();
   await mobilePage.goto(base);
   await viewport(mobilePage);
-  await mobilePage.getByRole('heading', { name: '🌐 Salas Abertas (Server Browser)' }).waitFor();
+  await mobilePage
+    .getByRole('heading', { name: '🌐 Salas Abertas (Entrar em 1 Clique)' })
+    .waitFor();
   await mobilePage.screenshot({ path: '.local/screenshots/rc-multiplayer-inicio-celular.png' });
   if (fixtures) {
     const openFixture = async (session: FixtureSession) => {
@@ -591,6 +595,7 @@ try {
     await ferry.state.until((g) =>
       g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION' && o.path?.[0] === 'maghreb'),
     );
+    await ferry.page.locator(`[data-battalion="${main.id}"]`).press('Enter');
     await ferry.page.getByRole('button', { name: '❌ Cancelar Ordem Atual', exact: true }).click();
     await rightClickProvince(ferry.page, 'brazil');
     await ferry.state.until((g) =>
@@ -620,7 +625,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Smoke v0.99 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
+    'Smoke v1.0 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
 } finally {
   await browser.close();

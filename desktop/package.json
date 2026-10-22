@@ -1,6 +1,6 @@
 {
   "name": "concordia-desktop",
-  "version": "0.99.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Conc\u00f3rdia desktop client and local multiplayer host",
   "main": "main.cjs",

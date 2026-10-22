@@ -156,6 +156,7 @@ export default function TacticalBattleModal({
                   ? TERRAIN_LABELS[province.terrain]
                   : 'CAMPO DE BATALHA'}{' '}
               · FORTE {battle.fortLevel}
+              {(battle.riverCrossingModifier ?? 1) < 1 && ' · 🌊 Travessia de Rio: −15%'}
             </small>
             <h2>⚔️ {province?.name ?? battle.provinceId}</h2>
           </div>

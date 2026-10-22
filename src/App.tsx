@@ -1,26 +1,20 @@
-import TurnResolutionSequencer, { CINEMATIC_DURATION } from './TurnResolutionSequencer';
-import TacticalBattleModal from './TacticalBattleModal';
 import { getNationAuthority } from '../shared/economy';
+import { FACTION_TRAITS, goldRules } from '../shared/factions';
 import { verticalRules } from '../shared/fogOfWar';
+import { ERAS, campaignEra } from '../shared/world';
+import CampaignSaveControls from './CampaignSaveControls';
+import DilemmaCard from './DilemmaCard';
+import MapLensSelector from './MapLensSelector';
+import { MaritimeOverview } from './MaritimePanel';
+import OutlinerDock from './OutlinerDock';
+import TacticalBattleModal from './TacticalBattleModal';
+import { TopBarModal } from './TopBarModal';
+import TurnResolutionSequencer, { CINEMATIC_DURATION } from './TurnResolutionSequencer';
+import TutorialOverlay from './TutorialOverlay';
 import { useStrategistProfile } from './useStrategistProfile';
 const StrategistProfileModal = lazy(() => import('./StrategistProfileModal'));
-import CampaignSaveControls from './CampaignSaveControls';
-import MapLensSelector from './MapLensSelector';
-import OutlinerDock from './OutlinerDock';
-import { ERAS, campaignEra } from '../shared/world';
-import { goldRules, FACTION_TRAITS } from '../shared/factions';
 const PostGameAnalytics = lazy(() => import('./PostGameAnalytics'));
-import TutorialOverlay from './TutorialOverlay';
-import { TopBarModal } from './TopBarModal';
-import { MaritimeOverview } from './MaritimePanel';
-const CommanderPanel = lazy(() => import('./CommanderPanel'));
-import { AudioControls } from './AudioControls';
-import CampaignPanel from './CampaignPanel';
-import PlayerNameForm from './PlayerNameForm';
-const SkillTreeDrawer = lazy(() => import('./SkillTreeDrawer'));
-import { crossingOptions } from '../shared/naval';
-import PersonalAlerts from './Notifications';
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+
 import {
   Anchor,
   BookOpen,
@@ -45,37 +39,44 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import type { Battalion, GameView, MapMode, Province, TurnResolutionReport } from '../shared/types';
-import { OBJECTIVES } from '../shared/types';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { crossingOptions } from '../shared/naval';
 import {
-  nationOf,
+  RELIGIONS,
   atWar,
   canUnitVisit,
   chronicle,
   controller,
   landProvinces,
   livingPlayers,
+  nationOf,
   realmEconomy,
-  RELIGIONS,
   telemetry,
   unitCount,
   unitPath,
 } from '../shared/rules';
-import { useGame } from './useGame';
+import { SEASONS } from '../shared/strategy';
+import type { Battalion, GameView, MapMode, Province, TurnResolutionReport } from '../shared/types';
+import { OBJECTIVES } from '../shared/types';
 import Atlas, { MAP_MODES, type CameraHandle } from './Atlas';
+import { AudioControls } from './AudioControls';
+import BattalionDrawer, { CommanderPanel, TacticalBar } from './BattalionDrawer';
+import CampaignPanel from './CampaignPanel';
 import { Entry, Lobby } from './Entry';
+import FirstReadyBanner from './FirstReadyBanner';
+import PersonalAlerts from './Notifications';
+import PlayerNameForm from './PlayerNameForm';
 import ProvinceDrawer from './ProvinceDrawer';
-import BattalionDrawer, { TacticalBar } from './BattalionDrawer';
+import type { ReportTab } from './TurnPanel';
+import WarModal from './WarModal';
+import { audio } from './audio';
+import { CoatOfArms, number, typing } from './ui';
+import { useGame } from './useGame';
+const SkillTreeDrawer = lazy(() => import('./SkillTreeDrawer'));
 const DiplomacyDrawer = lazy(() => import('./DiplomacyDrawer'));
 const WorldDrawer = lazy(() => import('./WorldDrawer'));
 const SecretDrawer = lazy(() => import('./SecretDrawer'));
-import WarModal from './WarModal';
-import FirstReadyBanner from './FirstReadyBanner';
-import { SEASONS } from '../shared/strategy';
-import type { ReportTab } from './TurnPanel';
 const TurnPanel = lazy(() => import('./TurnPanel'));
-import { audio } from './audio';
-import { CoatOfArms, number, typing } from './ui';
 function download(game: GameView, format: 'json' | 'txt') {
   const text = format === 'json' ? JSON.stringify(telemetry(game), null, 2) : chronicle(game),
     blob = new Blob([text], {
@@ -784,6 +785,7 @@ export default function App() {
         pings={pings}
         onPing={signal}
       />
+      <DilemmaCard game={game} playerId={playerId} command={command} />
       <MapLensSelector
         mode={mode}
         onChange={setMode}
@@ -853,7 +855,7 @@ export default function App() {
           </div>
           <div
             className="hud-stat authority-stat"
-            title="Autoridade reúne influência, prestígio e experiência militar. Nas novas campanhas paga doutrinas, líderes, diplomacia e Defesa da Pátria. Batalhas e decisões alteram a previsão básica."
+            title="Autoridade paga doutrinas, líderes, diplomacia e decretos. Vitórias e dilemas alteram a geração básica por rodada."
           >
             <Crown size={18} />
             <span>
@@ -1416,8 +1418,8 @@ export default function App() {
             <CoatOfArms nationId={me.nationId} size={48} />
             <h2>{me.nation}</h2>
             <p>
-              {RELIGIONS[me.faith].name} · estabilidade {number(me.stability)}% · prestígio{' '}
-              {number(me.prestige)}
+              {RELIGIONS[me.faith].name} · estabilidade {number(me.stability)}% · Autoridade{' '}
+              {getNationAuthority(me)}
             </p>
             <label className="check-label">
               <input

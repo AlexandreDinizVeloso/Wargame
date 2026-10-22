@@ -128,7 +128,7 @@ test('v099: autoridade soma componentes e gasto não duplica nem deixa saldo neg
   assert.equal(spendNationAuthority(p, -1), false);
   assert.equal(getNationAuthority({ influence: 1.2, prestige: 2.4, militaryXP: 0 }), 4);
 });
-test('v099: doutrina usa autoridade mesmo sem XP e legado mantém custo de XP', () => {
+test('v099: doutrina usa autoridade mesmo sem XP também em partidas anteriores', () => {
   const {
     g,
     players: [me],
@@ -142,7 +142,9 @@ test('v099: doutrina usa autoridade mesmo sem XP e legado mantém custo de XP', 
   assert.ok(getNationAuthority(me) < before);
   const legacy = setup();
   legacy.players[0].militaryXP = 0;
-  assert.throws(() => unlockSkill(legacy.g, legacy.players[0].id, 'INF_T1'));
+  legacy.players[0].influence = 50;
+  unlockSkill(legacy.g, legacy.players[0].id, 'INF_T1');
+  assert.ok(legacy.players[0].unlockedSkills.includes('INF_T1'));
   assert.equal(verticalRules(legacy.g), false);
 });
 test('v099: ações diplomáticas cobram Autoridade e preservam ouro', () => {

@@ -151,6 +151,10 @@ test('salas privadas ficam fora do browser e opções de lobby preservam cenári
       'maxPlayers',
       'status',
       'turn',
+      'scenario',
+      'joinable',
+      'replaceableBots',
+      'humanPlayersCount',
     ].sort(),
   );
   assert.equal(list[0].roomId, joined.code);

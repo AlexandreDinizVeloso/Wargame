@@ -1,13 +1,21 @@
+import {
+  buildingLevel,
+  buildingLimit,
+  BUILDINGS,
+  buildingSlots,
+  canBuild,
+  imperialInflation,
+  usedSlots,
+} from '../shared/development';
+import type { BuildingType } from '../shared/types';
+
 import { getNationAuthority } from '../shared/economy';
-import { computeVisibleProvinces, verticalRules } from '../shared/fogOfWar';
-import { goldRules } from '../shared/factions';
-import { buildingSlots, usedSlots } from '../shared/development';
 import { levyReason } from '../shared/emergency';
-import { SeaTradeCard } from './MaritimePanel';
+import { goldRules } from '../shared/factions';
+import { computeVisibleProvinces, verticalRules } from '../shared/fogOfWar';
 import { independentCity, neutralTarget, nextNeutralTurn } from '../shared/neutral';
-import CityDevelopment from './CityDevelopment';
-import { provinceRecruitLimit, recruitedCount, recruitmentBlock } from '../shared/economy';
-import { useState, useEffect } from 'react';
+import { SeaTradeCard } from './MaritimePanel';
+
 import {
   Anchor,
   ArrowUpRight,
@@ -19,8 +27,8 @@ import {
   Swords,
   Users,
 } from 'lucide-react';
-import type { Battalion, Composition, GameView, PlayerOrder, Province } from '../shared/types';
-import { effectiveSupply, RESOURCES } from '../shared/strategy';
+import { useEffect, useState } from 'react';
+import { provinceRecruitLimit, recruitedCount, recruitmentBlock } from '../shared/economy';
 import { TERRAIN_LABELS } from '../shared/map';
 import {
   compositionOf,
@@ -35,6 +43,8 @@ import {
   reservedResources,
   unitCount,
 } from '../shared/rules';
+import { effectiveSupply, RESOURCES } from '../shared/strategy';
+import type { Battalion, Composition, GameView, PlayerOrder, Province } from '../shared/types';
 import { Empty, Meter, number, type Command } from './ui';
 export function budgetFor(game: GameView, id: string, order: PlayerOrder) {
   const actor = game.players.find((p) => p.id === id)!;
@@ -58,8 +68,7 @@ export function budgetFor(game: GameView, id: string, order: PlayerOrder) {
     affordable:
       actor.gold - reserved.gold >= cost.gold &&
       actor.manpower - reserved.manpower >= cost.manpower &&
-      (verticalRules(game) ? getNationAuthority(actor) : actor.influence) - reserved.influence >=
-        cost.influence,
+      getNationAuthority(actor) - reserved.influence >= cost.influence,
   };
 }
 export default function ProvinceDrawer({
@@ -512,12 +521,7 @@ export default function ProvinceDrawer({
               !own,
               <Flag size={17} />,
             )}
-            <CityDevelopment
-              game={game}
-              province={province}
-              playerId={playerId}
-              command={command}
-            />
+            {renderCityDevelopment({ game, province, playerId, command })}
 
             <button
               className="action-row"
@@ -543,10 +547,7 @@ export default function ProvinceDrawer({
                 <button
                   className="emergency-levy"
                   disabled={!!levyReason(game, playerId)}
-                  title={
-                    levyReason(game, playerId) ??
-                    (verticalRules(game) ? '50 ouro e 15 Autoridade' : '50 ouro e 15 estabilidade')
-                  }
+                  title={levyReason(game, playerId) ?? '50 ouro e 15 Autoridade'}
                   onClick={() => command({ type: 'EMERGENCY_LEVY' })}
                 >
                   🛡️ Convocar Defesa da Pátria
@@ -749,5 +750,94 @@ export default function ProvinceDrawer({
         </>
       )}
     </div>
+  );
+}
+
+export function renderCityDevelopment({
+  game,
+  province,
+  playerId,
+  command,
+}: {
+  game: GameView;
+  province: Province;
+  playerId: string;
+  command: Command;
+}) {
+  const me = game.players.find((p) => p.id === playerId)!,
+    active =
+      !me.ready &&
+      game.phase === 'planning' &&
+      province.ownerId === playerId &&
+      !province.occupierId;
+  const reserved = reservedResources(
+    { ...game, orders: { [playerId]: game.plannedOrders } },
+    playerId,
+    `city:${province.id}`,
+  );
+  return (
+    <section className="city-development">
+      <h3>🏙️ Especialização da cidade</h3>
+      <div
+        className="building-slots"
+        aria-label={`${usedSlots(province)} de ${buildingSlots(province)} slots ocupados`}
+      >
+        {Array.from({ length: buildingSlots(province) }, (_, i) => (
+          <span className={i < usedSlots(province) ? 'filled' : ''} key={i}>
+            {i < usedSlots(province) ? '▣' : '□'}
+          </span>
+        ))}
+        <b>
+          {usedSlots(province)}/{buildingSlots(province)} slots
+        </b>
+      </div>
+      <p className="fine-print">
+        Níveis compartilham o slot. Administração: +
+        {Math.round((imperialInflation(game, playerId) - 1) * 100)}% no custo de construção.
+      </p>
+      <div className="building-grid">
+        {(Object.keys(BUILDINGS) as BuildingType[]).map((b) => {
+          const data = BUILDINGS[b],
+            level = buildingLevel(province, b),
+            order = { type: 'BUILD_BUILDING' as const, provinceId: province.id, building: b },
+            cost = orderCost(order, province, me, game);
+          return (
+            <article className="building-card" key={b}>
+              <header>
+                <strong>{data.name}</strong>
+                <small>
+                  Nível {level}/{buildingLimit(b, me)}
+                </small>
+              </header>
+              <p>{data.description}</p>
+              <div className="button-pair">
+                <button
+                  disabled={
+                    !active || !canBuild(province, b, me) || me.gold - reserved.gold < cost.gold
+                  }
+                  onClick={() => command({ type: 'SUBMIT_ORDER', order })}
+                >
+                  {level ? 'Melhorar' : 'Construir'} {data.name.split(' / ')[0]} ·{' '}
+                  {Math.round(cost.gold)} ouro
+                </button>
+                {level > 0 && (
+                  <button
+                    disabled={!active}
+                    onClick={() =>
+                      command({
+                        type: 'SUBMIT_ORDER',
+                        order: { type: 'DEMOLISH_BUILDING', provinceId: province.id, building: b },
+                      })
+                    }
+                  >
+                    Demolir {data.name.split(' / ')[0]}
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }

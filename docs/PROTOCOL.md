@@ -6,14 +6,14 @@
 
 | Rota              | Retorno                                                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------- |
-| `GET /api/health` | `status: ok`, `version: 0.9.0-rc.1`, `protocolVersion: 7`                                   |
+| `GET /api/health` | `status: ok`, `version: 1.0.0`, `protocolVersion: 7`                                        |
 | `GET /api/schema` | Nações, mapas, recursos, crises, crenças, ordens, `skills`, `commanderTraits` e `buildings` |
 | `GET /api/rooms`  | Array de salas públicas não encerradas, sem sessão ou cartas privadas                       |
 | `/ws`             | WebSocket de mensagens JSON                                                                 |
 
 Browser usa mesma origem; cliente nativo pode omitir `Origin`. Mensagens têm até 16 KiB; há limite de frequência. HTTPS exige WSS.
 
-Cada item da listagem possui `roomId`, `roomName`, `hostName`, `theater` (`Mapa-Múndi`, `Europa`, `Américas`, `Ásia`), `enableSecretObjectives`, `playersCount`, `maxPlayers`, `status` (`LOBBY`/`IN_GAME`) e `turn`. O cliente consulta a cada 2 segundos. Só salas em lobby com vaga aceitam novas entradas; campanhas iniciadas exigem reconexão de sessão existente.
+Cada item da listagem possui `roomId`, `roomName`, `hostName`, `theater` (`Mapa-Múndi`, `Europa`, `Américas`, `Ásia`), `enableSecretObjectives`, `playersCount`, `maxPlayers`, `status` (`LOBBY`/`IN_GAME`) e `turn`. O cliente consulta a cada 2 segundos. Lobbies com vaga aceitam novas entradas. Campanhas públicas também permitem assumir bots permanentes substituíveis; humanos e regentes temporários exigem reconexão com o token da sessão.
 
 ## Entrada
 
@@ -192,8 +192,19 @@ Eventos opcionais de era, metadados do tratado e estados dos cenários permanece
 
 ## Extensões v0.99 (protocolo 7)
 
-`matchConfig.verticalSlice: true` ativa Autoridade e névoa nas novas salas; `createdVersion: 0.99.0` identifica a origem. A ausência do campo preserva as regras anteriores.
+Na v0.99, `matchConfig.verticalSlice: true` ativava Autoridade e névoa nas novas salas; `createdVersion: 0.99.0` identifica a origem. A ausência do campo preserva as regras anteriores.
 
 `BattleReport.attackerCompositionBefore` e `defenderCompositionBefore` são opcionais e registram forças antes das baixas. Nenhum campo legado foi removido. A visão do cliente filtra forças, comandantes e detalhes de relatórios sem reconhecimento. O snapshot autoritativo e o Save JSON completo conservam o estado integral.
 
 `GET /api/audio-assets` retorna a lista dos arquivos opcionais disponíveis, sem exigir assets de áudio para iniciar o servidor. Shared/server continuam independentes do DOM e de src.
+
+## Extensões v1.0 (protocolo 7)
+
+- `GET /api/rooms/public`: apenas lobbies com vaga ou campanhas públicas com bot permanente substituível. Inclui `scenario`, `humanPlayersCount`, `replaceableBots` e `joinable`, além dos campos da listagem anterior.
+- `join` em campanha pública pode assumir uma nação de bot permanente. Regentes AFK não são vagas públicas. Token humano existente é preservado durante regência.
+- `{type:"CHOOSE_DILEMMA", option:0|1}` resolve o dilema privado da rodada. `activeDilemma: {id,turn}|null`, `lastDilemmaTurn`, `authority`, `afkStreak` e `afkRegent` são extensões opcionais de jogador.
+- `authority` é sincronizada pelo servidor em cada comando e resolução; o cliente não altera o valor. Os campos antigos continuam serializáveis para compatibilidade, compondo a reserva única.
+- `previousProvinceId` e `lastMovedTurn` no batalhão registram a origem usada pelo modificador de rio. `riverCrossingModifier` no relatório indica a média ponderada aplicada ao poder atacante.
+- `GET /api/audio-assets` inclui os cinco arquivos WAV PCM. `GET /api/schema` retorna o mapa expandido; saves carregados conservam a geometria armazenada.
+
+As regras novas de Autoridade, logística, dilemas e regência valem independentemente de `verticalSlice`. Esse campo continua controlando névoa e apresentação histórica. Consulte [v1.0](V1_0.md).

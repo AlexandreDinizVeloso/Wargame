@@ -115,6 +115,8 @@ export function retreatArmy(
   a.pathQueue = [];
   a.stranded = !target;
   if (target) {
+    a.previousProvinceId = a.provinceId;
+    a.lastMovedTurn = g.turn;
     a.provinceId = target.id;
     syncCargo(g, a);
   }

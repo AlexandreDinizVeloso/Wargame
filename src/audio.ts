@@ -38,7 +38,7 @@ class Synthesizer {
       if (!Array.isArray(files)) return;
       await Promise.allSettled(
         ['cannon', 'march', 'sail', 'horn', 'coin'].map(async (name) => {
-          for (const extension of ['ogg', 'mp3']) {
+          for (const extension of ['wav', 'ogg', 'mp3']) {
             const filename = `${name}.${extension}`;
             if (!files.includes(filename)) continue;
             try {

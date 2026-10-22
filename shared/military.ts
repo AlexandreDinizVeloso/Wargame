@@ -1,6 +1,4 @@
 import { getNationAuthority } from './economy';
-import { verticalRules } from './fogOfWar';
-import { technologyCost } from './world';
 import type {
   Battalion,
   CommanderTrait,
@@ -10,6 +8,7 @@ import type {
   SkillDefinition,
   SkillId,
 } from './types';
+import { technologyCost } from './world';
 export const TRAITS: Record<CommanderTrait, { name: string; description: string }> = {
   SIEGE_MASTER: {
     name: 'Mestre de Cerco',
@@ -97,11 +96,8 @@ export function skillBlock(p: Player, id: SkillId, g?: Pick<GameState, 'turn'>):
   const s = SKILLS.find((s) => s.id === id);
   if (!s) return 'Doutrina desconhecida.';
   if (p.unlockedSkills.includes(id)) return 'Doutrina já desbloqueada.';
-  if (
-    (verticalRules(g) ? getNationAuthority(p) : p.militaryXP) <
-    (g ? technologyCost(g, s.tier, s.cost) : s.cost)
-  )
-    return verticalRules(g) ? 'Autoridade insuficiente.' : 'Experiência militar insuficiente.';
+  if (getNationAuthority(p) < (g ? technologyCost(g, s.tier, s.cost) : s.cost))
+    return 'Autoridade insuficiente.';
   if (s.tier > 1 && !p.unlockedSkills.includes(`${s.branch}_T1` as SkillId))
     return 'Desbloqueie o primeiro nível.';
   if (s.tier === 2 && p.unlockedSkills.some((i) => i.startsWith(`${s.branch}_T2`)))

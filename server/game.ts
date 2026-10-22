@@ -1,35 +1,59 @@
-import { computeVisibleProvinces, visionPartners, verticalRules } from '../shared/fogOfWar';
-import { integerEventText, getNationAuthority, spendNationAuthority } from '../shared/economy';
-import { SCENARIOS } from '../shared/scenarios';
-import { eraTransition, botThreat } from './goldWorld';
-import { goldRules } from '../shared/factions';
-import { supplyConsumption, invasionAttrition } from '../shared/logistics';
-import { applyScenario } from './scenarios';
 import { realmTurnAnalytics } from '../shared/campaignAnalytics';
-import { friendlyRest, offensiveBlock, isDisorganized, markDisorganized } from '../shared/morale';
-import { neutralTarget } from '../shared/neutral';
-import { bombardmentBlock, seaTradeNodes } from '../shared/maritime';
-import { resolveBombardments } from './maritime';
-import { desertForMaintenance, recordGoldReparations } from './economy';
-import { WORLD_STARTS } from '../shared/map';
 import {
   buildingLevel,
   buildingSlots,
   canBuild,
   constructionType,
   setBuildingLevel,
-  subjugationEligible,
 } from '../shared/development';
+import {
+  getNationAuthority,
+  integerEventText,
+  moraleRecovery,
+  realmLimits,
+  recruitedCount,
+  recruitmentBlock,
+  spendNationAuthority,
+  syncNationAuthority,
+} from '../shared/economy';
+import { goldRules } from '../shared/factions';
+import { computeVisibleProvinces, verticalRules, visionPartners } from '../shared/fogOfWar';
+import { invasionAttrition, supplyConsumption } from '../shared/logistics';
+import { makeMap, WORLD_STARTS } from '../shared/map';
+import { bombardmentBlock } from '../shared/maritime';
 import { commanderFor, hasSkill, movementAllowance } from '../shared/military';
-import { bridgeOptions, crossingOptions } from '../shared/naval';
-import { instantArmyAction, recruitCommander, unlockSkill, autoMerge } from './armies';
-import { assaultSiege, advanceSieges } from './siege';
-import { realmLimits, recruitmentBlock, recruitedCount, moraleRecovery } from '../shared/economy';
-import { notify, canSeeNotification } from './notifications';
-import { applyEncirclement } from './logistics';
-import { emergencyLevy } from './emergency';
-import { resolveBridges, prepareTransport } from './transport';
-import { advanceWorld, endWorld, dealObjectives, joinCoalition, coalitionWar } from './world';
+import { friendlyRest, isDisorganized, markDisorganized, offensiveBlock } from '../shared/morale';
+import { bridgeOptions } from '../shared/naval';
+import { neutralTarget } from '../shared/neutral';
+import {
+  attritionLoss,
+  atWar,
+  canTransit,
+  canTraverse,
+  clamp,
+  compositionOf,
+  controller,
+  dietSnapshot,
+  getRelation,
+  isBlockaded,
+  landCount,
+  livingPlayers,
+  nationOf,
+  NATIONS,
+  orderCost,
+  orderKey,
+  orderProvinceId,
+  realmEconomy,
+  reservedResources,
+  roundMoney,
+  shortestPath,
+  UNIT_KEYS,
+  unitCount,
+  unitPath,
+  victoryStatus,
+  zeroComposition,
+} from '../shared/rules';
+import { SCENARIOS } from '../shared/scenarios';
 import { effectiveSupply, isCamouflaged, seasonAt, winterActive } from '../shared/strategy';
 import type {
   BotArchetype,
@@ -45,36 +69,28 @@ import type {
   TurnResolutionReport,
 } from '../shared/types';
 import { emptyTurnReport } from '../shared/types';
-import { makeMap } from '../shared/map';
+import { autoMerge, instantArmyAction, recruitCommander, unlockSkill } from './armies';
+import { planBot as planTacticalBot } from './botAI';
+import { resolveBattle, safestRetreat } from './combat';
+import { parseCommand, parseOrder } from './commands';
+import { chooseDilemma, issueDilemmas, resolveUnansweredDilemmas } from './dilemmas';
 import {
-  atWar,
-  attritionLoss,
-  canTransit,
-  canTraverse,
-  clamp,
-  compositionOf,
-  controller,
-  dietSnapshot,
-  getRelation,
-  landCount,
-  livingPlayers,
-  NATIONS,
-  nationOf,
-  orderCost,
-  orderKey,
-  orderProvinceId,
-  realmEconomy,
-  reservedResources,
-  roundMoney,
-  shortestPath,
-  supplyLimit,
-  UNIT_KEYS,
-  unitCount,
-  unitPath,
-  victoryStatus,
-  zeroComposition,
-  isBlockaded,
-} from '../shared/rules';
+  answerOffer,
+  callToArms,
+  declareWar,
+  diplomacy,
+  offerPeace,
+  syncWars,
+  updateWarScores,
+} from './diplomacy';
+import { desertForMaintenance, recordGoldReparations } from './economy';
+import { emergencyLevy } from './emergency';
+import { eraTransition } from './goldWorld';
+import { applyEncirclement } from './logistics';
+import { resolveBombardments } from './maritime';
+import { canSeeNotification, notify } from './notifications';
+import { applyScenario } from './scenarios';
+import { advanceSieges, assaultSiege } from './siege';
 import {
   assert,
   battalionOf,
@@ -91,19 +107,10 @@ import {
   setNation,
   syncCargo,
 } from './state';
-import { combatPowers, resolveBattle, safestRetreat } from './combat';
-import {
-  answerOffer,
-  callToArms,
-  declareWar,
-  diplomacy,
-  offerPeace,
-  syncWars,
-  updateWarScores,
-} from './diplomacy';
-import { parseCommand, parseOrder } from './commands';
+import { prepareTransport, resolveBridges } from './transport';
+import { advanceWorld, coalitionWar, dealObjectives, endWorld, joinCoalition } from './world';
 export { assert, canAttack } from './state';
-export { parseOrder, parseCommand };
+export { parseCommand, parseOrder };
 export const BALANCE = {
   baseUpkeep: 0.75,
   initialGold: 75,
@@ -154,10 +161,10 @@ export function createGame(
     matchConfig: {
       mode,
       theater,
-      mapId: mode === 'quick' ? `natural-earth-${theater}` : 'natural-earth-world',
+      mapId: mode === 'quick' ? `natural-earth-v100-${theater}` : 'natural-earth-v100-world',
       maxTurns,
       turnSeconds,
-      createdVersion: '0.95.0',
+      createdVersion: '1.0.0',
       allowBotSecretVictory: false,
       enableSecretObjectives: true,
     },
@@ -244,6 +251,10 @@ export function addPlayer(
     objectiveStreak: 0,
     originalCapitalId: null,
     militaryXP: 0,
+    authority: 0,
+    activeDilemma: null,
+    afkStreak: 0,
+    afkRegent: false,
     unlockedSkills: [],
     paxStreak: 0,
   };
@@ -259,6 +270,7 @@ export function addPlayer(
       embargoes: [],
       tribute: null,
     });
+  syncNationAuthority(p);
   g.players.push(p);
   g.orders[p.id] = [];
   if (!g.hostId) g.hostId = p.id;
@@ -756,8 +768,7 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
   assert(
     actor.gold - reserved.gold >= cost.gold &&
       actor.manpower - reserved.manpower >= cost.manpower &&
-      (verticalRules(g) ? getNationAuthority(actor) : actor.influence) - reserved.influence >=
-        cost.influence,
+      getNationAuthority(actor) - reserved.influence >= cost.influence,
     'Recursos livres insuficientes.',
   );
 }
@@ -808,7 +819,7 @@ export function submitOrder(g: GameState, id: string, raw: PlayerOrder) {
   if (o.type === 'DIPLOMACY') {
     const authorityCost = orderCost(o, undefined, playerOf(g, id), g).influence;
     diplomacy(g, id, o);
-    if (verticalRules(g)) spendNationAuthority(playerOf(g, id), authorityCost);
+    spendNationAuthority(playerOf(g, id), authorityCost);
     return;
   }
   if (o.type === 'RECRUIT_BATTALION' && o.isMercenary) {
@@ -833,6 +844,7 @@ export function cancelOrder(g: GameState, id: string, key: string) {
 }
 export function refreshScores(g: GameState) {
   for (const r of g.relations) r.trust = clamp(r.trust, -100, 100);
+  for (const p of g.players) syncNationAuthority(p);
 }
 function resolveLocal(
   g: GameState,
@@ -847,7 +859,7 @@ function resolveLocal(
   if (
     actor.gold < cost.gold ||
     actor.manpower < cost.manpower ||
-    (verticalRules(g) ? getNationAuthority(actor) : actor.influence) < cost.influence
+    getNationAuthority(actor) < cost.influence
   )
     return;
   if (
@@ -880,7 +892,7 @@ function resolveLocal(
       actor.conversions++;
       if (actor.nationId === 'sol_invicto') {
         actor.gold = roundMoney(actor.gold + 25);
-        actor.fervor += 10;
+        actor.militaryXP += 10;
       }
       report.conversions.push({
         provinceId: p.id,
@@ -999,8 +1011,7 @@ function resolveLocal(
   } else return;
   actor.gold = roundMoney(actor.gold - cost.gold);
   actor.manpower -= cost.manpower;
-  if (verticalRules(g)) spendNationAuthority(actor, cost.influence);
-  else actor.influence -= cost.influence;
+  spendNationAuthority(actor, cost.influence);
 }
 function recoverAndRepatriate(
   g: GameState,
@@ -1125,6 +1136,8 @@ function moveBattalions(g: GameState, report: TurnResolutionReport, moved: Set<s
       a.pathQueue.shift();
       a.entrenched = false;
       a.morale = clamp(a.morale - 6);
+      a.previousProvinceId = from.id;
+      a.lastMovedTurn = g.turn;
       a.provinceId = target.id;
       moved.add(a.id);
       const battles = report.battles.length;
@@ -1250,6 +1263,7 @@ function applySupply(g: GameState, report: TurnResolutionReport) {
 }
 export function resolveTurn(g: GameState, _now = 0) {
   assert(g.phase === 'planning', 'A campanha não está em andamento.');
+  issueDilemmas(g);
   const before = new Map(
     g.players.map((p) => [
       p.id,
@@ -1272,6 +1286,7 @@ export function resolveTurn(g: GameState, _now = 0) {
   const startNoticeIds = new Set(g.notifications.map((n) => n.id));
   for (const bot of g.players.filter((p) => p.bot)) planBot(g, bot);
   const report = emptyTurnReport(g.turn, g.diet);
+  resolveUnansweredDilemmas(g, report);
   report.diplomaticChanges = g.pendingDiplomacy.splice(0);
   advanceWorld(g, report);
   report.neutralDevelopments = g.provinces
@@ -1334,7 +1349,7 @@ export function resolveTurn(g: GameState, _now = 0) {
       .reduce((n, a) => n + unitCount(a), 0);
     if (p.templeLevel > 0) {
       p.unrest = clamp(p.unrest - 15 * p.templeLevel);
-      actor.fervor += 2 * p.templeLevel;
+      actor.militaryXP += 2 * p.templeLevel;
       actor.stability = clamp(
         actor.stability + (goldRules(g) && actor.nationId === 'aurelia' ? 4 : 2) * p.templeLevel,
       );
@@ -1410,6 +1425,13 @@ export function resolveTurn(g: GameState, _now = 0) {
         stranded: !destination,
         reason: 'repatriation',
       });
+    }
+  }
+  for (const movement of report.movements) {
+    const unit = g.battalions.find((a) => a.id === movement.battalionId);
+    if (unit) {
+      unit.lastMovedTurn = g.turn;
+      unit.previousProvinceId = movement.fromProvinceId;
     }
   }
   const survivingRealms = new Set(livingPlayers(g).map((p) => p.id));
@@ -1648,447 +1670,14 @@ export function resolveTurn(g: GameState, _now = 0) {
     g.firstReadyPlayerName = null;
     g.season = seasonAt(g.turn);
     advanceWorld(g, emptyTurnReport(g.turn, g.diet), true);
+    issueDilemmas(g);
   } else g.deadline = null;
   g.battalions = g.battalions.filter((a) => unitCount(a) > 0);
+  for (const p of g.players) syncNationAuthority(p);
   return report;
 }
-function tryOrder(
-  g: GameState,
-  p: Player,
-  o: PlayerOrder,
-  estimatedNet = realmEconomy(g, p.id).net,
-) {
-  try {
-    const cost = orderCost(
-        o,
-        g.provinces.find((q) => q.id === orderProvinceId(o, g)),
-        p,
-        g,
-      ),
-      reserved = reservedResources(g, p.id, orderKey(o));
-    if (cost.gold > 0 && p.gold - reserved.gold - cost.gold + estimatedNet < 2) return false;
-    submitOrder(g, p.id, o);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function botPeace(g: GameState, p: Player) {
-  if (goldRules(g)) updateWarScores(g);
-  for (const war of g.wars.filter(
-    (w) => w.active && [w.attackerLeaderId, w.defenderLeaderId].includes(p.id),
-  )) {
-    const score = war.warScore * (war.attackerLeaderId === p.id ? 1 : -1);
-    try {
-      if (goldRules(g) && score <= -40 && p.warExhaustion >= 25) {
-        if (g.offers.some((o) => o.kind === 'peace' && o.warId === war.id && o.from === p.id))
-          continue;
-        const occupiers = war.attackerLeaderId === p.id ? war.defenderIds : war.attackerIds;
-        const ceded = g.provinces
-          .filter((q) => q.ownerId === p.id && q.occupierId && occupiers.includes(q.occupierId))
-          .slice(0, Math.floor(-score / 20))
-          .map((q) => q.id);
-        offerPeace(
-          g,
-          p.id,
-          war.id,
-          ceded.length
-            ? [{ type: 'CEDE_PROVINCES', provinceIds: ceded }]
-            : [{ type: 'WAR_REPARATIONS', immediateTribute: 0 }],
-          true,
-        );
-        continue;
-      }
-      const loserId = war.attackerLeaderId === p.id ? war.defenderLeaderId : war.attackerLeaderId;
-      const chosen = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId);
-      if (
-        score >= 85 &&
-        p.nationId === 'aurelia' &&
-        chosen?.kind === 'PAX' &&
-        g.players.filter((q) => q.subjectOfId === p.id).length < 2 &&
-        subjugationEligible(g, p.id, loserId)
-      ) {
-        offerPeace(g, p.id, war.id, [{ type: goldRules(g) ? 'SUBJUGATE_VASSAL' : 'SUBJUGATE' }]);
-        continue;
-      }
-      const otherIds = war.attackerLeaderId === p.id ? war.defenderIds : war.attackerIds;
-      const occupied = g.provinces.filter(
-        (q) => q.ownerId && otherIds.includes(q.ownerId) && q.occupierId === p.id,
-      );
-      if (occupied.length && score >= 20) {
-        const provinceIds: string[] = [];
-        let cost = 0;
-        for (const q of occupied) {
-          const next = goldRules(g) ? 20 : 12 + q.baseTax;
-          if (cost + next <= score) {
-            provinceIds.push(q.id);
-            cost += next;
-          }
-        }
-        if (provinceIds.length) {
-          offerPeace(g, p.id, war.id, [{ type: 'CEDE_PROVINCES', provinceIds }]);
-          continue;
-        }
-      }
-      if (p.warExhaustion >= 35 || g.turn - war.startedTurn >= 7) offerPeace(g, p.id, war.id, []);
-    } catch {
-      continue;
-    }
-  }
-}
 export function planBot(g: GameState, p: Player) {
-  if (!g.provinces.some((q) => q.ownerId === p.id)) return;
-  for (const offer of [...g.offers.filter((o) => o.to === p.id)])
-    try {
-      if (offer.kind === 'peace') {
-        const war = g.wars.find((w) => w.id === offer.warId);
-        if (
-          war &&
-          (goldRules(g) ||
-            p.warExhaustion >= 25 ||
-            (offer.terms?.length === 0 && g.turn - war.startedTurn >= 4))
-        )
-          answerOffer(g, p.id, offer.id, true);
-      } else answerOffer(g, p.id, offer.id, true);
-    } catch {
-      continue;
-    }
-  for (const target of g.players.filter(
-    (q) => q.id !== p.id && botThreat(g, p, q) && !p.subjectOfId,
-  )) {
-    try {
-      let c = g.coalitions.find((c) => c.targetId === target.id);
-      if (!c?.memberIds.includes(p.id)) joinCoalition(g, p.id, target.id);
-      c = g.coalitions.find((c) => c.targetId === target.id);
-      if (c && !c.warId && c.memberIds.length >= 2) coalitionWar(g, p.id, target.id);
-    } catch {}
-  }
-  p.ready = false;
-  const primary =
-    p.nationId === 'vespera'
-      ? 'NAV'
-      : p.nationId === 'turan'
-        ? 'CAV'
-        : p.nationId === 'kaldor'
-          ? 'ART'
-          : 'INF';
-  const branchOrder = [primary, ...['INF', 'CAV', 'ART', 'NAV'].filter((b) => b !== primary)];
-  for (const branch of branchOrder) {
-    const choice = p.botArchetype === 'Merchant' ? 'B' : 'A';
-    for (const id of [
-      `${branch}_T1`,
-      `${branch}_T2${choice}`,
-      `${branch}_T3`,
-    ] as import('../shared/types').SkillId[])
-      try {
-        unlockSkill(g, p.id, id);
-      } catch {}
-  }
-  for (const c of g.commanders.filter((c) => c.ownerId === p.id && !c.assignedBattalionId)) {
-    const a = g.battalions
-      .filter((a) => a.ownerId === p.id && a.isFleet === c.isAdmiral && !commanderFor(g, a))
-      .sort((a, b) => unitCount(b) - unitCount(a))[0];
-    if (a) c.assignedBattalionId = a.id;
-  }
-  botPeace(g, p);
-  const estimatedNet = realmEconomy(g, p.id).net;
-  const tryPlan = (o: PlayerOrder) => tryOrder(g, p, o, estimatedNet);
-  for (const a of [
-    ...g.battalions.filter(
-      (a) => a.ownerId === p.id && !a.isFleet && !a.embarkedOnId && !a.stranded,
-    ),
-  ]) {
-    if (a.pathQueue.length) continue;
-    const from = provinceOf(g, a.provinceId);
-    if (isDisorganized(a)) {
-      if (!friendlyRest(g, a.ownerId, from) && !from.siege) {
-        const retreat = g.provinces
-          .filter((q) => friendlyRest(g, a.ownerId, q))
-          .map((q) => unitPath(g, a, q.id))
-          .filter((path): path is string[] => !!path && path.length > 0)
-          .sort((a, b) => a.length - b.length)[0];
-        if (retreat) tryPlan({ type: 'MOVE_BATTALION', battalionId: a.id, path: retreat });
-      }
-      continue;
-    }
-    if (from.siege?.attackerOwnerId === p.id) {
-      if (a.training < 1.3) tryPlan({ type: 'TRAIN_BATTALION', battalionId: a.id });
-      continue;
-    }
-    const neighbors = from.neighbors
-      .map((id) => provinceOf(g, id))
-      .filter((q) => q.kind === 'LAND' && controller(q) !== p.id)
-      .sort(
-        (q, r) =>
-          Number(!!controller(r) && atWar(g, p.id, controller(r)!)) -
-            Number(!!controller(q) && atWar(g, p.id, controller(q)!)) ||
-          g.battalions
-            .filter((a) => a.provinceId === q.id && !a.isFleet)
-            .reduce((n, a) => n + unitCount(a), 0) -
-            g.battalions
-              .filter((a) => a.provinceId === r.id && !a.isFleet)
-              .reduce((n, a) => n + unitCount(a), 0),
-      );
-    let moved = false;
-    for (const q of neighbors) {
-      const target = controller(q),
-        enemies = g.battalions.filter(
-          (b) => b.provinceId === q.id && !b.isFleet && !b.embarkedOnId,
-        );
-      const estimate = combatPowers(g, [a], enemies, q);
-      if (
-        unitCount(a) < Math.max(2, Math.max(0, q.fortLevel - a.artillery) * 3) ||
-        (enemies.length > 0 && estimate.ratio < (p.botArchetype === 'Militarist' ? 1.04 : 1.2))
-      )
-        continue;
-      if (target && target !== p.id && !atWar(g, p.id, target)) {
-        if (
-          p.subjectOfId ||
-          g.wars.some((w) => w.active && [...w.attackerIds, ...w.defenderIds].includes(p.id))
-        )
-          continue;
-        if (
-          p.botArchetype !== 'Militarist' &&
-          !['turan', 'ferro_norte', 'sol_invicto'].includes(p.nationId) &&
-          g.turn % 4 !== 0
-        )
-          continue;
-        try {
-          declareWar(
-            g,
-            p.id,
-            target,
-            p.faith !== playerOf(g, target).faith && p.faith === 'SOLAR' ? 'HOLY_WAR' : 'CONQUEST',
-          );
-        } catch {
-          continue;
-        }
-      }
-      if (tryPlan({ type: 'MOVE_BATTALION', battalionId: a.id, targetProvinceId: q.id })) {
-        moved = true;
-        break;
-      }
-    }
-    if (!moved && unitCount(a) >= 5) {
-      const candidates = g.provinces
-        .filter(
-          (q) =>
-            q.kind === 'LAND' &&
-            controller(q) !== p.id &&
-            (!controller(q) || atWar(g, p.id, controller(q)!)),
-        )
-        .map((q) => ({ q, path: unitPath(g, a, q.id) }))
-        .filter((v) => v.path && v.path.length > 0)
-        .sort(
-          (a, b) =>
-            Number(!!controller(b.q) && atWar(g, p.id, controller(b.q)!)) -
-              Number(!!controller(a.q) && atWar(g, p.id, controller(a.q)!)) ||
-            a.path!.length - b.path!.length,
-        );
-      const next = candidates.find(
-        ({ q }) =>
-          combatPowers(
-            g,
-            [a],
-            g.battalions.filter((b) => b.provinceId === q.id && !b.isFleet && !b.embarkedOnId),
-            q,
-          ).ratio >= (p.botArchetype === 'Militarist' ? 1.04 : 1.2),
-      );
-      if (next) moved = tryPlan({ type: 'MOVE_BATTALION', battalionId: a.id, path: next.path! });
-    }
-    if (!moved && from.isCoastal) {
-      const targets = g.provinces
-        .filter(
-          (q) =>
-            q.kind === 'LAND' &&
-            q.isCoastal &&
-            !controller(q) &&
-            crossingOptions(g, a, q, g.orders[p.id]).length,
-        )
-        .sort(
-          (q, r) =>
-            g.battalions
-              .filter((b) => b.provinceId === q.id && !b.isFleet)
-              .reduce((n, b) => n + unitCount(b), 0) -
-            g.battalions
-              .filter((b) => b.provinceId === r.id && !b.isFleet)
-              .reduce((n, b) => n + unitCount(b), 0),
-        );
-      if (targets[0] && estimatedNet > 0)
-        moved = tryPlan({
-          type: 'AUTO_TRANSPORT',
-          battalionId: a.id,
-          targetProvinceId: targets[0].id,
-        });
-    }
-    if (!moved && a.training < 1.4) tryPlan({ type: 'TRAIN_BATTALION', battalionId: a.id });
-  }
-  for (const f of g.battalions.filter((a) => a.ownerId === p.id && a.isFleet && !a.stranded)) {
-    if (!f.embarkedArmyId && !f.pathQueue.length) {
-      const target = g.provinces.find(
-        (q) => q.siege?.attackerOwnerId === p.id && !bombardmentBlock(g, f, q),
-      );
-      if (
-        target &&
-        p.gold > 20 &&
-        tryPlan({ type: 'BOMBARD_COAST', battalionId: f.id, targetProvinceId: target.id })
-      )
-        continue;
-      if (f.warships > 0 && f.transports > 0) {
-        const nodes = seaTradeNodes(g),
-          here = nodes.find((n) => n.seaId === f.provinceId);
-        if (here?.ownerId === p.id) continue;
-        const trade = nodes
-          .filter(
-            (n) =>
-              !n.contested &&
-              (!n.ownerId || n.ownerId === p.id) &&
-              n.contenders.every(
-                (c) => c.ownerId === p.id || c.power < f.warships * 2 + f.transports,
-              ),
-          )
-          .map((n) => ({ node: n, path: unitPath(g, f, n.seaId) }))
-          .filter((x) => x.path && x.path.length)
-          .sort(
-            (a, b) => b.node.value / (b.path!.length + 1) - a.node.value / (a.path!.length + 1),
-          )[0];
-        if (trade && tryPlan({ type: 'MOVE_BATTALION', battalionId: f.id, path: trade.path! }))
-          continue;
-      }
-    }
-    if (f.embarkedArmyId) {
-      const cargo = g.battalions.find((a) => a.id === f.embarkedArmyId);
-      if (!cargo) continue;
-      const targets = provinceOf(g, f.provinceId)
-        .neighbors.map((id) => provinceOf(g, id))
-        .filter(
-          (q) =>
-            q.kind === 'LAND' &&
-            q.isCoastal &&
-            controller(q) !== p.id &&
-            canTransit(g, p.id, q) &&
-            g.battalions
-              .filter((a) => a.provinceId === q.id && !a.isFleet)
-              .reduce((n, a) => n + unitCount(a), 0) *
-              1.4 <
-              unitCount(cargo),
-        );
-      if (targets[0]) {
-        tryPlan({
-          type: 'EMBARK_BATTALION',
-          battalionId: cargo.id,
-          disembarkProvinceId: targets[0].id,
-        });
-        continue;
-      }
-      if (!f.pathQueue.length) {
-        const coasts = g.provinces.filter(
-          (q) =>
-            q.kind === 'LAND' && q.isCoastal && controller(q) !== p.id && canTransit(g, p.id, q),
-        );
-        const routes = coasts
-          .flatMap((q) =>
-            q.neighbors
-              .map((id) => provinceOf(g, id))
-              .filter((s) => s.kind === 'SEA_ZONE')
-              .map((s) => unitPath(g, f, s.id)),
-          )
-          .filter((r): r is string[] => !!r && r.length > 0)
-          .sort((a, b) => a.length - b.length);
-        if (routes[0]) tryPlan({ type: 'MOVE_BATTALION', battalionId: f.id, path: routes[0] });
-      }
-    } else if (!f.pathQueue.length) {
-      const pHere = provinceOf(g, f.provinceId);
-      const load = g.battalions.find(
-        (a) =>
-          a.ownerId === p.id &&
-          !a.isFleet &&
-          !a.embarkedOnId &&
-          !a.pathQueue.length &&
-          !a.stranded &&
-          unitCount(a) <= f.transports * 4 &&
-          (a.provinceId === f.provinceId || pHere.neighbors.includes(a.provinceId)) &&
-          provinceOf(g, a.provinceId).portLevel > 0,
-      );
-      if (
-        load &&
-        !g.orders[p.id].some(
-          (o) => 'battalionId' in o && o.battalionId === load.id && o.type === 'MOVE_BATTALION',
-        )
-      )
-        tryPlan({ type: 'EMBARK_BATTALION', battalionId: load.id, fleetId: f.id });
-    }
-  }
-  for (const q of g.provinces.filter((q) => q.kind === 'LAND' && controller(q) === p.id)) {
-    const guard = g.battalions
-      .filter(
-        (a) =>
-          a.ownerId === p.id &&
-          a.provinceId === q.id &&
-          !a.isFleet &&
-          !a.embarkedOnId &&
-          !a.stranded,
-      )
-      .sort((a, b) => unitCount(b) - unitCount(a))[0];
-    const choices: PlayerOrder[] = [];
-    if (
-      q.portLevel > 0 &&
-      q.ownerId === p.id &&
-      !q.occupierId &&
-      estimatedNet > 2 &&
-      p.gold > 35 &&
-      !g.battalions.some(
-        (a) => a.ownerId === p.id && a.isFleet && a.warships > 0 && a.transports > 0,
-      )
-    ) {
-      const fleet = g.battalions.find(
-        (a) => a.ownerId === p.id && a.isFleet && a.provinceId === q.id && !a.embarkedArmyId,
-      );
-      choices.push({
-        type: 'RECRUIT_BATTALION',
-        provinceId: q.id,
-        isFleet: true,
-        warships: fleet?.warships ? 0 : 1,
-        transports: fleet?.transports ? 0 : 1,
-        ...(fleet ? { battalionId: fleet.id } : {}),
-      });
-    }
-    if (q.templeLevel === 0 && (q.unrest > 45 || q.pacification < 65))
-      choices.push({ type: 'BUILD_BUILDING', provinceId: q.id, building: 'TEMPLE' });
-    if (q.barracksLevel === 0 && p.manpower < 12)
-      choices.push({ type: 'BUILD_BUILDING', provinceId: q.id, building: 'BARRACKS' });
-    if (q.foundryLevel === 0 && p.nationId === 'kaldor')
-      choices.push({ type: 'BUILD_BUILDING', provinceId: q.id, building: 'FOUNDRY' });
-    if (q.unrest > 55 || q.pacification < 65) choices.push({ type: 'PACIFY', provinceId: q.id });
-    if (q.ownerId === p.id && !q.occupierId) {
-      if (p.botArchetype === 'Merchant' && q.marketLevel < 2)
-        choices.push({ type: 'BUILD_MARKET', provinceId: q.id });
-      if (p.botArchetype === 'Theocrat' && q.religion !== p.faith)
-        choices.push({ type: 'CONVERT', targetProvinceId: q.id });
-      if (!guard || unitCount(guard) < Math.min(11, supplyLimit(q) - 2))
-        choices.push({
-          type: 'RECRUIT_BATTALION',
-          provinceId: q.id,
-          infantry: p.nationId === 'turan' && (q.barracksLevel || q.foundryLevel) ? 0 : 2,
-          cavalry:
-            p.nationId === 'turan' && (q.barracksLevel || q.foundryLevel)
-              ? Math.min(3, q.barracksLevel >= 2 || q.foundryLevel ? 7 : 4)
-              : 0,
-          artillery:
-            (q.barracksLevel || q.foundryLevel) &&
-            p.nationId !== 'turan' &&
-            (p.nationId === 'kaldor' || (guard && guard.artillery < 1))
-              ? 1
-              : 0,
-          ...(guard ? { battalionId: guard.id, isMercenary: guard.isMercenary } : {}),
-        });
-      if (q.marketLevel < 2) choices.push({ type: 'BUILD_MARKET', provinceId: q.id });
-      if (q.fortLevel < 1 && p.botArchetype === 'Diplomat')
-        choices.push({ type: 'BUILD_FORT', provinceId: q.id });
-    }
-    for (const o of choices) if (tryPlan(o)) break;
-  }
-  p.ready = true;
+  return planTacticalBot(g, p, submitOrder);
 }
 export function allReady(g: GameState) {
   return livingPlayers(g).every((p) => p.bot || p.ready);
@@ -2115,6 +1704,10 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
   )
     assert(g.phase === 'planning', 'A campanha não está em andamento.');
   switch (command.type) {
+    case 'CHOOSE_DILEMMA':
+      issueDilemmas(g);
+      chooseDilemma(g, actorId, command.option);
+      break;
     case 'EMERGENCY_LEVY':
       emergencyLevy(g, actorId);
       break;
@@ -2380,6 +1973,8 @@ export function viewFor(g: GameState, id: string): GameView {
     g.provinces.filter((p) => shared.has(controller(p) ?? '')).flatMap((p) => p.neighbors),
   );
   const cleanPlayer = (p: Player) => {
+    syncNationAuthority(p);
+    if (p.id !== id) p.activeDilemma = null;
     if (!finished && p.id !== id && p.id !== g.victoryRecord?.winnerId) {
       p.secretObjectives = [];
       p.selectedObjectiveId = null;

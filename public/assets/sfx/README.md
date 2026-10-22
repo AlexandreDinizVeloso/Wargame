@@ -1,5 +1,5 @@
-# Efeitos opcionais
+# Efeitos PCM incluídos
 
-Adicione arquivos de áudio licenciados para uso no jogo: `cannon.ogg`, `march.ogg`, `sail.ogg`, `horn.ogg`, `coin.ogg` (ou `.mp3`). O servidor detecta os arquivos presentes; o navegador os decodifica em AudioBuffer após desbloquear o áudio. Até que um buffer esteja pronto, o sintetizador físico responde imediatamente. Arquivos ausentes, inválidos ou bloqueados mantêm o fallback.
+`cannon.wav`, `march.wav`, `sail.wav`, `horn.wav` e `coin.wav` são arquivos PCM reais, mono, 44,1 kHz e 16 bits, gerados pelo projeto com DSP e semente fixa. Não usam gravações de terceiros.
 
-Execute `npm run build` após adicionar arquivos em produção. Música e efeitos conservam volumes separados. Nenhum áudio externo é necessário.
+Regenerar: `npx tsx scripts/generate-sfx-assets.ts`. Execute `npm run build` para copiá-los para produção. O carregador prefere WAV, admite OGG/MP3 opcionais e mantém síntese de contingência durante o carregamento ou se o navegador recusar áudio. Música e efeitos têm volumes separados.

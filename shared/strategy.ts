@@ -24,7 +24,7 @@ export const EVENTS: Record<GlobalEventId, { name: string; effect: string }> = {
   GOLD_RUSH: { name: 'Corrida do Ouro', effect: '+50% renda nas Minas de Ouro' },
   HARSH_WINTER: { name: 'Inverno Rigoroso', effect: 'Efeitos de inverno durante duas rodadas' },
   CRUSADE: {
-    name: 'Fervor de Cruzada',
+    name: 'Zelo de Cruzada',
     effect: '+10% ataque em guerras entre religiões diferentes',
   },
   MERCENARY_CRISIS: {

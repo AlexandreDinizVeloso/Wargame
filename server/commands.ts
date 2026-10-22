@@ -263,6 +263,7 @@ export function parseCommand(value: unknown): GameCommand {
     assert(c.policy === 'INQUISITION' || c.policy === 'TOLERANCE', 'Política inválida.');
     return { type, policy: c.policy };
   }
+  if (type === 'CHOOSE_DILEMMA') return { type, option: integer(c.option, 0, 1) as 0 | 1 };
   if (type === 'EMERGENCY_LEVY' || type === 'CONTINUE_SANDBOX') return { type };
   if (type === 'READ_NOTIFICATIONS')
     return { type, notificationIds: strings(c.notificationIds, 250) };

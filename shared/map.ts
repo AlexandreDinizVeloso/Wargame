@@ -1,3 +1,11 @@
+import { isImpassableCrossing } from './geography';
+export {
+  WORLD_RIVERS,
+  riverCrossings,
+  hasRiverCrossing,
+  impassableFeatures,
+  isImpassableCrossing,
+} from './geography';
 import geometry from './world-geometry.json';
 import type { Continent, GameMode, Province, Theater, StrategicResource } from './types';
 export type Terrain = 'plains' | 'forest' | 'hills' | 'mountains' | 'coastal';
@@ -141,8 +149,35 @@ const SEAS: [string, string, number[], string[], string[]][] = [
     ['south-china-sea', 'north-pacific'],
   ],
 ];
+for (const [sea, ports] of Object.entries({
+  'north-atlantic': ['aquitaine', 'britain', 'scotland', 'ireland', 'denmark'],
+  'south-atlantic': ['brazil-north', 'sao-paulo', 'patagonia', 'gold-coast'],
+  'caribbean-sea': ['venezuela', 'yukatan'],
+  'north-pacific': ['yakutia'],
+  'south-pacific': ['patagonia', 'australia-east'],
+  'western-med': ['aragon', 'naples', 'algiers', 'tripoli'],
+  'eastern-med': ['naples', 'levant'],
+  baltic: ['denmark', 'lithuania'],
+  arctic: ['yakutia'],
+  'indian-west': ['nubia', 'zambezi', 'punjab', 'mesopotamia'],
+  'indian-east': ['burma', 'sumatra', 'java', 'australia-west'],
+  'south-china-sea': ['china-south', 'philippines'],
+  'east-asian-sea': ['china-north'],
+})) {
+  const entry = SEAS.find((s) => s[0] === sea);
+  if (entry) entry[3].push(...ports);
+}
 export const STRAITS: readonly [string, string, string][] = [
   ['portugal', 'maghreb', 'western-med'],
+  ['britain', 'ireland', 'north-atlantic'],
+  ['scotland', 'ireland', 'north-atlantic'],
+  ['scandinavia', 'denmark', 'baltic'],
+  ['denmark', 'germany', 'baltic'],
+  ['malaya', 'sumatra', 'indian-east'],
+  ['sumatra', 'java', 'indian-east'],
+  ['java', 'archipelago', 'indian-east'],
+  ['archipelago', 'philippines', 'south-china-sea'],
+  ['alaska', 'yakutia', 'arctic'],
   ['castile', 'maghreb', 'western-med'],
   ['france', 'britain', 'north-atlantic'],
   ['scandinavia', 'germany', 'baltic'],
@@ -156,7 +191,6 @@ export const STRAITS: readonly [string, string, string][] = [
   ['arabia', 'horn', 'indian-west'],
   ['malaya', 'archipelago', 'indian-east'],
   ['korea', 'japan', 'east-asian-sea'],
-  ['alaska', 'siberia', 'arctic'],
   ['caribbean', 'central-america', 'caribbean-sea'],
   ['caribbean', 'usa-east', 'caribbean-sea'],
   ['caribbean', 'colombia', 'caribbean-sea'],
@@ -186,11 +220,22 @@ export function makeStaticMap(
       'afghan',
       'china-west',
       'anatolia',
+      'tibet',
+      'caucasus',
+      'bavaria',
     ].includes(g.id)
       ? 'mountains'
-      : ['amazon', 'canada-east', 'canada-west', 'siberia', 'central-africa', 'guianas'].includes(
-            g.id,
-          )
+      : [
+            'amazon',
+            'canada-east',
+            'canada-west',
+            'siberia',
+            'yakutia',
+            'central-africa',
+            'guianas',
+            'burma',
+            'archipelago',
+          ].includes(g.id)
         ? 'forest'
         : ['bohemia', 'castile', 'inland', 'bolivia', 'mongolia'].includes(g.id)
           ? 'hills'
@@ -210,14 +255,25 @@ export function makeStaticMap(
       terrain,
       terrainDefenseBonus: TERRAIN_DEFENSE[terrain],
       baseTax: [4, 5, 3, 4][i % 4] + (i % 6 === 3 ? 5 : 0),
-      strategicResource: (['GRAIN', 'IRON', 'HORSES', 'GOLD_MINE', 'RELIC', null] as const)[i % 6],
+      strategicResource: (
+        ['GRAIN', 'IRON', 'HORSES', 'GOLD_MINE', 'RELIC', 'TIMBER', 'SPICES', null] as const
+      )[i % 8],
       razedTurn: null,
       baseSupplyLimit: terrain === 'mountains' ? 10 : terrain === 'forest' ? 12 : 18,
       resource,
     };
   });
   const ids = new Set(
-    land.filter((p) => mode === 'campaign' || p.continent === theater).map((p) => p.id),
+    land
+      .filter(
+        (p) =>
+          mode === 'campaign' ||
+          p.continent === theater ||
+          (theater === 'EUROPE' &&
+            ['anatolia', 'levant', 'nile', 'maghreb', 'algiers', 'tripoli'].includes(p.id)) ||
+          (theater === 'ASIA' && p.id === 'persia'),
+      )
+      .map((p) => p.id),
   );
   const seas: ProvinceStaticData[] = SEAS.filter((s) => s[3].some((id) => ids.has(id))).map(
     ([id, name, bounds, ports, links]) => {
@@ -258,7 +314,9 @@ export function makeStaticMap(
   const all = [...land.filter((p) => ids.has(p.id)), ...seas];
   const active = new Set(all.map((p) => p.id));
   for (const p of all) {
-    p.neighbors = p.neighbors.filter((id) => active.has(id) && !isLegacySeaShortcut(p.id, id));
+    p.neighbors = p.neighbors.filter(
+      (id) => active.has(id) && !isLegacySeaShortcut(p.id, id) && !isImpassableCrossing(p.id, id),
+    );
     if (p.kind === 'LAND')
       for (const s of seas) if (s.neighbors.includes(p.id)) p.neighbors.push(s.id);
     p.neighbors = [...new Set(p.neighbors)];
