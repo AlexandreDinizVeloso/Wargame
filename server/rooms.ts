@@ -1,3 +1,4 @@
+import { prepareTutorial } from './tutorial';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -44,7 +45,7 @@ const send = (ws: WebSocket, message: ServerMessage) => {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
 };
 function readCommand(msg: Record<string, unknown>): GameCommand {
-  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 6.');
+  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 7.');
   return parseCommand(msg.command);
 }
 const nationOfMessage = (value: unknown): NationId | undefined => {
@@ -201,10 +202,15 @@ export function attachRooms(server: Server, options: Options = {}) {
           assert(rooms.size < 200, 'Limite de salas atingido neste servidor.');
           let code = randomBytes(3).toString('hex').toUpperCase();
           while (rooms.has(code)) code = randomBytes(3).toString('hex').toUpperCase();
+          assert(
+            msg.tutorial === undefined || typeof msg.tutorial === 'boolean',
+            'Opção de tutorial inválida.',
+          );
+          const tutorial = msg.tutorial === true;
           const g = createGame(
             code,
-            msg.mode === 'campaign' ? 'campaign' : 'quick',
-            msg.demo === true,
+            tutorial || msg.mode === 'campaign' ? 'campaign' : 'quick',
+            msg.demo === true || tutorial,
             randomBytes(4).readUInt32LE(),
             ['EUROPE', 'AMERICAS', 'ASIA'].includes(String(msg.theater))
               ? (msg.theater as Theater)
@@ -214,8 +220,8 @@ export function attachRooms(server: Server, options: Options = {}) {
             typeof msg.roomName === 'string' && msg.roomName.trim()
               ? msg.roomName.trim().slice(0, 60)
               : `Campanha ${code}`;
-          g.isPublic = msg.isPublic !== false;
-          g.enableSecretObjectives = msg.enableSecretObjectives !== false;
+          g.isPublic = !tutorial && msg.isPublic !== false;
+          g.enableSecretObjectives = !tutorial && msg.enableSecretObjectives !== false;
           assert(
             msg.allowBotSecretVictory === undefined ||
               typeof msg.allowBotSecretVictory === 'boolean',
@@ -230,7 +236,7 @@ export function attachRooms(server: Server, options: Options = {}) {
                 Number(msg.turnTimerSeconds) <= 600,
               'Timer deve ser 15–600 segundos.',
             );
-          g.turnSeconds = Number(msg.turnTimerSeconds ?? 60);
+          g.turnSeconds = tutorial ? 600 : Number(msg.turnTimerSeconds ?? 60);
           g.matchConfig.turnSeconds = g.turnSeconds;
           g.matchConfig.enableSecretObjectives = g.enableSecretObjectives;
           g.persistenceEnabled = !!options.stateFile;
@@ -238,7 +244,7 @@ export function attachRooms(server: Server, options: Options = {}) {
             g,
             typeof msg.name === 'string' ? msg.name : 'Estrategista',
             false,
-            nationOfMessage(msg.nationId),
+            tutorial ? 'vespera' : nationOfMessage(msg.nationId),
           );
           const room: Room = {
             game: g,
@@ -248,8 +254,12 @@ export function attachRooms(server: Server, options: Options = {}) {
           };
           rooms.set(code, room);
           if (g.demo) {
-            for (let i = 0; i < 3; i++) addPlayer(g, `Conselho ${i + 1}`, true);
+            if (tutorial) {
+              addPlayer(g, 'Conselho do Norte', true, 'ferro_norte', 'Diplomat');
+              addPlayer(g, 'Conselho do Sul', true, 'kaldor', 'Merchant');
+            } else for (let i = 0; i < 3; i++) addPlayer(g, `Conselho ${i + 1}`, true);
             startGame(g, clock());
+            if (tutorial) prepareTutorial(g, p.id);
           }
           bind(room, p.id, randomBytes(24).toString('hex'));
           return;
@@ -257,6 +267,7 @@ export function attachRooms(server: Server, options: Options = {}) {
         if (msg.type === 'join') {
           const room = rooms.get(String(msg.code).trim().toUpperCase());
           assert(room, 'Sala não encontrada. Confira o código e o servidor.');
+          assert(!room.game.matchConfig.tutorial, 'O tutorial é uma mesa de treino individual.');
           const p = addPlayer(
             room.game,
             typeof msg.name === 'string' ? msg.name : 'Estrategista',

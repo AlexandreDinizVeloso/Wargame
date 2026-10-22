@@ -22,7 +22,11 @@ export default function CityDevelopment({
   command: Command;
 }) {
   const me = game.players.find((p) => p.id === playerId)!,
-    active = game.phase === 'planning' && province.ownerId === playerId && !province.occupierId;
+    active =
+      !me.ready &&
+      game.phase === 'planning' &&
+      province.ownerId === playerId &&
+      !province.occupierId;
   const reserved = reservedResources(
     { ...game, orders: { [playerId]: game.plannedOrders } },
     playerId,

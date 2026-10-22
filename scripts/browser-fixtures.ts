@@ -1,3 +1,5 @@
+import { createBattalion } from '../server/state';
+import { compositionOf } from '../shared/rules';
 import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';
@@ -59,8 +61,61 @@ export function seedBrowserFixtures(filename: string) {
   addPlayer(lobby, 'Conselho 3', true, 'aurelia');
   addPlayer(lobby, 'Conselho 4', true, 'ferro_norte');
   lobby.isPublic = false;
+  const visual = structuredClone(alerts);
+  visual.code = 'VISRC9';
+  visual.turn = 4;
+  visual.season = 'WINTER';
+  const structures = [
+    'fortLevel',
+    'barracksLevel',
+    'marketLevel',
+    'portLevel',
+    'foundryLevel',
+    'templeLevel',
+  ] as const;
+  visual.provinces
+    .filter((p) => p.kind === 'LAND')
+    .slice(0, 6)
+    .forEach((p, i) => {
+      p[structures[i]] = Math.max(1, p[structures[i]]);
+      if (p.siege) p.siege.required = 2 + p.fortLevel * 2;
+    });
+  const owner = visual.players[0].id;
+  const artillery = createBattalion(
+    visual,
+    owner,
+    'castile',
+    compositionOf({ infantry: 3, artillery: 2 }),
+    { name: 'Canhões da Coroa', morale: 18 },
+  );
+  artillery.entrenched = true;
+  artillery.encircled = true;
+  createBattalion(visual, owner, 'france', compositionOf({ infantry: 1, cavalry: 4 }), {
+    name: 'Cavalaria Real',
+    morale: 75,
+  });
+  const navy = createBattalion(
+    visual,
+    owner,
+    'western-med',
+    compositionOf({ warships: 3, transports: 2 }),
+    { name: 'Galeões Reais', morale: 80, isFleet: true },
+  );
+  const cargo = createBattalion(visual, owner, 'portugal', compositionOf({ infantry: 4 }), {
+    name: 'Fuzileiros embarcados',
+    morale: 80,
+  });
+  cargo.provinceId = 'western-med';
+  navy.embarkedArmyId = cargo.id;
+  cargo.embarkedOnId = navy.id;
+  const general = visual.commanders.find((c) => c.ownerId === owner && !c.isAdmiral);
+  if (general) {
+    general.assignedBattalionId = artillery.id;
+    general.stars = 3;
+    general.xp = 100;
+  }
   const sessions = new Map<string, FixtureSession[]>();
-  const rooms = [alerts, sandbox, transport, lobby].map((game: GameState) => {
+  const rooms = [alerts, sandbox, transport, lobby, visual].map((game: GameState) => {
     const auth = game.players.map((p) => ({
       code: game.code,
       playerId: p.id,
@@ -79,6 +134,7 @@ export function seedBrowserFixtures(filename: string) {
   });
   writeSnapshot(filename, rooms, Date.now());
   return {
+    visual: sessions.get('VISRC9')!,
     lobby: sessions.get('LOBBY6')!,
     alerts: sessions.get('ALERT6')!,
     sandbox: sessions.get('SANDB6')!,

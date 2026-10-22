@@ -1,11 +1,17 @@
+const PostGameAnalytics = lazy(() => import('./PostGameAnalytics'));
+import TutorialOverlay from './TutorialOverlay';
+import { TopBarModal, type CenterTab } from './TopBarModal';
+import { MaritimeOverview } from './MaritimePanel';
+import CommanderPanel from './CommanderPanel';
+import { AudioControls } from './AudioControls';
 import CampaignPanel from './CampaignPanel';
 import PlayerNameForm from './PlayerNameForm';
-import SkillTreeDrawer from './SkillTreeDrawer';
+const SkillTreeDrawer = lazy(() => import('./SkillTreeDrawer'));
 import { crossingOptions } from '../shared/naval';
-import { levyReason } from '../shared/emergency';
 import PersonalAlerts from './Notifications';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Anchor,
   BookOpen,
   Castle,
   Check,
@@ -35,7 +41,6 @@ import { OBJECTIVES } from '../shared/types';
 import {
   atWar,
   canUnitVisit,
-  getRelation,
   chronicle,
   controller,
   landProvinces,
@@ -51,14 +56,14 @@ import Atlas, { MAP_MODES, type CameraHandle } from './Atlas';
 import { Entry, Lobby } from './Entry';
 import ProvinceDrawer from './ProvinceDrawer';
 import BattalionDrawer, { TacticalBar } from './BattalionDrawer';
-import DiplomacyDrawer from './DiplomacyDrawer';
-import WorldDrawer from './WorldDrawer';
-import SecretDrawer from './SecretDrawer';
+const DiplomacyDrawer = lazy(() => import('./DiplomacyDrawer'));
+const WorldDrawer = lazy(() => import('./WorldDrawer'));
+const SecretDrawer = lazy(() => import('./SecretDrawer'));
 import WarModal from './WarModal';
 import FirstReadyBanner from './FirstReadyBanner';
-import { SEASONS, hegemonicThreat } from '../shared/strategy';
-import TurnPanel, { type ReportTab } from './TurnPanel';
-import { FloatingWindow } from './FloatingWindow';
+import { SEASONS } from '../shared/strategy';
+import type { ReportTab } from './TurnPanel';
+const TurnPanel = lazy(() => import('./TurnPanel'));
 import { audio } from './audio';
 import { CoatOfArms, number, typing } from './ui';
 function download(game: GameView, format: 'json' | 'txt') {
@@ -75,25 +80,9 @@ function download(game: GameView, format: 'json' | 'txt') {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function Manual({
-  close,
-  active = true,
-  onActivate,
-}: {
-  close: () => void;
-  active?: boolean;
-  onActivate?: () => void;
-}) {
+function Manual({ close }: { close: () => void; active?: boolean; onActivate?: () => void }) {
   return (
-    <FloatingWindow
-      id="manual"
-      title="Manual de campanha"
-      width={760}
-      height={640}
-      active={active}
-      onActivate={onActivate}
-      onClose={close}
-    >
+    <TopBarModal id="manual" title="Manual de campanha" onClose={close}>
       <section className="manual-modal popup-sheet">
         <span className="eyebrow">A ARTE DE GOVERNAR</span>
         <h2>Um mundo. Dois legados.</h2>
@@ -154,8 +143,9 @@ function Manual({
         </p>
         <h3>Seu conselho, sua mesa</h3>
         <p>
-          Desanexe, arraste, redimensione ou minimize as janelas. Suas posições ficam salvas neste
-          navegador. Baixe o relatório JSON ou a crônica TXT para estudar a partida.
+          O dock reúne as ações da cidade ou formação selecionada; as abas do conselho abrem uma
+          consulta por vez. Use Esc ou clique fora para voltar ao mapa. A Crônica mostra gráficos da
+          campanha; o Conselho da nação permite baixar JSON e TXT.
         </p>
         <div className="keyboard-guide">
           <span>
@@ -175,13 +165,23 @@ function Manual({
           Convocar o conselho <ArrowIcon />
         </button>
       </section>
-    </FloatingWindow>
+    </TopBarModal>
   );
 }
 function ArrowIcon() {
   return <span aria-hidden="true">→</span>;
 }
-type Panel = 'province' | 'battalion' | 'diplomacy' | 'world' | 'secret' | 'skills' | 'report';
+type Panel =
+  | 'province'
+  | 'battalion'
+  | 'diplomacy'
+  | 'world'
+  | 'secret'
+  | 'skills'
+  | 'report'
+  | 'maritime'
+  | 'analytics';
+const GLOBAL_PANELS: Panel[] = ['diplomacy', 'skills', 'maritime', 'world', 'secret', 'analytics'];
 export default function App() {
   const { game, playerId, status, error, setError, send, command, leave } = useGame();
   const camera = useRef<CameraHandle>(null);
@@ -192,9 +192,21 @@ export default function App() {
       return true;
     }
   });
-  const PanelWindow = cartographic ? CampaignPanel : FloatingWindow;
+  const PanelWindow = CampaignPanel;
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [turnAnnouncement, setTurnAnnouncement] = useState<{
+    turn: number;
+    season: string;
+    summary: string;
+  } | null>(null);
+  const announcedTurn = useRef('');
+  const tutorialRoom = useRef('');
   const [focusedWindow, setFocusedWindow] = useState('');
   const openMenu = () => {
+    setPanels([]);
+    setManual(false);
+    setWarRequest(null);
+    setEndOpen(false);
     setMenu(true);
     setFocusedWindow('council-menu');
   };
@@ -203,6 +215,10 @@ export default function App() {
     focusRemaining('council-menu');
   };
   const openManual = () => {
+    setPanels([]);
+    setMenu(false);
+    setWarRequest(null);
+    setEndOpen(false);
     setManual(true);
     setFocusedWindow('manual');
   };
@@ -210,6 +226,7 @@ export default function App() {
     setManual(false);
     focusRemaining('manual');
   };
+  const [unitTab, setUnitTab] = useState<'command' | 'leaders' | 'details'>('command');
   const [provinceTab, setProvinceTab] = useState<'build' | 'recruit' | 'diplomacy'>('build');
   const [panels, setPanels] = useState<Panel[]>([]),
     [provinceId, setProvince] = useState(''),
@@ -235,6 +252,80 @@ export default function App() {
       progress: number;
       nonce: number;
     } | null>(null);
+  useEffect(() => {
+    audio.setAmbience(
+      game?.phase === 'planning'
+        ? game.wars.some((w) => w.active && [...w.attackerIds, ...w.defenderIds].includes(playerId))
+          ? 'war'
+          : 'peace'
+        : 'off',
+    );
+    return () => audio.setAmbience('off');
+  }, [
+    game?.code,
+    game?.phase,
+    game?.wars
+      .filter((w) => w.active && [...w.attackerIds, ...w.defenderIds].includes(playerId))
+      .map((w) => w.id)
+      .join('|'),
+    playerId,
+  ]);
+  useEffect(() => {
+    if (!game || game.phase === 'lobby') return;
+    const stamp = `${game.code}:${game.turn}`;
+    if (announcedTurn.current === stamp) return;
+    const previous = announcedTurn.current;
+    announcedTurn.current = stamp;
+    if (!previous || !previous.startsWith(`${game.code}:`)) return;
+    const battles =
+      game.lastReport?.battles.filter(
+        (b) => b.attackerId === playerId || b.defenderId === playerId,
+      ) ?? [];
+    const wins = battles.filter((b) => b.winnerId === playerId).length;
+    setTurnAnnouncement({
+      turn: game.turn,
+      season: SEASONS[game.season].name,
+      summary: battles.length
+        ? `${battles.length} batalha(s) · ${wins} vitória(s) para sua nação`
+        : 'Suas fronteiras atravessaram uma rodada sem batalhas.',
+    });
+    const timer = setTimeout(() => setTurnAnnouncement(null), 2500);
+    return () => clearTimeout(timer);
+  }, [game?.code, game?.turn, playerId]);
+  useEffect(() => {
+    if (
+      !game?.matchConfig.tutorial ||
+      game.phase !== 'planning' ||
+      tutorialRoom.current === game.code
+    )
+      return;
+    tutorialRoom.current = game.code;
+    try {
+      if (sessionStorage.getItem(`concordia-tutorial-${game.code}-complete`) !== 'true')
+        setTutorialOpen(true);
+    } catch {
+      setTutorialOpen(true);
+    }
+    const home = game.provinces.find((p) => p.ownerId === playerId && p.capitalOf === playerId);
+    if (home) camera.current?.focus(home);
+  }, [game?.code, game?.phase, playerId]);
+  const startTutorial = () => {
+    audio.unlock();
+    if (game) {
+      setTutorialOpen(true);
+      return;
+    }
+    send({
+      type: 'create',
+      name: 'Aprendiz',
+      tutorial: true,
+      mode: 'campaign',
+      nationId: 'vespera',
+      isPublic: false,
+      enableSecretObjectives: false,
+      roomName: 'Academia de Concórdia',
+    });
+  };
   const firstReadySound = useRef('');
   useEffect(() => {
     const key = game?.firstReadyPlayerName ? `${game.code}:${game.turn}` : '';
@@ -248,19 +339,15 @@ export default function App() {
     seenWinner = useRef('');
   const open = (panel: Panel) => {
     setFocusedWindow(panel);
-    setPanels((v) => [
-      ...v.filter(
-        (p) =>
-          p !== panel &&
-          (!(cartographic && (panel === 'province' || panel === 'battalion')) ||
-            (p !== 'province' && p !== 'battalion')),
-      ),
-      panel,
-    ]);
+    setMenu(false);
+    setManual(false);
+    setWarRequest(null);
+    setEndOpen(false);
+    setPanels([panel]);
   };
   const close = (panel: Panel) => {
     if (focusedWindow === panel) focusRemaining(panel);
-    if (cartographic && panel === 'battalion') setArmy('');
+    if (panel === 'battalion') setArmy('');
     setPanels((v) => v.filter((p) => p !== panel));
   };
   const focusRemaining = (excluded: string) =>
@@ -284,10 +371,22 @@ export default function App() {
     focusRemaining('result');
   };
   useEffect(() => {
-    if (warRequest) setFocusedWindow('war');
+    if (warRequest) {
+      setFocusedWindow('war');
+      setPanels([]);
+      setMenu(false);
+      setManual(false);
+      setEndOpen(false);
+    }
   }, [warRequest]);
   useEffect(() => {
-    if (endOpen) setFocusedWindow('result');
+    if (endOpen) {
+      setFocusedWindow('result');
+      setPanels([]);
+      setMenu(false);
+      setManual(false);
+      setWarRequest(null);
+    }
   }, [endOpen]);
   const playReplay = useCallback(
     (report: TurnResolutionReport) => setReplay({ report, progress: 0, nonce: performance.now() }),
@@ -382,7 +481,12 @@ export default function App() {
   if (!game)
     return (
       <div className="application" onClickCapture={rootClick}>
-        <Entry send={send} online={status === 'online'} onHelp={openManual} />
+        <Entry
+          send={send}
+          online={status === 'online'}
+          onHelp={openManual}
+          onTutorial={startTutorial}
+        />
         {manual && (
           <Manual
             close={closeManual}
@@ -422,11 +526,13 @@ export default function App() {
     if (p) camera.current?.focus(p);
   };
   const selectArmy = (a: Battalion) => {
+    setUnitTab('command');
     setArmy(a.id);
     setProvince(a.provinceId);
     open('battalion');
   };
   const selectProvince = (p: Province) => {
+    setArmy('');
     setProvinceTab('build');
     setProvince(p.id);
     open('province');
@@ -508,7 +614,7 @@ export default function App() {
   };
   return (
     <div
-      className={`game-viewport ${cartographic ? 'cartographic-interface' : 'classic-interface'}`}
+      className={`game-viewport release-candidate-interface ${cartographic ? 'cartographic-interface' : 'classic-interface'}`}
       onClickCapture={rootClick}
       data-interface={cartographic ? 'cartographic' : 'classic'}
       data-audio-muted={muted}
@@ -532,7 +638,7 @@ export default function App() {
         viewerId={playerId}
         replay={replay}
       />
-      <header className="top-bar framed-panel">
+      <header className="top-bar framed-panel" data-hud-surface>
         <button className="nation-heading" onClick={openMenu} title="Conselho da nação">
           <CoatOfArms nationId={me.nationId} size={32} />
           <span>
@@ -636,8 +742,18 @@ export default function App() {
         </button>
         <div className="top-tools">
           <button
-            aria-label={muted ? 'Ativar som' : 'Silenciar som'}
-            title={muted ? 'Ativar som' : 'Silenciar som'}
+            aria-label="🎓 Tutorial Rápido (5 Passos)"
+            title="Tutorial Rápido (5 Passos)"
+            onClick={startTutorial}
+          >
+            🎓
+          </button>
+          <button aria-label="Como jogar" title="Manual de campanha" onClick={openManual}>
+            <BookOpen size={16} />
+          </button>
+          <button
+            aria-label={muted ? 'Ativar efeitos' : 'Silenciar efeitos'}
+            title={muted ? 'Ativar efeitos' : 'Silenciar efeitos'}
             onClick={() => {
               const next = !muted;
               setMuted(next);
@@ -652,109 +768,69 @@ export default function App() {
           </button>
         </div>
       </header>
-      <div className="nation-ribbon" aria-label="Nações da campanha">
-        {game.players.map((p) => {
-          const r = getRelation(game, playerId, p.id);
-          const status = p.subjectOfId
-            ? '👑'
-            : r?.atWar
-              ? '⚔️'
-              : r?.allied
-                ? '🤝'
-                : r && r.truceUntil >= game.turn
-                  ? '🕊️'
-                  : hegemonicThreat(game, p.id)
-                    ? '🔥'
-                    : '•';
-          return (
-            <button
-              key={p.id}
-              disabled={p.id === playerId}
-              title={`${p.nation} · ${status}`}
-              aria-label={`Diplomacia com ${p.nation}`}
-              onClick={() => {
-                setDiplomacyTarget(p.id);
-                open('diplomacy');
-              }}
-            >
-              <CoatOfArms nationId={p.nationId} size={25} />
-              <small>{status}</small>
-            </button>
-          );
-        })}
-      </div>
       {game.sandboxContinued && (
-        <div className="sandbox-banner">
+        <div className="sandbox-banner" data-hud-surface>
           ⚔️ Dominação Livre · vitória original preservada na rodada {game.victoryRecord?.turn}
         </div>
       )}
       {game.turn <= game.graceUntilTurn && (
-        <div className="grace-banner">
+        <div className="grace-banner" data-hud-surface>
           🕊️ Pacto de não agressão · guerras liberadas na rodada {game.graceUntilTurn + 1}
         </div>
       )}
       <FirstReadyBanner game={game} />
+      {turnAnnouncement && (
+        <aside className="turn-announcement" aria-live="polite" data-turn-announcement>
+          <span>
+            📜 Rodada {turnAnnouncement.turn} — {turnAnnouncement.season}
+          </span>
+          <small>{turnAnnouncement.summary}</small>
+        </aside>
+      )}
       <PersonalAlerts
         game={game}
         playerId={playerId}
         command={command}
         onFocus={focus}
-        compact={cartographic}
+        compact
         onShowAll={() => showReport('personal')}
       />
-      <nav className="hud-navigation">
-        <button
-          onClick={() => {
-            const p = selected ?? game.provinces.find((p) => controller(p) === playerId);
-            if (p) selectProvince(p);
-          }}
-          className={panels.includes('province') ? 'selected' : ''}
-        >
-          <Castle size={15} />
-          Província
+      <nav
+        className="hud-navigation unified-navigation"
+        aria-label="Conselhos estratégicos"
+        data-hud-surface
+      >
+        <button onClick={() => open('diplomacy')} aria-label="Diplomacia" title="👑 Diplomacia">
+          <Handshake size={15} />
+          <span>Diplomacia</span>
         </button>
         <button
-          onClick={() => {
-            const a = selectedArmy ?? game.battalions.find((a) => a.ownerId === playerId);
-            if (a) selectArmy(a);
-          }}
-          className={panels.includes('battalion') ? 'selected' : ''}
+          onClick={() => open('skills')}
+          aria-label="Árvore Militar"
+          title="🎖️ Árvore Militar"
         >
           <Swords size={15} />
-          Batalhões
+          <span>Árvore Militar</span>
         </button>
         <button
-          onClick={() => open('diplomacy')}
-          className={panels.includes('diplomacy') ? 'selected' : ''}
+          onClick={() => open('maritime')}
+          aria-label="Comércio & Mares"
+          title="⚓ Comércio & Mares"
         >
-          <Handshake size={15} />
-          Diplomacia
+          <Anchor size={15} />
+          <span>Comércio & Mares</span>
         </button>
         <button
           onClick={() => open('world')}
-          className={panels.includes('world') ? 'selected' : ''}
+          aria-label="Crises & Coalizões"
+          title="🌍 Crises & Coalizões"
         >
           <Crown size={15} />
-          Mundo & Coalizões
+          <span>Crises & Coalizões</span>
         </button>
-        <button onClick={() => open('skills')}>
-          🎖️ Doutrinas & Árvore de Tropas · {me.militaryXP} XP
-        </button>
-        <button
-          title={
-            levyReason(game, playerId) ??
-            '50 ouro, 15 estabilidade; cinco infantarias e defesa territorial.'
-          }
-          disabled={!!levyReason(game, playerId)}
-          onClick={() => command({ type: 'EMERGENCY_LEVY' })}
-        >
-          🛡️ Convocar Defesa da Pátria
-        </button>
-        {game.enableSecretObjectives && (
-          <button onClick={() => open('secret')}>🎯 Meu Objetivo Secreto</button>
-        )}
-        <button aria-label="Como jogar" onClick={openManual}>
-          <BookOpen size={16} />
+        <button onClick={() => open('secret')} aria-label="Objetivos" title="🎯 Objetivos">
+          <Flag size={15} />
+          <span>Objetivos</span>
         </button>
       </nav>
       <div className="telemetry-tools">
@@ -811,47 +887,45 @@ export default function App() {
           onActivate={() => setFocusedWindow('war')}
         />
       )}
-      {panels.includes('skills') && (
-        <PanelWindow
-          id="skills"
-          active={focusedWindow === 'skills'}
-          onActivate={() => open('skills')}
-          title="Doutrinas & Árvore de Tropas"
-          width={660}
-          height={650}
-          anchor="right"
-          onClose={() => close('skills')}
-        >
-          <SkillTreeDrawer game={game} playerId={playerId} command={command} />
-        </PanelWindow>
-      )}
-      {panels.includes('secret') && (
-        <PanelWindow
-          id="secret"
-          active={focusedWindow === 'secret'}
-          onActivate={() => open('secret')}
-          title="Meu Objetivo Secreto"
-          icon={<Flag size={15} />}
-          anchor="right"
-          width={390}
-          height={590}
-          onClose={() => close('secret')}
-        >
-          <SecretDrawer game={game} playerId={playerId} command={command} />
-        </PanelWindow>
-      )}
-      {!cartographic && selectedArmy?.ownerId === playerId && (
-        <TacticalBar
-          game={game}
-          army={selectedArmy}
-          playerId={playerId}
-          command={command}
-          onRecruit={() =>
-            selectProvince(game.provinces.find((p) => p.id === selectedArmy.provinceId)!)
+      {panels.some((p) => GLOBAL_PANELS.includes(p)) && (
+        <TopBarModal
+          id="strategy-center"
+          title="Conselho Estratégico"
+          onClose={() => setPanels([])}
+          tab={panels[0]}
+          tabs={
+            [
+              { id: 'diplomacy', label: 'Diplomacia', icon: <Handshake size={15} /> },
+              { id: 'skills', label: 'Árvore Militar', icon: <Swords size={15} /> },
+              { id: 'maritime', label: 'Comércio & Mares', icon: <Anchor size={15} /> },
+              { id: 'world', label: 'Crises & Coalizões', icon: <Crown size={15} /> },
+              { id: 'secret', label: 'Objetivos', icon: <Flag size={15} /> },
+              { id: 'analytics', label: 'Estatísticas', icon: <ScrollText size={15} /> },
+            ] satisfies CenterTab[]
           }
-          onDetails={() => open('battalion')}
-          onDeselect={() => setArmy('')}
-        />
+          onTabChange={(id) => open(id as Panel)}
+        >
+          {panels[0] === 'diplomacy' && (
+            <DiplomacyDrawer
+              game={game}
+              playerId={playerId}
+              command={command}
+              focusedRealmId={diplomacyTarget}
+              onDeclareWar={(id) => setWarRequest({ targetId: id })}
+            />
+          )}
+          {panels[0] === 'skills' && (
+            <SkillTreeDrawer game={game} playerId={playerId} command={command} />
+          )}
+          {panels[0] === 'maritime' && <MaritimeOverview game={game} playerId={playerId} />}
+          {panels[0] === 'world' && (
+            <WorldDrawer game={game} playerId={playerId} command={command} />
+          )}
+          {panels[0] === 'secret' && (
+            <SecretDrawer game={game} playerId={playerId} command={command} />
+          )}
+          {panels[0] === 'analytics' && <PostGameAnalytics game={game} playerId={playerId} />}
+        </TopBarModal>
       )}
       {replay && (
         <div className="replay-indicator">
@@ -872,6 +946,7 @@ export default function App() {
       {panels.includes('province') && selected && (
         <PanelWindow
           id="province"
+          key={selected.id}
           active={focusedWindow === 'province'}
           onActivate={() => open('province')}
           title="Inspeção de Província"
@@ -885,7 +960,7 @@ export default function App() {
             game={game}
             playerId={playerId}
             province={selected}
-            compact={cartographic}
+            compact
             initialTab={provinceTab}
             command={command}
             onSelectArmy={selectArmy}
@@ -901,6 +976,7 @@ export default function App() {
       {panels.includes('battalion') && selectedArmy && (
         <PanelWindow
           id="battalion"
+          key={selectedArmy.id}
           active={focusedWindow === 'battalion'}
           onActivate={() => open('battalion')}
           title="Comando de Batalhão"
@@ -910,8 +986,7 @@ export default function App() {
           height={610}
           onClose={() => close('battalion')}
         >
-          {cartographic &&
-            selectedArmy.ownerId === playerId &&
+          {selectedArmy.ownerId === playerId &&
             game.plannedOrders.some(
               (o) =>
                 'battalionId' in o &&
@@ -930,41 +1005,65 @@ export default function App() {
                   )}
               </p>
             )}
-          {cartographic && selectedArmy.ownerId === playerId && (
-            <TacticalBar
-              game={game}
-              army={selectedArmy}
-              playerId={playerId}
-              command={command}
-              onRecruit={() => {
-                setArmy('');
-                setProvince(selectedArmy.provinceId);
-                setProvinceTab('recruit');
-                open('province');
-              }}
-              onDetails={() => focus(selectedArmy.provinceId)}
-              onDeselect={() => {
-                setArmy('');
-                close('battalion');
-              }}
-            />
-          )}
-          {cartographic && selectedArmy.ownerId === playerId ? (
-            <details className="advanced-command">
-              <summary>General e ordens avançadas</summary>
-              <BattalionDrawer
-                key={selectedArmy.id}
-                game={game}
-                army={selectedArmy}
-                playerId={playerId}
-                command={command}
-                onFocus={() => focus(selectedArmy.provinceId)}
-                onSelect={(id) => {
-                  const a = game.battalions.find((a) => a.id === id);
-                  if (a) selectArmy(a);
-                }}
-              />
-            </details>
+          {selectedArmy.ownerId === playerId ? (
+            <>
+              <div className="context-tabs" role="tablist" aria-label="Comando da unidade">
+                {(
+                  [
+                    ['command', '⚔️ Comando'],
+                    ['leaders', '🎖️ Líder'],
+                    ['details', '⚙️ Detalhes'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    role="tab"
+                    key={id}
+                    aria-selected={unitTab === id}
+                    onClick={() => setUnitTab(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {unitTab === 'command' && (
+                <TacticalBar
+                  game={game}
+                  army={selectedArmy}
+                  playerId={playerId}
+                  command={command}
+                  onRecruit={() => {
+                    setArmy('');
+                    setProvince(selectedArmy.provinceId);
+                    setProvinceTab('recruit');
+                    open('province');
+                  }}
+                  onDetails={() => focus(selectedArmy.provinceId)}
+                  onDeselect={() => close('battalion')}
+                />
+              )}
+              {unitTab === 'leaders' && (
+                <CommanderPanel
+                  game={game}
+                  army={selectedArmy}
+                  playerId={playerId}
+                  command={command}
+                />
+              )}
+              {unitTab === 'details' && (
+                <BattalionDrawer
+                  key={selectedArmy.id}
+                  game={game}
+                  army={selectedArmy}
+                  playerId={playerId}
+                  command={command}
+                  onFocus={() => focus(selectedArmy.provinceId)}
+                  onSelect={(id) => {
+                    const a = game.battalions.find((a) => a.id === id);
+                    if (a) selectArmy(a);
+                  }}
+                />
+              )}
+            </>
           ) : (
             <BattalionDrawer
               key={selectedArmy.id}
@@ -979,42 +1078,6 @@ export default function App() {
               }}
             />
           )}
-        </PanelWindow>
-      )}
-      {panels.includes('diplomacy') && (
-        <PanelWindow
-          id="diplomacy"
-          active={focusedWindow === 'diplomacy'}
-          onActivate={() => open('diplomacy')}
-          title="Diplomacia & Guerras"
-          icon={<Handshake size={15} />}
-          anchor="right"
-          width={414}
-          height={620}
-          onClose={() => close('diplomacy')}
-        >
-          <DiplomacyDrawer
-            game={game}
-            playerId={playerId}
-            command={command}
-            focusedRealmId={diplomacyTarget}
-            onDeclareWar={(id) => setWarRequest({ targetId: id })}
-          />
-        </PanelWindow>
-      )}
-      {panels.includes('world') && (
-        <PanelWindow
-          id="world"
-          active={focusedWindow === 'world'}
-          onActivate={() => open('world')}
-          title="Mundo & Coalizões"
-          icon={<Crown size={15} />}
-          anchor="right"
-          width={374}
-          height={620}
-          onClose={() => close('world')}
-        >
-          <WorldDrawer game={game} playerId={playerId} command={command} />
         </PanelWindow>
       )}
       {panels.includes('report') && (
@@ -1040,8 +1103,11 @@ export default function App() {
           />
         </PanelWindow>
       )}
-      <footer className="hud-footer">
+      <footer className="hud-footer" data-hud-surface>
         <div className="footer-tabs">
+          <button onClick={() => open('analytics')} aria-label="Estatísticas da campanha">
+            📊 Crônica
+          </button>
           <button onClick={() => showReport('personal')}>
             🔔 Minha Nação (
             {
@@ -1086,7 +1152,7 @@ export default function App() {
           <b>{game.code}</b>
         </span>
       </footer>
-      <div className="map-controls framed-panel">
+      <div className="map-controls framed-panel" data-hud-surface>
         <div className="map-mode-buttons">
           {MAP_MODES.map((m) => (
             <button
@@ -1143,15 +1209,7 @@ export default function App() {
         <span>Espaço + arraste · scroll para zoom</span>
       </div>
       {menu && (
-        <FloatingWindow
-          id="council-menu"
-          title="Conselho da nação"
-          width={470}
-          height={620}
-          active={focusedWindow === 'council-menu'}
-          onActivate={() => setFocusedWindow('council-menu')}
-          onClose={closeMenu}
-        >
+        <TopBarModal id="council-menu" title="Conselho da nação" onClose={closeMenu}>
           <section className="council-menu popup-sheet">
             <span className="eyebrow">SOB A SUA BANDEIRA</span>
             <CoatOfArms nationId={me.nationId} size={48} />
@@ -1176,9 +1234,10 @@ export default function App() {
                   } catch {}
                 }}
               />
-              Mapa cartográfico · HUD compacta
+              Relevo cartográfico 2,5D
             </label>
             <PlayerNameForm name={me.name} command={command} />
+            <AudioControls />
             <label>
               Política religiosa
               <select
@@ -1235,17 +1294,32 @@ export default function App() {
               </button>
             </div>
           </section>
-        </FloatingWindow>
+        </TopBarModal>
       )}
       {endOpen && game.phase === 'finished' && (
-        <FloatingWindow
+        <TopBarModal
           id="result"
           title="Resultado da campanha"
-          width={600}
-          height={650}
-          active={focusedWindow === 'result'}
-          onActivate={() => setFocusedWindow('result')}
           onClose={closeResult}
+          footer={
+            <>
+              {game.finishReason === 'victory' && (
+                <button
+                  className="primary"
+                  disabled={game.hostId !== playerId}
+                  title={game.hostId !== playerId ? 'O anfitrião decide pela sala.' : ''}
+                  onClick={() => {
+                    command({ type: 'CONTINUE_SANDBOX' });
+                    closeResult();
+                  }}
+                >
+                  ⚔️ Continuar Jogando (Modo Sandbox)
+                </button>
+              )}
+              <button onClick={() => download(game, 'json')}>📊 Baixar Relatório .JSON</button>
+              <button onClick={() => download(game, 'txt')}>📜 Baixar Crônica .TXT</button>
+            </>
+          }
         >
           <section className="result-modal popup-sheet">
             <span className="eyebrow">A CRÔNICA FOI ESCRITA</span>
@@ -1297,6 +1371,7 @@ export default function App() {
                 ? OBJECTIVES[game.winnerObjective].description
                 : 'As duas condições permaneceram em disputa. A crônica preserva os resultados desta campanha.'}
             </p>
+            <PostGameAnalytics game={game} playerId={playerId} />
             <div className="result-stats">
               <span>
                 {game.history.length}
@@ -1311,46 +1386,27 @@ export default function App() {
                 <small>guerras</small>
               </span>
             </div>
-            <button className="primary" onClick={() => download(game, 'json')}>
-              <Download size={16} />
-              Baixar Relatório (.JSON)
-            </button>
-            <button onClick={() => download(game, 'txt')}>
-              <ScrollText size={16} />
-              Baixar Crônica (.TXT)
-            </button>
-            <button
-              className="primary"
-              onClick={() => {
-                download(game, 'json');
-                closeResult();
-              }}
-            >
-              🏆 Encerrar Campanha e Baixar Relatório
-            </button>
-            {game.finishReason === 'victory' && (
-              <button
-                disabled={game.hostId !== playerId}
-                title={game.hostId !== playerId ? 'O anfitrião decide pela sala.' : ''}
-                onClick={() => {
-                  command({ type: 'CONTINUE_SANDBOX' });
-                  closeResult();
-                }}
-              >
-                ⚔️ Continuar Jogando (Modo Dominação Livre)
-              </button>
-            )}
-            <button className="text-button" onClick={closeResult}>
-              Explorar o mapa final
-            </button>
           </section>
-        </FloatingWindow>
+        </TopBarModal>
       )}
       {manual && (
         <Manual
           close={closeManual}
           active={focusedWindow === 'manual'}
           onActivate={() => setFocusedWindow('manual')}
+        />
+      )}
+      {tutorialOpen && (
+        <TutorialOverlay
+          game={game}
+          playerId={playerId}
+          selectedArmyId={armyId}
+          selectedProvinceId={provinceId}
+          activePanel={panels[0] ?? ''}
+          onClose={() => setTutorialOpen(false)}
+          onComplete={() => {
+            setTutorialOpen(false);
+          }}
         />
       )}
       <ConnectionToast error={error} status={status} dismiss={() => setError('')} />

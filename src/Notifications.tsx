@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GameView, GameNotification } from '../shared/types';
 import type { Command } from './ui';
 import { audio } from './audio';
@@ -90,6 +90,7 @@ export default function PersonalAlerts({
   command: Command;
   onFocus: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const seen = useRef(new Set<string>()),
     read = new Set(game.readNotificationIds);
   const pending = game.notifications.filter(
@@ -110,24 +111,40 @@ export default function PersonalAlerts({
   }, [pending.map((n) => n.id).join()]);
   if (!pending.length) return null;
   return (
-    <aside className="personal-alerts" aria-label="Alertas pessoais críticos" aria-live="polite">
-      <div className="alert-count">
-        {pending.length} alerta(s) pendente(s)
-        {compact && pending.length > 1 && <button onClick={onShowAll}>Ver todos</button>}
-      </div>
-      {pending
-        .slice(compact ? -1 : -3)
-        .reverse()
-        .map((n) => (
-          <NotificationCard
-            key={n.id}
-            notice={n}
-            game={game}
-            playerId={playerId}
-            command={command}
-            onFocus={onFocus}
-          />
-        ))}
+    <aside
+      className="personal-alerts"
+      aria-label="Alertas pessoais críticos"
+      aria-live="polite"
+      data-hud-surface
+    >
+      <button
+        className="critical-alert-badge"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        🔔 Alertas críticos ({pending.length})
+      </button>
+      {expanded && (
+        <>
+          <div className="alert-count">
+            {pending.length} alerta(s) pendente(s)
+            {compact && pending.length > 1 && <button onClick={onShowAll}>Ver todos</button>}
+          </div>
+          {pending
+            .slice(-8)
+            .reverse()
+            .map((n) => (
+              <NotificationCard
+                key={n.id}
+                notice={n}
+                game={game}
+                playerId={playerId}
+                command={command}
+                onFocus={onFocus}
+              />
+            ))}
+        </>
+      )}
     </aside>
   );
 }

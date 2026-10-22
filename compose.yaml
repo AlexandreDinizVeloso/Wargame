@@ -1,0 +1,32 @@
+services:
+  game:
+    build: .
+    restart: unless-stopped
+    environment:
+      HOST: '::'
+      PORT: '3000'
+      ROOMS_STATE_FILE: /app/.local/rooms-state.json
+    volumes:
+      - game-data:/app/.local
+    expose:
+      - '3000'
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      game:
+        condition: service_healthy
+    environment:
+      GAME_DOMAIN: ${GAME_DOMAIN:?Defina GAME_DOMAIN com o domínio do jogo}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+volumes:
+  game-data:
+  caddy-data:
+  caddy-config:

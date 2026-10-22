@@ -6,7 +6,7 @@
 
 | Rota              | Retorno                                                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------- |
-| `GET /api/health` | `status: ok`, `version: 0.7.0`, `protocolVersion: 7`                                        |
+| `GET /api/health` | `status: ok`, `version: 0.9.0-rc.1`, `protocolVersion: 7`                                   |
 | `GET /api/schema` | Nações, mapas, recursos, crises, crenças, ordens, `skills`, `commanderTraits` e `buildings` |
 | `GET /api/rooms`  | Array de salas públicas não encerradas, sem sessão ou cartas privadas                       |
 | `/ws`             | WebSocket de mensagens JSON                                                                 |
@@ -164,3 +164,12 @@ A carga de snapshots também remove as adjacências legadas China–Japão e Pa�
 - Notificação pessoal `BOMBARDMENT`, severidade `WARNING`, com foco na costa.
 
 Nós comerciais são derivados de províncias, frotas e guerras por `shared/maritime.ts`; não exigem ordens comerciais persistidas. Consultas do cliente são janelas não modais e não pausam o planejamento.
+
+## Extensões compatíveis do RC v0.8/v0.9
+
+O protocolo/snapshot permanece em **7**. O release HTTP é `0.9.0-rc.1`; `MatchConfig.createdVersion` admite esse release e a origem v0.7. Não é necessária migração destrutiva das salas v7.
+
+- `create.tutorial?:boolean`: `true` cria uma mesa privada, iniciada, com um humano e dois bots. O servidor configura nação, recursos e alvo de treino; `MatchConfig.tutorial` marca a sala. Entrada de novos humanos nessa mesa é recusada; reconexão autenticada permanece disponível. Não existe comando para injetar esses recursos em uma campanha comum.
+- `TurnHistory.analytics?:RealmTurnAnalytics[]`: cada fechamento novo registra `playerId`, `landTroops?`, `ships?`, `fortLevels` e `tradeNodes`. A ausência do campo em rodadas antigas indica dado não coletado.
+- Durante o planejamento, `viewFor` remove `landTroops`/`ships` de adversários sem compartilhamento de visão; o resultado final revela os totais. Exportações respeitam a mesma visão. Cartas e ordens privadas continuam com a redação anterior.
+- Gráficos, medalhas, volumes, tutorial e estado de consultas são recursos do cliente; não alteram as ordens ou a ordem de resolução de combate.

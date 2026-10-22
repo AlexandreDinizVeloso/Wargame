@@ -62,10 +62,12 @@ export function Entry({
   send,
   online,
   onHelp,
+  onTutorial,
 }: {
   send: (message: ClientMessage) => void;
   online: boolean;
   onHelp: () => void;
+  onTutorial: () => void;
 }) {
   const [form, setForm] = useState<'create' | 'join' | null>(null),
     [name, setName] = useState(''),
@@ -102,7 +104,7 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          SÉTIMA EDIÇÃO <i /> 0.7
+          RELEASE CANDIDATE <i /> 0.9
         </span>
         <button className="quiet-button" onClick={onHelp}>
           Como jogar <ArrowRight size={14} />
@@ -138,6 +140,9 @@ export function Entry({
           </div>
           {!form && (
             <div className="entry-actions">
+              <button className="tutorial-entry-button" disabled={!online} onClick={onTutorial}>
+                🎓 Tutorial Rápido (5 Passos)
+              </button>
               <button className="primary" disabled={!online} onClick={() => setForm('create')}>
                 Criar uma sala <ArrowRight size={17} />
               </button>

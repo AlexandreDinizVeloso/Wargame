@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { GameView, PublicRoom } from '../shared/types';
 let child: ChildProcess | undefined;
-const temp = await mkdtemp(path.join(os.tmpdir(), 'concordia-browser-v6-'));
+const temp = await mkdtemp(path.join(os.tmpdir(), 'concordia-browser-rc-'));
 let base = process.env.BASE_URL;
 const fixtures = !base ? seedBrowserFixtures(path.join(temp, 'rooms.json')) : null;
 if (!base) {
@@ -88,13 +88,17 @@ async function viewport(page: Page) {
   );
 }
 async function closeWindows(page: Page) {
-  const buttons = page.locator('.window-controls button[aria-label^="Fechar"]');
+  const buttons = page.locator('.strategy-modal > header button[aria-label^="Fechar"]');
   while (await buttons.count()) await buttons.last().click();
 }
 async function selectProvince(page: Page, id: string) {
   await page.locator(`.province-shape[data-province="${id}"]`).press('Enter');
 }
 async function saveDownload(page: Page, label: string, filename: string) {
+  if (!(await page.getByRole('button', { name: label, exact: true }).isVisible())) {
+    await closeWindows(page);
+    await page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
+  }
   const downloaded = page.waitForEvent('download');
   await page.getByRole('button', { name: label, exact: true }).click();
   const file = await downloaded;
@@ -107,7 +111,10 @@ try {
   const contexts = await Promise.all(
     [0, 1, 2].map(async () => {
       const c = await browser.newContext({ viewport: { width: 1440, height: 960 } });
-      await c.addInitScript(() => localStorage.setItem('concordia-interface', 'classic'));
+      await c.addInitScript(() => {
+        localStorage.setItem('concordia-interface', 'classic');
+        localStorage.setItem('concordia-music-volume', '0');
+      });
       return c;
     }),
   );
@@ -160,8 +167,8 @@ try {
   assert.ok((await page.locator('.resource-badge').count()) > 0);
   await page.getByRole('button', { name: 'Mapa Economia', exact: true }).click();
   assert.ok((await page.locator('.resource-badge.emphasized').count()) > 0);
-  await page.getByRole('button', { name: '🎯 Meu Objetivo Secreto', exact: true }).click();
-  const secret = page.getByRole('region', { name: 'Meu Objetivo Secreto', exact: true });
+  await page.getByRole('button', { name: 'Objetivos', exact: true }).click();
+  const secret = page.getByRole('dialog', { name: 'Conselho Estratégico' });
   await secret.getByRole('button', { name: 'Escolher esta carta' }).first().click();
   await states[0].until((g) => g.players[0].selectedObjectiveId !== null);
   await closeWindows(page);
@@ -181,24 +188,25 @@ try {
   }
   g = states[0].get();
   const target = g.players[1];
-  await page.getByRole('button', { name: `Diplomacia com ${target.nation}`, exact: true }).click();
-  const dip = page.getByRole('region', { name: 'Diplomacia & Guerras', exact: true });
+  await page.getByRole('button', { name: 'Diplomacia', exact: true }).click();
+  const dip = page.getByRole('dialog', { name: 'Conselho Estratégico' });
   await dip
     .getByRole('button', { name: `⚔️ Declarar Guerra a ${target.nation}`, exact: true })
     .click();
   await page
-    .getByRole('region', { name: /Ato de Guerra contra/ })
+    .getByRole('dialog', { name: /Ato de Guerra contra/ })
     .getByRole('button', { name: 'Cancelar', exact: true })
     .click();
   await closeWindows(page);
   const targetProvince = g.provinces.find((p) => p.ownerId === target.id)!;
   await selectProvince(page, targetProvince.id);
   const province = page.getByRole('region', { name: 'Inspeção de Província', exact: true });
+  await province.getByRole('tab', { name: '📜 Diplomacia do Reino', exact: true }).click();
   await province
     .getByRole('button', { name: `⚔️ Declarar Guerra a ${target.nation}`, exact: true })
     .click();
   await page
-    .getByRole('region', { name: /Ato de Guerra contra/ })
+    .getByRole('dialog', { name: /Ato de Guerra contra/ })
     .getByRole('button', { name: 'Cancelar', exact: true })
     .click();
   await closeWindows(page);
@@ -222,6 +230,7 @@ try {
   await page
     .getByRole('button', { name: '👣 Mover / Escolher Destino no Mapa', exact: true })
     .click();
+  await page.getByRole('tab', { name: '🎖️ Líder', exact: true }).click();
   const leaderSelect = page.getByLabel('Líder atribuído (instantâneo)', { exact: true });
   await leaderSelect.selectOption('');
   await states[0].until(
@@ -231,17 +240,20 @@ try {
   await states[0].until(
     (g) => g.commanders.find((c) => c.id === leader.id)?.assignedBattalionId === own.id,
   );
-  await page.screenshot({ path: '.local/screenshots/v6-lider.png' });
+  await page.screenshot({ path: '.local/screenshots/rc-multiplayer-lider.png' });
   await closeWindows(page);
+  await page.getByRole('tab', { name: '⚔️ Comando', exact: true }).click();
   await page.getByRole('button', { name: '➕ Reforçar / Recrutar Aqui', exact: true }).click();
+  await page.getByRole('tab', { name: '🏛️ Cidade & Economia', exact: true }).click();
   assert.equal(await page.locator('.building-card').count(), 6);
   await page.getByRole('button', { name: /Construir Quartel/ }).click();
   await states[0].until((g) =>
     g.plannedOrders.some((o) => o.type === 'BUILD_BUILDING' && o.building === 'BARRACKS'),
   );
-  await page.screenshot({ path: '.local/screenshots/v6-cidade.png' });
+  await page.screenshot({ path: '.local/screenshots/rc-multiplayer-cidade.png' });
   await closeWindows(page);
 
+  await page.locator(`[data-battalion="${own.id}"]`).press('Enter');
   assert.ok((await page.locator('[data-destination]').count()) > 0);
   await page
     .locator(`.province-shape[data-province="${targetProvince.id}"]`)
@@ -259,9 +271,9 @@ try {
       { x: targetProvince.x, y: targetProvince.y },
     );
   await page.mouse.click(position.x, position.y, { button: 'right' });
-  const modal = page.getByRole('region', { name: `Ato de Guerra contra ${target.nation}` });
+  const modal = page.getByRole('dialog', { name: `Ato de Guerra contra ${target.nation}` });
   assert.equal(await page.locator('.modal-backdrop').count(), 0);
-  await modal.getByRole('button', { name: /Redimensionar Ato de Guerra/ }).waitFor();
+  assert.equal(await page.locator('[role=dialog]').count(), 1);
   await modal.waitFor();
   await modal.getByRole('button', { name: '⚔️ Declarar Guerra e Marchar!', exact: true }).click();
   await states[0].until(
@@ -271,6 +283,9 @@ try {
     .getByRole('button', { name: `Cancelar movimento de ${own.name}`, exact: true })
     .press('Enter');
   await states[0].until((g) => !g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION'));
+  await page.locator(`[data-battalion="${own.id}"]`).press('Enter');
+  const badge = page.getByRole('button', { name: /🔔 Alertas críticos/ });
+  if (await badge.isVisible()) await badge.click();
   const notices = page
     .getByRole('complementary', { name: 'Alertas pessoais críticos' })
     .getByRole('button', { name: 'Marcar alerta como lido', exact: true });
@@ -331,17 +346,18 @@ try {
   );
   await page.getByRole('button', { name: '🏰 Entrincheirar (+Defesa)', exact: true }).click();
   await states[0].until((g) => g.plannedOrders.some((o) => o.type === 'ENTRENCH_BATTALION'));
-  await page.screenshot({ path: '.local/screenshots/v6-comando.png' });
+  await page.screenshot({ path: '.local/screenshots/rc-multiplayer-comando.png' });
   await page
     .getByRole('button', { name: '👣 Mover / Escolher Destino no Mapa', exact: true })
     .click();
+  await page.getByRole('tab', { name: '⚙️ Detalhes', exact: true }).click();
   await page.getByRole('button', { name: 'Treinar · 6 ouro', exact: true }).click();
   await states[0].until((g) => g.plannedOrders.some((o) => o.type === 'TRAIN_BATTALION'));
   await closeWindows(page);
-  await page.getByRole('button', { name: 'Desmarcar batalhão', exact: true }).click();
-  await page.getByRole('button', { name: 'Mundo & Coalizões', exact: true }).click();
+  await page.getByRole('button', { name: 'Fechar Comando de Batalhão', exact: true }).click();
+  await page.getByRole('button', { name: 'Crises & Coalizões', exact: true }).click();
   await page
-    .getByRole('region', { name: 'Mundo & Coalizões', exact: true })
+    .getByRole('dialog', { name: 'Conselho Estratégico', exact: true })
     .getByRole('heading', { name: 'Ameaça e contenção' })
     .waitFor();
   await closeWindows(page);
@@ -378,11 +394,12 @@ try {
   const besieged = states[0].get().provinces.find((p) => p.id === neutral.id)!;
   assert.equal(besieged.ownerId, null);
   assert.equal(besieged.siege?.progress, 1);
-  assert.ok((await page.locator('.siege-map-ring').count()) > 0);
-  await page.screenshot({ path: '.local/screenshots/v6-cerco.png' });
-  await page.getByRole('button', { name: 'Desmarcar batalhão', exact: true }).click();
+  assert.ok((await page.locator('.siege-miniature').count()) > 0);
+  await page.screenshot({ path: '.local/screenshots/rc-multiplayer-cerco.png' });
+  await page.getByRole('button', { name: 'Fechar Comando de Batalhão', exact: true }).click();
   const xpBeforeResearch = states[0].get().players[0].militaryXP;
-  await page.getByRole('button', { name: /🎖️ Doutrinas & Árvore de Tropas/ }).click();
+  await page.getByRole('button', { name: 'Árvore Militar', exact: true }).click();
+  await page.locator('.skill-node').first().waitFor();
   assert.equal(await page.locator('.skill-node').count(), 16);
   await page
     .locator('.skill-node')
@@ -391,7 +408,7 @@ try {
     .click();
   await states[0].until((g) => g.players[0].unlockedSkills.includes('INF_T1'));
   assert.equal(states[0].get().players[0].militaryXP, xpBeforeResearch - 25);
-  await page.screenshot({ path: '.local/screenshots/v6-doutrinas.png' });
+  await page.screenshot({ path: '.local/screenshots/rc-multiplayer-doutrinas.png' });
   await closeWindows(page);
 
   for (const p of pages) {
@@ -404,13 +421,13 @@ try {
   assert.equal(states[0].get().provinces.find((p) => p.id === neutral.id)?.ownerId, own.ownerId);
   assert.equal(states[0].get().provinces.find((p) => p.id === neutral.id)?.siege, null);
   const json = JSON.parse(
-    await saveDownload(page, 'Baixar Relatório (.JSON)', '.local/exports/v6-browser.json'),
+    await saveDownload(page, 'Baixar Relatório (.JSON)', '.local/exports/rc-browser.json'),
   );
   assert.equal(json.schemaVersion, 7);
   assert.equal(json.turnByTurnHistory.length, 5);
   assert.ok(json.worldHistory.length === 5);
   assert.ok(!('seed' in json.finalState));
-  const txt = await saveDownload(page, 'Baixar Crônica (.TXT)', '.local/exports/v6-browser.txt');
+  const txt = await saveDownload(page, 'Baixar Crônica (.TXT)', '.local/exports/rc-browser.txt');
   assert.match(txt, /RODADA 1/);
   await page.reload();
   await states[0].until((g) => g.turn === 6);
@@ -418,18 +435,19 @@ try {
   assert.equal(states[0].get().turnDeadlineAt, null);
   await page.setViewportSize({ width: 390, height: 844 });
   await viewport(page);
-  const mobileSkills = page.getByRole('button', { name: /🎖️ Doutrinas & Árvore de Tropas/ });
+  const mobileSkills = page.getByRole('button', { name: 'Árvore Militar', exact: true });
   await mobileSkills.scrollIntoViewIfNeeded();
   await mobileSkills.click();
   await viewport(page);
+  await page.locator('.skill-node').first().waitFor();
   assert.equal(await page.locator('.skill-node').count(), 16);
-  await page.screenshot({ path: '.local/screenshots/v6-celular.png' });
+  await page.screenshot({ path: '.local/screenshots/rc-multiplayer-celular.png' });
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const mobilePage = await mobile.newPage();
   await mobilePage.goto(base);
   await viewport(mobilePage);
   await mobilePage.getByRole('heading', { name: '🌐 Salas Abertas (Server Browser)' }).waitFor();
-  await mobilePage.screenshot({ path: '.local/screenshots/v6-inicio-celular.png' });
+  await mobilePage.screenshot({ path: '.local/screenshots/rc-multiplayer-inicio-celular.png' });
   if (fixtures) {
     const openFixture = async (session: FixtureSession) => {
       const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
@@ -469,7 +487,9 @@ try {
     await guest.state.until((g) => g.players[2].nationId === 'kaldor');
     await lobby.page.setViewportSize({ width: 390, height: 844 });
     await viewport(lobby.page);
-    await lobby.page.screenshot({ path: '.local/screenshots/v6-lobby-bots-celular.png' });
+    await lobby.page.screenshot({
+      path: '.local/screenshots/rc-multiplayer-lobby-bots-celular.png',
+    });
     await lobby.page.getByRole('button', { name: 'Iniciar campanha', exact: false }).click();
     await lobby.state.until(
       (g) =>
@@ -479,6 +499,7 @@ try {
     const alerts = await openFixture(fixtures.alerts[0]);
     const critical = alerts.page.getByRole('complementary', { name: 'Alertas pessoais críticos' });
     await critical.waitFor();
+    await critical.getByRole('button', { name: /🔔 Alertas críticos/ }).click();
     assert.ok(
       alerts.state
         .get()
@@ -493,6 +514,11 @@ try {
       await alerts.page.locator('[data-zoom]').getAttribute('data-zoom'),
       cameraBefore,
     );
+    await alerts.page.keyboard.press('Escape');
+    await alerts.page.locator('.province-shape[data-province="portugal"]').press('Enter');
+    await alerts.page
+      .getByRole('tab', { name: '⚔️ Recrutamento & Guarnição', exact: true })
+      .click();
     await alerts.page
       .getByRole('button', { name: '🛡️ Convocar Defesa da Pátria', exact: true })
       .click();
@@ -520,18 +546,18 @@ try {
     await alerts.page.getByRole('button', { name: 'Marcar todos como lidos', exact: true }).click();
     await alerts.page.getByRole('button', { name: /🌍 Jornal do Mundo/ }).click();
     await alerts.page.getByRole('heading', { name: '🌍 Jornal do Mundo' }).waitFor();
-    await alerts.page.screenshot({ path: '.local/screenshots/v6-notificacoes.png' });
+    await alerts.page.screenshot({ path: '.local/screenshots/rc-multiplayer-notificacoes.png' });
     const sandbox = await openFixture(fixtures.sandbox[0]);
-    await sandbox.page.getByRole('region', { name: 'Resultado da campanha' }).waitFor();
+    await sandbox.page.getByRole('dialog', { name: 'Resultado da campanha' }).waitFor();
     assert.equal(await sandbox.page.locator('.modal-backdrop').count(), 0);
     await sandbox.page
-      .getByRole('button', { name: '⚔️ Continuar Jogando (Modo Dominação Livre)', exact: true })
+      .getByRole('button', { name: '⚔️ Continuar Jogando (Modo Sandbox)', exact: true })
       .click();
     await sandbox.state.until(
       (g) => g.sandboxContinued && g.phase === 'planning' && g.victoryRecord !== null,
     );
     await sandbox.page.getByText(/Dominação Livre · vitória original preservada/).waitFor();
-    await sandbox.page.screenshot({ path: '.local/screenshots/v6-sandbox.png' });
+    await sandbox.page.screenshot({ path: '.local/screenshots/rc-multiplayer-sandbox.png' });
     const ferry = await openFixture(fixtures.transport[0]);
     const main = ferry.state
       .get()
@@ -553,7 +579,7 @@ try {
       .first()
       .waitFor();
     const treasury = ferry.state.get().players[0].gold;
-    await ferry.page.screenshot({ path: '.local/screenshots/v6-fretamento.png' });
+    await ferry.page.screenshot({ path: '.local/screenshots/rc-multiplayer-fretamento.png' });
     await ferry.page.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
     const peers = await Promise.all(fixtures.transport.slice(1).map((s) => fixturePeer(base!, s)));
     for (const client of peers) client.send({ type: 'READY', ready: true });
@@ -566,11 +592,13 @@ try {
     await ferry.page.getByRole('button', { name: 'Encerrar animação', exact: true }).click();
     await ferry.page.setViewportSize({ width: 390, height: 844 });
     await viewport(ferry.page);
-    await ferry.page.screenshot({ path: '.local/screenshots/v6-fretamento-celular.png' });
+    await ferry.page.screenshot({
+      path: '.local/screenshots/rc-multiplayer-fretamento-celular.png',
+    });
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Smoke v0.7 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
+    'Smoke RC 0.9 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
 } finally {
   await browser.close();
