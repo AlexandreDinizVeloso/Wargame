@@ -1,3 +1,4 @@
+import { developNeutralCities } from './neutral';
 import { notify } from './notifications';
 import type { GameState, TurnResolutionReport } from '../shared/types';
 import { atWar, clamp, getRelation, livingPlayers, roundMoney, unitCount } from '../shared/rules';
@@ -67,6 +68,10 @@ export function dealObjectives(g: GameState) {
   }
 }
 export function advanceWorld(g: GameState, report: TurnResolutionReport) {
+  for (const p of g.provinces)
+    if (p.coastalBombardment && p.coastalBombardment.untilTurn < g.turn)
+      p.coastalBombardment = null;
+  developNeutralCities(g, report);
   g.season = seasonAt(g.turn);
   if (g.globalEvent && g.globalEvent.endsTurn < g.turn) g.globalEvent = null;
   if (g.turn % 4 === 0 && g.globalEvent?.startedTurn !== g.turn) {

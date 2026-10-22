@@ -1,3 +1,5 @@
+import { isDisorganized } from '../shared/morale';
+import { FleetOperations } from './MaritimePanel';
 import CommanderPanel from './CommanderPanel';
 import { commanderFor, TRAITS } from '../shared/military';
 import { useMemo, useState } from 'react';
@@ -94,6 +96,15 @@ export default function BattalionDrawer({
     : (['infantry', 'cavalry', 'artillery'] as const);
   return (
     <div className="battalion-ledger">
+      {isDisorganized(army) && (
+        <p className="warning-box">
+          ⛺ Desorganizado: ofensivas bloqueadas. Descanse uma rodada em território amigo sem mover,
+          treinar ou lutar.
+        </p>
+      )}
+      {own && army.isFleet && (
+        <FleetOperations game={game} army={army} playerId={playerId} command={command} />
+      )}
       {own && <CommanderPanel game={game} army={army} playerId={playerId} command={command} />}
       {own && (
         <label className="check-label">
@@ -476,6 +487,14 @@ export function TacticalBar({
         <p className="transport-hint">
           ⛵ Travessia Marítima (15 Ouro) · grátis com frota disponível; estreitos sem custo.
         </p>
+      )}
+      {isDisorganized(army) && (
+        <p className="warning-box">
+          ⛺ Desorganizado · recue ou descanse em território amigo para voltar à ofensiva.
+        </p>
+      )}
+      {army.isFleet && (
+        <FleetOperations game={game} army={army} playerId={playerId} command={command} />
       )}
       {army.encircled && (
         <p className="warning-box">

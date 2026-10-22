@@ -102,7 +102,7 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          SEXTA EDIÇÃO <i /> 0.6
+          SÉTIMA EDIÇÃO <i /> 0.7
         </span>
         <button className="quiet-button" onClick={onHelp}>
           Como jogar <ArrowRight size={14} />

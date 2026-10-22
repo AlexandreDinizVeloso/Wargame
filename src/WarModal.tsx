@@ -3,6 +3,7 @@ import type { CasusBelli, GameView } from '../shared/types';
 import { getRelation } from '../shared/rules';
 import { hegemonicThreat } from '../shared/strategy';
 import type { Command } from './ui';
+import { FloatingWindow } from './FloatingWindow';
 export default function WarModal({
   game,
   playerId,
@@ -13,6 +14,8 @@ export default function WarModal({
   autoTransport,
   command,
   close,
+  active,
+  onActivate,
 }: {
   game: GameView;
   playerId: string;
@@ -23,6 +26,8 @@ export default function WarModal({
   autoTransport?: boolean;
   command: Command;
   close: () => void;
+  active: boolean;
+  onActivate: () => void;
 }) {
   const [cb, setCB] = useState<CasusBelli>('CONQUEST'),
     [allies, setAllies] = useState<string[]>([]);
@@ -42,13 +47,16 @@ export default function WarModal({
     game.phase !== 'planning' ||
     game.turn <= game.graceUntilTurn;
   return (
-    <div className="modal-backdrop">
-      <section
-        className="game-modal war-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Ato de Guerra contra ${target.nation}`}
-      >
+    <FloatingWindow
+      id="war"
+      title={`Ato de Guerra contra ${target.nation}`}
+      width={500}
+      height={480}
+      active={active}
+      onActivate={onActivate}
+      onClose={close}
+    >
+      <section className="war-modal popup-sheet">
         <h2>⚔️ Ato de Guerra contra {target.nation}</h2>
         <p>
           {provinceId
@@ -126,6 +134,6 @@ export default function WarModal({
           <button onClick={close}>Cancelar</button>
         </div>
       </section>
-    </div>
+    </FloatingWindow>
   );
 }

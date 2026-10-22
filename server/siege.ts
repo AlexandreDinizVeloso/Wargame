@@ -1,3 +1,4 @@
+import { isDisorganized, markDisorganized } from '../shared/morale';
 import { notify } from './notifications';
 import type { Battalion, GameState, Province, TurnResolutionReport } from '../shared/types';
 import { atWar, clamp, controller, getRelation, sameWarSide, unitCount } from '../shared/rules';
@@ -95,10 +96,11 @@ export function assaultSiege(
   p: Province,
   report: TurnResolutionReport,
 ) {
-  if (!p.siege || p.siege.attackerOwnerId !== a.ownerId) return;
+  if (!p.siege || p.siege.attackerOwnerId !== a.ownerId || isDisorganized(a)) return;
   const loss = Math.min(a.infantry, Math.ceil(a.infantry * (0.15 + p.fortLevel * 0.1)));
   a.infantry -= loss;
   a.morale = clamp(a.morale - 25);
+  markDisorganized(a);
   a.pathQueue = [];
   p.siege.progress += 3;
   report.sieges.push({

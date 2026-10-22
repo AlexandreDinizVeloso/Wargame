@@ -161,6 +161,9 @@ export function migrateV2(value: unknown): GameState {
       straitSeaIds: {},
       recruitedThisTurn: 0,
       recruitmentTurn: 0,
+      neutralDevelopmentLevel: 0,
+      neutralDevelopmentTurn: 0,
+      coastalBombardment: null,
       continent: 'EUROPE',
       terrain: p.terrain,
       terrainDefenseBonus: p.terrainDefenseBonus,
@@ -345,7 +348,7 @@ export function migrateV3(value: unknown): GameState {
   g.matchConfig = {
     ...g.matchConfig,
     maxTurns: 0,
-    createdVersion: '0.6.0',
+    createdVersion: '0.7.0',
     allowBotSecretVictory: false,
     enableSecretObjectives: false,
   };
@@ -403,9 +406,9 @@ export function migrateV4(value: unknown): GameState {
   return finalizeV5(g);
 }
 function finalizeV5(g: GameState): GameState {
-  g.version = 6;
+  g.version = 7;
   g.commanders ??= [];
-  g.matchConfig.createdVersion = '0.6.0';
+  g.matchConfig.createdVersion = '0.7.0';
   for (const p of g.players) {
     p.militaryXP ??= 0;
     p.unlockedSkills ??= [];
@@ -520,7 +523,7 @@ export function migrateV5(value: unknown): GameState {
   return finalizeV6(g);
 }
 function finalizeV6(g: GameState): GameState {
-  g.version = 6;
+  g.version = 7;
   g.baseUpkeep = 0.75;
   g.allowBotSecretVictory ??= false;
   g.sandboxContinued ??= false;
@@ -530,7 +533,7 @@ function finalizeV6(g: GameState): GameState {
   g.victoryRecord ??= g.winnerId
     ? { winnerId: g.winnerId, objective: g.winnerObjective, turn: g.turn }
     : null;
-  g.matchConfig.createdVersion = '0.6.0';
+  g.matchConfig.createdVersion = '0.7.0';
   g.matchConfig.allowBotSecretVictory = g.allowBotSecretVictory;
   const map = makeStaticMap(g.mode, g.theater);
   for (const p of g.provinces) {
@@ -608,5 +611,57 @@ function finalizeV6(g: GameState): GameState {
     g,
     'Campanha migrada para v0.6: economia, limites e estreitos atualizados; planejamento reaberto.',
   );
+  return finalizeV7(g);
+}
+
+export function migrateV6(value: unknown): GameState {
+  const g = structuredClone(value) as GameState;
+  if ((g as unknown as { version: number }).version !== 6) throw new Error('Campanha v6 inválida.');
+  if (g.phase === 'finished' && !g.matchConfig.legacyResult)
+    g.matchConfig.legacyResult = {
+      winnerId: g.winnerId,
+      objective: g.winnerObjective,
+      version: '0.6.0',
+    };
+  return finalizeV7(g);
+}
+function finalizeV7(g: GameState): GameState {
+  g.version = 7;
+  g.matchConfig.createdVersion = '0.7.0';
+  for (const a of g.battalions) a.disorganized ??= !a.isFleet && a.morale < 25;
+  for (const p of g.provinces) {
+    p.neutralDevelopmentLevel ??= 0;
+    p.neutralDevelopmentTurn ??= g.turn;
+    p.coastalBombardment ??= null;
+  }
+  for (const r of [...g.history, ...g.reports, ...(g.lastReport ? [g.lastReport] : [])]) {
+    r.bombardments ??= [];
+    r.neutralDevelopments ??= [];
+    for (const e of r.economy) e.maritimeTrade ??= 0;
+  }
+  if (g.phase === 'planning') {
+    for (const p of g.players) {
+      g.orders[p.id] = (g.orders[p.id] ?? []).filter(
+        (o) =>
+          ![
+            'MOVE_BATTALION',
+            'AUTO_TRANSPORT',
+            'NAVAL_BRIDGE',
+            'EMBARK_BATTALION',
+            'ASSAULT_SIEGE',
+            'BOMBARD_COAST',
+          ].includes(o.type),
+      );
+      p.ready = p.bot;
+    }
+    for (const a of g.battalions) a.pathQueue = [];
+    g.turnDeadlineAt = null;
+    g.deadline = null;
+    g.firstReadyPlayerName = null;
+    log(
+      g,
+      'Campanha migrada para v0.7: moral, cidades independentes e marinha atualizadas; ofensivas reabertas para planejamento.',
+    );
+  }
   return g;
 }

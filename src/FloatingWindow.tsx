@@ -21,7 +21,6 @@ export interface WindowProps {
   onActivate?: () => void;
   className?: string;
 }
-let nextWindowZ = 40;
 export function FloatingWindow({
   id,
   title,
@@ -64,11 +63,8 @@ export function FloatingWindow({
     return defaults();
   });
   const [viewport, setViewport] = useState({ width: innerWidth, height: innerHeight }),
-    [raised, setRaised] = useState(false),
-    [zIndex, setZIndex] = useState(() => ++nextWindowZ);
-  useEffect(() => {
-    if (active) setZIndex(++nextWindowZ);
-  }, [active]);
+    [raised, setRaised] = useState(false);
+  const zIndex = active ? 44 : 40;
   const gesture = useRef<{
     kind: 'drag' | 'resize';
     clientX: number;
@@ -156,10 +152,11 @@ export function FloatingWindow({
       className={`floating-window ${geometry.docked ? 'docked' : 'undocked'} ${geometry.minimized ? 'minimized' : ''} ${raised ? 'raised' : ''} ${className}`}
       aria-label={title}
       data-window={id}
+      data-context-panel={id === 'province' || id === 'battalion' || undefined}
       data-docked={geometry.docked}
+      onFocusCapture={() => onActivate?.()}
       onPointerDownCapture={() => {
         setRaised(true);
-        setZIndex(++nextWindowZ);
         onActivate?.();
       }}
       style={{

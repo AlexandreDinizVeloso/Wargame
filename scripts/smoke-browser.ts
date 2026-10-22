@@ -147,9 +147,9 @@ try {
   await pages[1].getByLabel('Seu nome', { exact: true }).fill('Almirante convidado');
   await pages[1].getByRole('button', { name: 'Salvar nome', exact: true }).click();
   await states[0].until((g) => g.players[1].name === 'Almirante convidado');
-  await pages[1].getByRole('button', { name: 'Fechar menu', exact: true }).click();
+  await pages[1].getByRole('button', { name: 'Fechar Conselho da nação', exact: true }).click();
   let g = states[0].get();
-  assert.equal(g.version, 6);
+  assert.equal(g.version, 7);
   assert.equal(g.turnDeadlineAt, null);
   assert.equal(g.players[0].secretObjectives.length, 2);
   assert.ok(g.players.slice(1).every((p) => p.secretObjectives.length === 0));
@@ -186,7 +186,10 @@ try {
   await dip
     .getByRole('button', { name: `⚔️ Declarar Guerra a ${target.nation}`, exact: true })
     .click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await page
+    .getByRole('region', { name: /Ato de Guerra contra/ })
+    .getByRole('button', { name: 'Cancelar', exact: true })
+    .click();
   await closeWindows(page);
   const targetProvince = g.provinces.find((p) => p.ownerId === target.id)!;
   await selectProvince(page, targetProvince.id);
@@ -194,7 +197,10 @@ try {
   await province
     .getByRole('button', { name: `⚔️ Declarar Guerra a ${target.nation}`, exact: true })
     .click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await page
+    .getByRole('region', { name: /Ato de Guerra contra/ })
+    .getByRole('button', { name: 'Cancelar', exact: true })
+    .click();
   await closeWindows(page);
   const own = g.battalions.find((a) => a.ownerId === g.players[0].id && !a.isFleet)!;
   await page.locator(`[data-battalion="${own.id}"]`).press('Enter');
@@ -253,7 +259,9 @@ try {
       { x: targetProvince.x, y: targetProvince.y },
     );
   await page.mouse.click(position.x, position.y, { button: 'right' });
-  const modal = page.getByRole('dialog', { name: `Ato de Guerra contra ${target.nation}` });
+  const modal = page.getByRole('region', { name: `Ato de Guerra contra ${target.nation}` });
+  assert.equal(await page.locator('.modal-backdrop').count(), 0);
+  await modal.getByRole('button', { name: /Redimensionar Ato de Guerra/ }).waitFor();
   await modal.waitFor();
   await modal.getByRole('button', { name: '⚔️ Declarar Guerra e Marchar!', exact: true }).click();
   await states[0].until(
@@ -398,7 +406,7 @@ try {
   const json = JSON.parse(
     await saveDownload(page, 'Baixar Relatório (.JSON)', '.local/exports/v6-browser.json'),
   );
-  assert.equal(json.schemaVersion, 6);
+  assert.equal(json.schemaVersion, 7);
   assert.equal(json.turnByTurnHistory.length, 5);
   assert.ok(json.worldHistory.length === 5);
   assert.ok(!('seed' in json.finalState));
@@ -514,7 +522,8 @@ try {
     await alerts.page.getByRole('heading', { name: '🌍 Jornal do Mundo' }).waitFor();
     await alerts.page.screenshot({ path: '.local/screenshots/v6-notificacoes.png' });
     const sandbox = await openFixture(fixtures.sandbox[0]);
-    await sandbox.page.getByRole('dialog', { name: 'Resultado da campanha' }).waitFor();
+    await sandbox.page.getByRole('region', { name: 'Resultado da campanha' }).waitFor();
+    assert.equal(await sandbox.page.locator('.modal-backdrop').count(), 0);
     await sandbox.page
       .getByRole('button', { name: '⚔️ Continuar Jogando (Modo Dominação Livre)', exact: true })
       .click();
@@ -561,7 +570,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Smoke v0.6 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
+    'Smoke v0.7 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
 } finally {
   await browser.close();

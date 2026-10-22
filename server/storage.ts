@@ -16,7 +16,7 @@ import { SKILLS, TRAITS } from '../shared/military';
 import { buildingSlots, usedSlots } from '../shared/development';
 import { parseOrder } from './commands';
 import { isLegacySeaShortcut } from '../shared/map';
-import { migrateV2, migrateV3, migrateV4, migrateV5 } from './migration';
+import { migrateV2, migrateV3, migrateV4, migrateV5, migrateV6 } from './migration';
 export interface SavedRoom {
   game: GameState;
   sessions: { playerId: string; tokenHash: string }[];
@@ -24,7 +24,7 @@ export interface SavedRoom {
   remainingMs: number;
 }
 interface Snapshot {
-  schemaVersion: 6;
+  schemaVersion: 7;
   savedAt: number;
   rooms: SavedRoom[];
 }
@@ -32,7 +32,7 @@ export function validGame(g: GameState): boolean {
   try {
     if (
       !g ||
-      g.version !== 6 ||
+      g.version !== 7 ||
       typeof g.code !== 'string' ||
       !['lobby', 'planning', 'finished'].includes(g.phase) ||
       !Array.isArray(g.players) ||
@@ -138,6 +138,20 @@ export function validGame(g: GameState): boolean {
           p.portLevel,
           p.marketLevel,
         ].every(Number.isFinite) ||
+        !Number.isInteger(p.neutralDevelopmentLevel) ||
+        p.neutralDevelopmentLevel < 0 ||
+        p.neutralDevelopmentLevel > 5 ||
+        !Number.isInteger(p.neutralDevelopmentTurn) ||
+        p.neutralDevelopmentTurn < 0 ||
+        p.neutralDevelopmentTurn > g.turn ||
+        (p.coastalBombardment !== null &&
+          (!ids.has(p.coastalBombardment.ownerId) ||
+            !Number.isInteger(p.coastalBombardment.startedTurn) ||
+            p.coastalBombardment.startedTurn < 1 ||
+            p.coastalBombardment.startedTurn > g.turn ||
+            p.coastalBombardment.untilTurn !== p.coastalBombardment.startedTurn + 1 ||
+            p.kind !== 'LAND' ||
+            !p.isCoastal)) ||
         !Array.isArray(p.straitNeighbors) ||
         !p.straitSeaIds ||
         p.straitNeighbors.some(
@@ -237,6 +251,7 @@ export function validGame(g: GameState): boolean {
         typeof a.isFleet !== 'boolean' ||
         typeof a.autoMerge !== 'boolean' ||
         typeof a.encircled !== 'boolean' ||
+        typeof a.disorganized !== 'boolean' ||
         ![a.infantryPower, a.artilleryPower].every(
           (n) => Number.isFinite(n) && n >= 1 && n <= 1.2 + 1e-8,
         ) ||
@@ -306,6 +321,7 @@ export function validGame(g: GameState): boolean {
           'PEACE_OFFER',
           'BATTALION_WIPED',
           'VICTORY_WARNING',
+          'BOMBARDMENT',
           'BATTLE',
           'ENCIRCLEMENT',
           'EMERGENCY_LEVY',
@@ -341,7 +357,7 @@ function decode(value: unknown): SavedRoom[] {
   const snapshot = value as { schemaVersion: number; rooms: SavedRoom[] };
   if (
     !snapshot ||
-    ![2, 3, 4, 5, 6].includes(snapshot.schemaVersion) ||
+    ![2, 3, 4, 5, 6, 7].includes(snapshot.schemaVersion) ||
     !Array.isArray(snapshot.rooms) ||
     snapshot.rooms.length > 200
   )
@@ -357,7 +373,9 @@ function decode(value: unknown): SavedRoom[] {
             ? migrateV4(room.game)
             : snapshot.schemaVersion === 5
               ? migrateV5(room.game)
-              : room.game,
+              : snapshot.schemaVersion === 6
+                ? migrateV6(room.game)
+                : room.game,
   }));
   for (const room of rooms)
     for (const p of room.game.provinces)
@@ -407,6 +425,11 @@ export function readSnapshot(filename: string): SavedRoom[] {
         !existsSync(`${filename}.v5-backup`)
       )
         copyFileSync(candidate, `${filename}.v5-backup`);
+      if (
+        (raw as { schemaVersion: number }).schemaVersion === 6 &&
+        !existsSync(`${filename}.v6-backup`)
+      )
+        copyFileSync(candidate, `${filename}.v6-backup`);
       return rooms;
     } catch {
       continue;
@@ -419,7 +442,7 @@ export function readSnapshot(filename: string): SavedRoom[] {
   return [];
 }
 export function writeSnapshot(filename: string, rooms: SavedRoom[], now: number) {
-  const snapshot: Snapshot = { schemaVersion: 6, savedAt: now, rooms };
+  const snapshot: Snapshot = { schemaVersion: 7, savedAt: now, rooms };
   decode(snapshot);
   const temporary = `${filename}.tmp`;
   mkdirSync(path.dirname(filename), { recursive: true });

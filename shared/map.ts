@@ -300,6 +300,9 @@ export function makeMap(mode: GameMode = 'campaign', theater: Theater = 'EUROPE'
     maxBuildingSlots:
       p.strategicResource === 'GOLD_MINE' || p.strategicResource === 'RELIC' ? 3 : 2,
     siege: null,
+    neutralDevelopmentLevel: 0,
+    neutralDevelopmentTurn: 0,
+    coastalBombardment: null,
     recruitedThisTurn: 0,
     recruitmentTurn: 0,
     conversion: 0,

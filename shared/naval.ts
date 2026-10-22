@@ -118,7 +118,10 @@ export function crossingOptions(
         !f.embarkedArmyId &&
         !f.stranded &&
         !f.pathQueue.length &&
-        !orders.some((o) => o.type === 'MOVE_BATTALION' && o.battalionId === f.id),
+        !orders.some(
+          (o) =>
+            (o.type === 'MOVE_BATTALION' || o.type === 'BOMBARD_COAST') && o.battalionId === f.id,
+        ),
     )) {
       const used = orders
         .filter(

@@ -816,7 +816,7 @@ test('migração v4 corrige terrestre solto no mar, introduz líderes e ajusta c
   raw.version = 4;
   delete raw.commanders;
   const migrated = migrateV4(raw);
-  assert.equal(migrated.version, 6);
+  assert.equal(migrated.version, 7);
   assert.equal(migrated.battalions[0].infantry, 9);
   assert.equal(province(migrated, migrated.battalions[0].provinceId).kind, 'LAND');
   assert.equal(migrated.commanders.length, 1);

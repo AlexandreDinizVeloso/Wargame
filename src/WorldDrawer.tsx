@@ -1,3 +1,4 @@
+import { MARITIME_CAP, seaTradeNodes } from '../shared/maritime';
 import type { GameView } from '../shared/types';
 import { EVENTS, hegemonicThreat, SEASONS } from '../shared/strategy';
 import { CoatOfArms, Meter, type Command } from './ui';
@@ -30,6 +31,25 @@ export default function WorldDrawer({
           Uma crise global é sorteada a cada quatro rodadas e dura duas rodadas.
         </p>
       )}
+      <details className="sea-trade-ledger">
+        <summary>⚓ Rotas marítimas e cidades independentes</summary>
+        <p>
+          Navio de guerra e transporte livres disputam renda de 3–6 ouro por mar, até {MARITIME_CAP}{' '}
+          por nação. Empates e bloqueios impedem o recebimento.
+        </p>
+        {seaTradeNodes(game).map((n) => (
+          <p key={n.seaId}>
+            <b>{n.name}</b> · {n.value} ouro ·{' '}
+            {n.contested
+              ? 'disputado'
+              : (game.players.find((p) => p.id === n.ownerId)?.nation ?? 'livre')}
+          </p>
+        ))}
+        <p>
+          Cidades independentes ricas recebem até duas tropas a cada quatro rodadas, até 12; fortes
+          nos níveis 2 e 4 de desenvolvimento. A evolução é suspensa sob cerco ou invasão.
+        </p>
+      </details>
       <h3>Ameaça e contenção</h3>
       <p>
         Expansão agressiva ≥60 ou controle de 40% das terras permite formar uma coalizão. Paz reduz
