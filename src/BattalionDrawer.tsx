@@ -1,9 +1,9 @@
 import { effectiveSupply } from '../shared/strategy';
 import { isDisorganized } from '../shared/morale';
 import { FleetOperations } from './MaritimePanel';
-import CommanderPanel from './CommanderPanel';
+const CommanderPanel = lazy(() => import('./CommanderPanel'));
 import { commanderFor, TRAITS } from '../shared/military';
-import { useMemo, useState } from 'react';
+import { lazy, useMemo, useState } from 'react';
 import { Anchor, ArrowUpRight, Merge, Shield, Split, Swords, Target } from 'lucide-react';
 import type { Battalion, Composition, GameView, PlayerOrder } from '../shared/types';
 import {
@@ -465,7 +465,7 @@ export function TacticalBar({
     <section className="tactical-hud framed-panel" aria-label="HUD tática de batalhão">
       <header>
         <strong>{army.name}</strong>
-        <span>{p.name} · 👣 destinos iluminados</span>
+        <span>{p.name} · botão direito: mover / atacar</span>
         <button aria-label="Desmarcar batalhão" onClick={onDeselect}>
           ✕
         </button>
@@ -473,14 +473,29 @@ export function TacticalBar({
       <div className="tactical-composition">
         {army.isFleet ? (
           <>
-            <b>⚓ {army.warships}</b>
-            <b>⛵ {army.transports}</b>
+            <b>
+              ⚓ {army.warships}
+              <small>Navios de guerra</small>
+            </b>
+            <b>
+              ⛵ {army.transports}
+              <small>Transportes</small>
+            </b>
           </>
         ) : (
           <>
-            <b>🛡️ {army.infantry}</b>
-            <b>🐎 {army.cavalry}</b>
-            <b>💣 {army.artillery}</b>
+            <b>
+              🛡️ {army.infantry}
+              <small>Infantaria</small>
+            </b>
+            <b>
+              🐎 {army.cavalry}
+              <small>Cavalaria</small>
+            </b>
+            <b>
+              💣 {army.artillery}
+              <small>Artilharia</small>
+            </b>
           </>
         )}
         <span>Moral {Math.round(army.morale)}%</span>
@@ -495,10 +510,10 @@ export function TacticalBar({
         <button
           className="selected"
           aria-label="👣 Mover / Escolher Destino no Mapa"
-          title="Escolher destino no mapa"
+          title="Clique direito em um destino no mapa para mover / atacar"
           onClick={onDetails}
         >
-          👣 Mover
+          👣 Ver destinos
         </button>
         <button
           aria-label="➗ Dividir agora (50/50)"

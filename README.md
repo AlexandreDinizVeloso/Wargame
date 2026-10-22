@@ -1,24 +1,35 @@
-# Concórdia — Atlas de Impérios · v0.9 RC
+# Concórdia — Atlas de Impérios · v0.95
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
 
-## Pacote v0.8/v0.9 · Release Candidate
+## v0.95 · Interface, controles e áudio
 
-- **Miniaturas SVG:** estandartes heráldicos por composição, líderes/estrelas/moral, galeões com carga, rosas dos ventos comerciais e seis construções ilustradas. Cercos têm fogo/fumaça e progresso; inverno aplica geada ao norte e montanhas.
-- **HUD única:** um dock compacto alterna cidade/formação; Diplomacia, Árvore Militar, Comércio & Mares, Crises & Coalizões, Objetivos e Estatísticas ficam em uma central com abas. Esc ou clique fora fecha a consulta.
+- **Mouse:** esquerdo seleciona/inspeciona; direito prepara movimento, ataque ou travessia. Arrastar com direito/meio move a câmera; Alt + esquerdo sinaliza para aliados.
+- **Janelas:** inspeção de 480×540, arraste pelo título, alças direita/inferior/canto, minimizar e ↺ para restaurar. Tamanho e posição ficam salvos neste navegador.
+- **Conselhos e Crônica:** navegação única nas barras superior/inferior, títulos específicos e relógio independente no topo. Sem esmaecer o mapa.
+- **Replay de quatro segundos:** fogo, fumaça e explosões são desmontados ao terminar; o cerco mantém somente seu anel de progresso.
+- **Efeitos acústicos:** canhão, mosquetes, aço, passos, água, lona, madeira e sino sintetizados com ruído filtrado e envelopes percussivos.
+- **Tática:** prévia de poder ao passar sobre um vizinho com unidade selecionada; sinal dourado com nota compartilhado apenas com a própria nação e aliados, durante seis segundos.
+
+Veja [escopo e validação v0.95](docs/V0_95.md).
+
+## Recursos da campanha
+
+- **Miniaturas SVG:** estandartes heráldicos por composição, líderes/estrelas/moral, galeões com carga, rosas dos ventos comerciais e seis construções ilustradas. Cercos têm progresso, com fogo/fumaça restritos ao replay; inverno aplica geada ao norte e montanhas.
+- **HUD única:** uma janela contextual alterna cidade/formação; Diplomacia, Árvore Militar, Comércio & Mares, Crises & Coalizões, Objetivos e Estatísticas abrem diretamente pelo menu superior. Esc ou clique fora fecha a consulta.
 - **Áudio procedural:** ambiente de paz/guerra com volume e mute de música separados dos efeitos; transição de rodada com resumo pessoal por 2,5 segundos.
 - **Tutorial de cinco passos:** a tela inicial cria uma mesa privada de treino. Ações reais avançam o guia; o botão no topo também permite orientar uma campanha existente.
 - **Crônica interativa:** gráficos por nação, inspeção de rodadas, receitas/tesouro/território/forças/vitórias e quatro títulos com empates. Dados militares antigos ausentes aparecem como lacunas; informações privadas continuam protegidas.
 - **Docker Node 20 Alpine**, volume de salas, healthcheck e Compose/Caddy para HTTPS. Veja [deploy cloud](docs/DEPLOY_CLOUD.md).
 
-O motor mantém as [regras v0.7](docs/REGRAS_V7.md), com protocolo 7 compatível e campos opcionais de estatísticas. A interface deste RC substitui os popups simultâneos da prévia v0.7. Consulte [escopo e validação do RC](docs/RELEASE_CANDIDATE.md) e o [histórico de balanceamento](docs/BALANCE.md).
+O motor mantém as [regras v0.7](docs/REGRAS_V7.md), com protocolo 7 compatível e campos opcionais de estatísticas. A v0.95 amplia a inspeção e retoma janelas móveis; consulte também o [RC anterior](docs/RELEASE_CANDIDATE.md) e o [histórico de balanceamento](docs/BALANCE.md).
 
 ## Executar
 
 Node.js **20.19+ na linha 20, ou 22.12+**. O Docker usa `node:20-alpine`; o ambiente de desenvolvimento usa Node 24.
 
 ```sh
-npm ci
+npm ci --include=dev
 npm run dev
 ```
 
@@ -28,6 +39,16 @@ Abra a porta **3000**. O navegador de salas lista campanhas públicas desse serv
 npm run build
 npm start
 ```
+
+No Windows/PowerShell, use estes comandos na pasta que contém `package.json` (Node 24 LTS recomendado):
+
+```powershell
+npm.cmd ci --include=dev
+npm.cmd run build
+npm.cmd start
+```
+
+Se aparecer `'tsx' is not recognized`, a instalação das dependências não foi concluída nessa pasta. O `tsx` é uma dependência de produção local; não precisa instalar globalmente.
 
 Motor sem interface, Vite ou dependência de `dist/`:
 
@@ -82,12 +103,12 @@ Trigo, ferro, cavalos, minas de ouro e relíquias aparecem no mapa e alteram rec
 ## Comandar
 
 - Clique em uma província para administrar, recrutar, converter e negociar com o proprietário.
-- Selecione uma ficha militar: os destinos vizinhos ficam verdes (mover), vermelhos (invadir) ou azuis (transporte). Os estreitos aparecem tracejados; destinos costeiros também podem oferecer travessia gratuita ou fretamento por 15 ouro. Clique esquerdo ou direito prepara o movimento. Clique fora ou pressione **Esc** para desmarcar.
+- Selecione uma ficha militar: os destinos vizinhos ficam verdes (mover), vermelhos (invadir) ou azuis (transporte). Os estreitos aparecem tracejados; destinos costeiros também podem oferecer travessia gratuita ou fretamento por 15 ouro. **Clique direito** prepara o movimento; **clique esquerdo** inspeciona a região sem emitir ordens. Clique fora ou pressione **Esc** para desmarcar.
 - Clique no **✕ da seta** para cancelar a marcha. O dock da formação divide 50/50, reúne forças e oferece manobras; Líder permite atribuição imediata e Detalhes contém as ordens avançadas.
 - Declare guerra pela central Diplomacia, pela aba Diplomacia do Reino de uma província estrangeira ou pela confirmação ao tentar invadir em paz. **Declarar Guerra e Marchar** é uma operação atômica no servidor.
 - **Scroll** ajusta zoom; botão direito/meio ou Espaço + arraste move a câmera; **1–5** troca o modo de mapa.
 
-As janelas podem ser arrastadas, redimensionadas, desanexadas e minimizadas. A resolução tem replay de quatro segundos e áudio sintetizado com opção de silenciar.
+As janelas podem ser arrastadas, redimensionadas e minimizadas; ↺ restaura os padrões. A resolução tem replay de quatro segundos e áudio sintetizado com opção de silenciar.
 
 ## Ritmo e vitória
 
@@ -129,4 +150,4 @@ O smoke inicia um servidor isolado em porta livre e abre três navegadores Chrom
 
 `shared/` e `server/` não importam React, `src/` ou DOM. Um cliente Godot pode consumir o [protocolo 7](docs/PROTOCOL.md). Consulte [regras v0.7](docs/REGRAS_V7.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3/v0.4/v0.5/v0.6 em `docs/` são arquivos históricos.
 
-Análise das partidas anteriores: [plano da v0.7](docs/PLANO_V7.md). A direção atual está no [RC v0.8/v0.9](docs/RELEASE_CANDIDATE.md).
+Análise das partidas anteriores: [plano da v0.7](docs/PLANO_V7.md). A direção atual está na [v0.95](docs/V0_95.md).

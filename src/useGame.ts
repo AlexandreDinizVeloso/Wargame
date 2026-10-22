@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ClientMessage, GameCommand, GameView, ServerMessage } from '../shared/types';
+import type { ClientMessage, GameCommand, GameView, ServerMessage, MapPing } from '../shared/types';
 
 interface Session {
   code: string;
@@ -23,6 +23,7 @@ function readSession(): Session | null {
   return null;
 }
 export function useGame() {
+  const [pings, setPings] = useState<MapPing[]>([]);
   const [game, setGame] = useState<GameView | null>(null),
     [playerId, setPlayerId] = useState(''),
     [status, setStatus] = useState<'connecting' | 'online' | 'offline'>('connecting'),
@@ -71,7 +72,12 @@ export function useGame() {
           return;
         }
         switch (data.type) {
+          case 'map_ping':
+            if (data.ping.code === session.current?.code)
+              setPings((p) => [...p.filter((x) => x.expiresAt > Date.now()), data.ping].slice(-12));
+            break;
           case 'joined':
+            setPings([]);
             session.current = { code: data.code, playerId: data.playerId, token: data.token };
             saveSession(session.current);
             setPlayerId(data.playerId);
@@ -95,6 +101,7 @@ export function useGame() {
             }
             break;
           case 'left':
+            setPings([]);
             setGame(null);
             setPlayerId('');
             break;
@@ -123,12 +130,21 @@ export function useGame() {
     const timer = setTimeout(() => setError(''), 8000);
     return () => clearTimeout(timer);
   }, [error]);
+  useEffect(() => {
+    if (!pings.length) return;
+    const timer = setTimeout(
+      () => setPings((p) => p.filter((x) => x.expiresAt > Date.now())),
+      Math.max(0, Math.min(...pings.map((p) => p.expiresAt)) - Date.now()) + 20,
+    );
+    return () => clearTimeout(timer);
+  }, [pings]);
   const leave = () => {
+    setPings([]);
     session.current = null;
     saveSession(null);
     if (socket.current?.readyState === WebSocket.OPEN) send({ type: 'leave' });
     setGame(null);
     setPlayerId('');
   };
-  return { game, playerId, status, error, setError, send, command, leave };
+  return { game, playerId, status, error, setError, send, command, leave, pings };
 }

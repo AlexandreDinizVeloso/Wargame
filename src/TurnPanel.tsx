@@ -1,7 +1,6 @@
 import { NotificationCard } from './Notifications';
-import FirstReadyBanner from './FirstReadyBanner';
 import { useEffect, useState } from 'react';
-import { ArrowRight, Coins, MessageSquare, Play, ScrollText, Swords, X } from 'lucide-react';
+import { ArrowRight, Coins, Play, ScrollText, Swords, X } from 'lucide-react';
 import type { GameView, TurnResolutionReport } from '../shared/types';
 import { RETREAT_LABELS, orderCost, orderKey, orderProvinceId } from '../shared/rules';
 import { orderName } from './orders';
@@ -12,7 +11,6 @@ export default function TurnPanel({
   playerId,
   command,
   tab,
-  setTab,
   onReplay,
   onFocus,
 }: {
@@ -20,7 +18,6 @@ export default function TurnPanel({
   playerId: string;
   command: Command;
   tab: ReportTab;
-  setTab: (tab: ReportTab) => void;
   onReplay: (r: TurnResolutionReport) => void;
   onFocus: (id: string) => void;
 }) {
@@ -31,70 +28,8 @@ export default function TurnPanel({
   const me = game.players.find((p) => p.id === playerId)!;
   return (
     <div className="turn-panel">
-      <FirstReadyBanner game={game} />
-      <div className="panel-tabs">
-        <button className={tab === 'personal' ? 'selected' : ''} onClick={() => setTab('personal')}>
-          🔔 Comunique-se / Minha Nação (
-          {
-            game.notifications.filter(
-              (n) =>
-                n.type !== 'WORLD' &&
-                n.involvesPlayerIds.includes(playerId) &&
-                !game.readNotificationIds.includes(n.id),
-            ).length
-          }
-          )
-        </button>
-        <button
-          className={tab === 'world' ? 'selected' : ''}
-          onClick={() => {
-            setTab('world');
-            command({
-              type: 'READ_NOTIFICATIONS',
-              notificationIds: game.notifications
-                .filter((n) => n.type === 'WORLD' && !game.readNotificationIds.includes(n.id))
-                .map((n) => n.id),
-            });
-          }}
-        >
-          🌍 Jornal do Mundo (
-          {
-            game.notifications.filter(
-              (n) => n.type === 'WORLD' && !game.readNotificationIds.includes(n.id),
-            ).length
-          }
-          )
-        </button>
-        <button className={tab === 'orders' ? 'selected' : ''} onClick={() => setTab('orders')}>
-          <ScrollText size={14} />
-          Ordens <b>{game.plannedOrders.length}</b>
-        </button>
-        <button className={tab === 'reports' ? 'selected' : ''} onClick={() => setTab('reports')}>
-          <Swords size={14} />
-          Relatórios <b>{game.lastReport?.battles.length ?? 0}</b>
-        </button>
-        <button className={tab === 'chat' ? 'selected' : ''} onClick={() => setTab('chat')}>
-          <MessageSquare size={14} />
-          Conselho <b>{game.chat.length}</b>
-        </button>
-      </div>
       {tab === 'personal' && (
         <section className="personal-inbox">
-          <div className="section-heading">
-            <h3>Minha nação</h3>
-            <button
-              onClick={() =>
-                command({
-                  type: 'READ_NOTIFICATIONS',
-                  notificationIds: game.notifications
-                    .filter((n) => n.type !== 'WORLD' && n.involvesPlayerIds.includes(playerId))
-                    .map((n) => n.id),
-                })
-              }
-            >
-              Marcar todos como lidos
-            </button>
-          </div>
           {game.notifications
             .filter((n) => n.type !== 'WORLD' && n.involvesPlayerIds.includes(playerId))
             .slice()

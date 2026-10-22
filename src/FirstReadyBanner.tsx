@@ -16,8 +16,8 @@ export default function FirstReadyBanner({ game }: { game: GameView }) {
       {game.paused
         ? '⏸️ Campanha pausada'
         : game.turnDeadlineAt
-          ? `⏳ ${game.firstReadyPlayerName} finalizou a rodada! Restam ${Math.max(0, Math.ceil((game.turnDeadlineAt - now) / 1000))}s para o turno virar automaticamente!`
-          : `⏸️ Aguardando o 1º jogador finalizar para iniciar o relógio (${game.turnSeconds}s)`}
+          ? `⏳ ${game.firstReadyPlayerName} finalizou · Restam ${Math.max(0, Math.ceil((game.turnDeadlineAt - now) / 1000))}s`
+          : `⏸️ Aguardando o 1º jogador finalizar · relógio de ${game.turnSeconds}s`}
     </div>
   );
 }

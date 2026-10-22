@@ -14,7 +14,7 @@ interface Progress {
 const TEXT = [
   [
     'Comando de Batalhão',
-    'Clique no estandarte do seu batalhão e escolha uma terra neutra vizinha iluminada. A seta no mapa mostra a marcha preparada.',
+    'Clique Esquerdo: Selecionar | Clique Direito: Mover / Atacar. Selecione o estandarte e clique com o botão direito numa terra neutra vizinha iluminada. A seta no mapa mostra a marcha preparada.',
   ],
   [
     'Cerco e Conquista',
@@ -22,7 +22,7 @@ const TEXT = [
   ],
   [
     'Economia e Quartéis',
-    'Desmarque a formação com Esc e selecione uma cidade sua em Cidade & Economia. Construa um Quartel ou Mercado e confirme a rodada para concluir a obra.',
+    'Clique com o botão esquerdo em uma cidade sua em Cidade & Economia. Construa um Quartel ou Mercado e confirme a rodada para concluir a obra.',
   ],
   [
     'Recrutamento e Líderes',

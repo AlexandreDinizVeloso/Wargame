@@ -439,7 +439,7 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.7.0' | '0.9.0-rc.1';
+  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0';
   tutorial?: boolean;
   enableSecretObjectives: boolean;
   allowBotSecretVictory: boolean;
@@ -559,6 +559,14 @@ export type GameCommand =
       autoTransport?: boolean;
     }
   | { type: 'CALL_TO_ARMS'; warId: string; allyId: string };
+export interface MapPing {
+  id: string;
+  code: string;
+  playerId: string;
+  provinceId: string;
+  note: string;
+  expiresAt: number;
+}
 export type ClientMessage =
   | {
       type: 'create';
@@ -577,8 +585,10 @@ export type ClientMessage =
   | { type: 'join'; code: string; name: string; nationId?: NationId }
   | { type: 'resume'; code: string; playerId: string; token: string }
   | { type: 'leave' }
-  | { type: 'command'; command: GameCommand };
+  | { type: 'command'; command: GameCommand }
+  | { type: 'map_ping'; provinceId: string; note?: string };
 export type ServerMessage =
+  | { type: 'map_ping'; ping: MapPing }
   | { type: 'joined'; code: string; playerId: string; token: string }
   | { type: 'state'; state: GameView }
   | { type: 'error'; message: string }

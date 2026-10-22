@@ -173,3 +173,9 @@ O protocolo/snapshot permanece em **7**. O release HTTP é `0.9.0-rc.1`; `MatchC
 - `TurnHistory.analytics?:RealmTurnAnalytics[]`: cada fechamento novo registra `playerId`, `landTroops?`, `ships?`, `fortLevels` e `tradeNodes`. A ausência do campo em rodadas antigas indica dado não coletado.
 - Durante o planejamento, `viewFor` remove `landTroops`/`ships` de adversários sem compartilhamento de visão; o resultado final revela os totais. Exportações respeitam a mesma visão. Cartas e ordens privadas continuam com a redação anterior.
 - Gráficos, medalhas, volumes, tutorial e estado de consultas são recursos do cliente; não alteram as ordens ou a ordem de resolução de combate.
+
+## Extensão opcional v0.95: sinais táticos
+
+Protocolo e snapshots permanecem em **7**. O cliente autenticado envia `{ "type": "map_ping", "provinceId": "portugal", "note": "Atacar juntos!" }`. A nota é opcional, limitada a 80 caracteres. O servidor valida sala, sessão, nação ativa e província; aplica intervalo mínimo de 1,5 segundo por jogador/sala (inclusive após reconectar) e envia `{ "type": "map_ping", "ping": { "id", "code", "playerId", "provinceId", "note", "expiresAt" } }` somente ao remetente e seus aliados atuais. Identidade, código, ID e expiração são definidos pelo servidor.
+
+O sinal dura seis segundos, não prepara ordens, não altera recursos/turno e não entra em snapshots, relatórios, chat público ou histórico. Clientes antigos podem ignorar a nova mensagem. Não há replay de sinais ao retomar a sessão. A prévia de combate usa exclusivamente a visão já filtrada pelo servidor e o cálculo puro compartilhado de poder.

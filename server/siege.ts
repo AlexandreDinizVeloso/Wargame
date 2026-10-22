@@ -1,8 +1,9 @@
+import { siegeProgressPerTurn } from '../shared/siege';
 import { isDisorganized, markDisorganized } from '../shared/morale';
 import { notify } from './notifications';
 import type { Battalion, GameState, Province, TurnResolutionReport } from '../shared/types';
-import { atWar, clamp, controller, getRelation, sameWarSide, unitCount } from '../shared/rules';
-import { commanderFor, hasSkill } from '../shared/military';
+import { atWar, clamp, controller, unitCount } from '../shared/rules';
+import { hasSkill } from '../shared/military';
 import { destroyBattalion, log, playerOf } from './state';
 import { commanderXP } from './armies';
 export function beginSiege(g: GameState, a: Battalion, p: Province) {
@@ -146,32 +147,7 @@ export function advanceSieges(g: GameState, report: TurnResolutionReport) {
     }
     s.required = 2 + p.fortLevel * 2;
     if (s.lastProgressTurn < g.turn) {
-      const artillery = troops.reduce((n, a) => n + a.artillery, 0),
-        master = troops.some((a) => commanderFor(g, a)?.trait === 'SIEGE_MASTER');
-      const blockade =
-        p.isCoastal &&
-        g.battalions.some(
-          (a) =>
-            a.isFleet &&
-            a.warships > 0 &&
-            p.neighbors.includes(a.provinceId) &&
-            g.provinces.some((q) => q.id === a.provinceId && q.kind === 'SEA_ZONE') &&
-            (a.ownerId === s.attackerOwnerId ||
-              sameWarSide(g, a.ownerId, s.attackerOwnerId) ||
-              getRelation(g, a.ownerId, s.attackerOwnerId)?.allied) &&
-            !!p.ownerId &&
-            atWar(g, a.ownerId, p.ownerId),
-        );
-      s.progress +=
-        1 +
-        (artillery > 0
-          ? artillery >= 3 || hasSkill(g, s.attackerOwnerId, 'ART_T2A')
-            ? 2
-            : 1
-          : 0) +
-        (artillery > 0 && hasSkill(g, s.attackerOwnerId, 'ART_T2A') ? 1 : 0) +
-        (master ? 1 : 0) +
-        (blockade ? 1 : 0);
+      s.progress += siegeProgressPerTurn(g, s.attackerOwnerId, troops, p);
       s.turnsUnderSiege++;
       s.lastProgressTurn = g.turn;
       for (const a of troops) commanderXP(g, a, 5);

@@ -1,3 +1,4 @@
+import { buildingSlots, usedSlots } from '../shared/development';
 import { levyReason } from '../shared/emergency';
 import { SeaTradeCard } from './MaritimePanel';
 import { independentCity, neutralTarget, nextNeutralTurn } from '../shared/neutral';
@@ -68,6 +69,7 @@ export default function ProvinceDrawer({
   onFocus,
   onDiplomacy,
   onDeclareWar,
+  onPing,
 }: {
   game: GameView;
   playerId: string;
@@ -79,6 +81,7 @@ export default function ProvinceDrawer({
   onFocus: () => void;
   onDiplomacy: (id: string) => void;
   onDeclareWar: (id: string) => void;
+  onPing?: (note: string) => void;
 }) {
   const me = game.players.find((p) => p.id === playerId)!,
     owner = game.players.find((p) => p.id === province.ownerId),
@@ -89,7 +92,8 @@ export default function ProvinceDrawer({
   const armies = game.battalions.filter((a) => a.provinceId === province.id && !a.embarkedOnId),
     total = armies.reduce((n, a) => n + unitCount(a), 0),
     limit = effectiveSupply(game, playerId, province);
-  const [tab, setTab] = useState(initialTab);
+  const [tab, setTab] = useState(initialTab),
+    [pingNote, setPingNote] = useState('');
   useEffect(() => setTab(initialTab), [province.id, initialTab]);
   const [kind, setKind] = useState<'regular' | 'mercenary' | 'fleet'>('regular'),
     [values, setValues] = useState<Composition>({
@@ -187,6 +191,67 @@ export default function ProvinceDrawer({
         </button>
       </div>
 
+      {compact && province.kind === 'LAND' && (
+        <div className="province-overview" aria-label="Resumo da província">
+          <div>
+            <small>IMPOSTO</small>
+            <strong>
+              {number(
+                effectiveTax(
+                  province,
+                  ruler?.faith ?? province.religion,
+                  isBlockaded(game, province),
+                  ruler?.religiousPolicy ?? 'TOLERANCE',
+                ),
+                1,
+              )}
+            </strong>
+          </div>
+          <div>
+            <small>SUPRIMENTO</small>
+            <strong>
+              {total}/{limit}
+            </strong>
+          </div>
+          <div>
+            <small>PACIFICAÇÃO</small>
+            <strong>{Math.round(province.pacification)}%</strong>
+          </div>
+          <div>
+            <small>CONSTRUÇÕES</small>
+            <strong>
+              {usedSlots(province)}/{buildingSlots(province)} slots
+            </strong>
+          </div>
+          <div>
+            <small>RECRUTAMENTO</small>
+            <strong>
+              {localCount}/{provinceRecruitLimit(province)}
+            </strong>
+          </div>
+        </div>
+      )}
+      {onPing && (
+        <form
+          className="province-ping"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onPing(pingNote);
+            setPingNote('');
+          }}
+        >
+          <input
+            aria-label="Nota do sinal para aliados"
+            value={pingNote}
+            maxLength={80}
+            placeholder="Nota para aliados (opcional)"
+            onChange={(e) => setPingNote(e.target.value)}
+          />
+          <button type="submit" title="Visível somente para você e seus aliados">
+            📍 Sinalizar no Mapa
+          </button>
+        </form>
+      )}
       {province.kind === 'SEA_ZONE' && <SeaTradeCard game={game} sea={province} />}
       {independentCity(province) && (
         <p className="neutral-city-card">
@@ -297,11 +362,7 @@ export default function ProvinceDrawer({
           tratado.
         </p>
       )}
-      <details
-        className="province-facts"
-        open={!compact || tab === 'build'}
-        hidden={compact && tab !== 'build'}
-      >
+      <details className="province-facts" open={!compact} hidden={compact && tab !== 'build'}>
         <summary>Terreno, fé e suprimento</summary>
         <div className="ledger-grid">
           <div>

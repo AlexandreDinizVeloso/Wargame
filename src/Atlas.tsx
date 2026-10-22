@@ -1,3 +1,6 @@
+import { lazy, Suspense } from 'react';
+const BattlePreviewTooltip = lazy(() => import('./BattlePreviewTooltip'));
+import type { MapPing } from '../shared/types';
 import { ArmyCrestToken, FleetShipToken, SeaZoneCompassNode, MiniatureDefs } from './MapMiniatures';
 import { seaTradeNodes, SEA_TRADE_VALUE } from '../shared/maritime';
 import {
@@ -90,7 +93,9 @@ interface Props {
   viewerId?: string;
   onCancelOrder?: (id: string) => void;
   onDeselect?: () => void;
-  replay?: { report: TurnResolutionReport; progress: number } | null;
+  replay?: { report: TurnResolutionReport; progress: number; nonce: number } | null;
+  pings?: MapPing[];
+  onPing?: (p: Province) => void;
 }
 const heat = (n: number) => `hsl(${145 - clamp(n, 0, 1) * 140} 36% ${38 + clamp(n, 0, 1) * 8}%)`;
 const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
@@ -112,12 +117,25 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     viewerId,
     onCancelOrder,
     onDeselect,
+    pings = [],
+    onPing,
   },
   ref,
 ) {
   const root = useRef<HTMLDivElement>(null),
     [bounds, setBounds] = useState({ width: 1440, height: 900 }),
-    [hoveredId, setHoveredId] = useState('');
+    [hoveredId, setHoveredId] = useState(''),
+    [pointer, setPointer] = useState({ x: 0, y: 0 }),
+    [isTurnReplayPlaying, setIsTurnReplayPlaying] = useState(false);
+  useEffect(() => {
+    if (!replay) {
+      setIsTurnReplayPlaying(false);
+      return;
+    }
+    setIsTurnReplayPlaying(true);
+    const timer = setTimeout(() => setIsTurnReplayPlaying(false), 4000);
+    return () => clearTimeout(timer);
+  }, [replay?.nonce]);
   const extent = useMemo(() => {
     const points = provinces.filter((p) => p.kind === 'LAND').flatMap((p) => p.rings.flat());
     const xs = points.map((p) => p[0]),
@@ -351,12 +369,16 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         ? 'attack'
         : 'friendly';
   };
-  const pick = (p: Province) => {
-    if (highlight(p)) onTactical?.(p);
-    else {
-      onDeselect?.();
-      onSelect?.(p);
+  const pick = (p: Province, alt = false) => {
+    if (alt) {
+      onPing?.(p);
+      return;
     }
+    onDeselect?.();
+    onSelect?.(p);
+  };
+  const pickArmy = (a: Battalion) => {
+    onSelectArmy?.(a);
   };
   const pathFor = (ids: string[]) => {
     const points = ids
@@ -408,11 +430,12 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         }
       }}
       onPointerMove={(e) => {
+        if (selectedArmy) setPointer({ x: e.clientX, y: e.clientY });
         const p = pan.current;
         if (!p) return;
         const dx = e.clientX - p.x,
           dy = e.clientY - p.y;
-        if (Math.hypot(dx, dy) > 4) dragged.current = true;
+        if (Math.hypot(dx, dy) >= 6) dragged.current = true;
         if (dragged.current)
           setCamera({
             ...p.start,
@@ -427,12 +450,12 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         setGrabbing(false);
         if (e.currentTarget.hasPointerCapture(e.pointerId))
           e.currentTarget.releasePointerCapture(e.pointerId);
-        if (!dragged.current && p.provinceId) {
+        if (!dragged.current && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 6 && p.provinceId) {
           const province = provinces.find((q) => q.id === p.provinceId)!;
           if (p.button === 2) onTactical?.(province);
           else if (p.touch) {
             const army = p.armyId ? armies.find((a) => a.id === p.armyId) : undefined;
-            if (army) onSelectArmy?.(army);
+            if (army) pickArmy(army);
             else pick(province);
             dragged.current = true;
           }
@@ -552,10 +575,10 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   transform={`translate(${p.x} ${p.y}) scale(${0.72 / scale})`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!dragged.current && !preview) pick(p);
+                    if (e.button === 0 && !dragged.current && !preview) pick(p, e.altKey);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') pick(p);
+                    if (e.key === 'Enter') pick(p, e.altKey);
                   }}
                 >
                   <SeaZoneCompassNode
@@ -598,23 +621,23 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   strokeOpacity={destination || selected ? 1 : 0.55}
                   strokeWidth={destination ? 3 / scale : selected ? 2 / scale : 0.6 / scale}
                   onPointerEnter={() => {
-                    if (cartographic) setHoveredId(p.id);
+                    setHoveredId(p.id);
                   }}
                   onPointerLeave={() => {
-                    if (cartographic) setHoveredId('');
+                    setHoveredId('');
                   }}
                   onFocus={() => {
-                    if (cartographic) setHoveredId(p.id);
+                    setHoveredId(p.id);
                   }}
                   onBlur={() => {
-                    if (cartographic) setHoveredId('');
+                    setHoveredId('');
                   }}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!dragged.current && !preview) pick(p);
+                    if (e.button === 0 && !dragged.current && !preview) pick(p, e.altKey);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') pick(p);
+                    if (e.key === 'Enter') pick(p, e.altKey);
                   }}
                 />
               )}
@@ -623,6 +646,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                 <InfrastructureSymbols
                   province={p}
                   scale={scale}
+                  isTurnReplayPlaying={isTurnReplayPlaying && !!replay}
                   expanded={camera.zoom > 1.5 || selected || mode === 'ECONOMIC_SUPPLY'}
                 />
               )}
@@ -840,10 +864,13 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   aria-label={`${a.name}, ${unitCount(a)} ${a.isFleet ? 'navios' : 'tropas'}, ${owner?.nation ?? 'milícia local'}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!dragged.current) onSelectArmy?.(a);
+                    if (e.button === 0 && !dragged.current) {
+                      if (e.altKey) onPing?.(p);
+                      else pickArmy(a);
+                    }
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') onSelectArmy?.(a);
+                    if (e.key === 'Enter') pickArmy(a);
                   }}
                 >
                   {a.isFleet ? (
@@ -864,7 +891,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                 </g>
               );
             })}
-        {replay && (
+        {isTurnReplayPlaying && replay && (
           <g className="turn-replay" pointerEvents="none">
             {replay.report.movements.map((m, i) => {
               const from = provinces.find((p) => p.id === m.fromProvinceId),
@@ -921,7 +948,37 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
               })}
           </g>
         )}
+        {pings.map((ping) => {
+          const p = provinces.find((q) => q.id === ping.provinceId);
+          return p ? (
+            <g
+              key={ping.id}
+              className="map-ping"
+              data-map-ping={ping.id}
+              transform={`translate(${p.x} ${p.y}) scale(${1 / scale})`}
+              pointerEvents="none"
+            >
+              <circle className="ping-wave" r="12" />
+              <circle className="ping-wave delayed" r="12" />
+              <circle r="5" fill="#f8dc81" />
+              <text y="-30" textAnchor="middle" fontSize="12" fill="#ffe9a1">
+                📍 {players.find((q) => q.id === ping.playerId)?.name}: {ping.note}
+              </text>
+            </g>
+          ) : null;
+        })}
       </svg>
+      {!preview && game && selectedArmy && hoveredId && !grabbing && (
+        <Suspense fallback={null}>
+          <BattlePreviewTooltip
+            game={game}
+            army={selectedArmy}
+            province={provinces.find((p) => p.id === hoveredId)!}
+            x={pointer.x}
+            y={pointer.y}
+          />
+        </Suspense>
+      )}
       {!preview && (
         <div className="map-attribution">
           Natural Earth · domínio público · fronteiras de jogo simplificadas
