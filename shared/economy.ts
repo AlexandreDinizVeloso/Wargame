@@ -1,3 +1,4 @@
+import { goldRules } from './factions';
 import type { Battalion, Composition, GameState, Province, RecruitBattalionOrder } from './types';
 export const UNIT_UPKEEP: Composition = {
   infantry: 0.75,
@@ -6,9 +7,17 @@ export const UNIT_UPKEEP: Composition = {
   warships: 1.5,
   transports: 0.5,
 };
-export const maintenanceOf = (a: Partial<Composition>) =>
+export const maintenanceOf = (a: Partial<Composition>, nation?: import('./types').NationId) =>
   (Object.keys(UNIT_UPKEEP) as (keyof Composition)[]).reduce(
-    (n, k) => n + (a[k] ?? 0) * UNIT_UPKEEP[k],
+    (n, k) =>
+      n +
+      (a[k] ?? 0) *
+        UNIT_UPKEEP[k] *
+        (nation === 'kaldor' && k === 'artillery'
+          ? 0.75
+          : nation === 'turan' && k === 'cavalry'
+            ? 0.8
+            : 1),
     0,
   );
 export function realmLimits(g: Pick<GameState, 'provinces' | 'players'>, id: string) {
@@ -25,11 +34,29 @@ export function realmLimits(g: Pick<GameState, 'provinces' | 'players'>, id: str
       ((g.players.find((p) => p.id === id)?.warExhaustion ?? 0) >= 25 ? 0.7 : 1),
   };
 }
-export const provinceRecruitLimit = (p: Pick<Province, 'barracksLevel' | 'foundryLevel'>) =>
-  p.barracksLevel >= 2 || p.foundryLevel >= 1 ? 7 : p.barracksLevel === 1 ? 4 : 2;
+export const provinceRecruitLimit = (
+  p: Pick<Province, 'barracksLevel' | 'foundryLevel'> & Partial<Pick<Province, 'marketLevel'>>,
+  actor?: { nationId: string },
+  g?: unknown,
+  order?: Partial<RecruitBattalionOrder>,
+) =>
+  (p.barracksLevel >= 2 || p.foundryLevel >= 1 ? 7 : p.barracksLevel === 1 ? 4 : 2) +
+  (goldRules(g) &&
+  actor?.nationId === 'vespera' &&
+  (p.marketLevel ?? 0) > 0 &&
+  !order?.isFleet &&
+  ((!(order?.cavalry ?? 0) && !(order?.artillery ?? 0)) || order?.isMercenary)
+    ? 1
+    : 0);
 export const recruitedCount = (p: Province, turn: number) =>
   p.recruitmentTurn === turn ? p.recruitedThisTurn : 0;
-export function recruitmentBlock(p: Province, o: RecruitBattalionOrder, turn: number) {
+export function recruitmentBlock(
+  p: Province,
+  o: RecruitBattalionOrder,
+  turn: number,
+  actor?: { nationId: string },
+  g?: unknown,
+) {
   const count =
     (o.infantry ?? 0) +
     (o.cavalry ?? 0) +
@@ -40,11 +67,12 @@ export function recruitmentBlock(p: Province, o: RecruitBattalionOrder, turn: nu
     !o.isFleet &&
     !p.barracksLevel &&
     !p.foundryLevel &&
-    ((o.cavalry ?? 0) > 0 || (o.artillery ?? 0) > 0)
+    (((o.cavalry ?? 0) > 0 && !(goldRules(g) && actor?.nationId === 'turan')) ||
+      (o.artillery ?? 0) > 0)
   )
     return 'Construa um Quartel ou Fundição para recrutar Cavalaria/Artilharia.';
-  if (recruitedCount(p, turn) + count > provinceRecruitLimit(p))
-    return `Capacidade local de ${provinceRecruitLimit(p)} unidades por rodada excedida.`;
+  if (recruitedCount(p, turn) + count > provinceRecruitLimit(p, actor, g, o))
+    return `Capacidade local de ${provinceRecruitLimit(p, actor, g, o)} unidades por rodada excedida.`;
   return null;
 }
 export function moraleRecovery(
@@ -64,4 +92,22 @@ export function moraleRecovery(
   )
     return 20;
   return 8;
+}
+
+export function goldReparationPayments(
+  g: Pick<GameState, 'reparations' | 'players' | 'turn'>,
+  economy: (id: string) => { grossIncome: number; income: number },
+) {
+  const available = new Map<string, number>();
+  return g.reparations
+    .filter((r) => r.untilTurn >= g.turn)
+    .map((r) => {
+      const payer = g.players.find((p) => p.id === r.payerId),
+        eco = payer ? economy(payer.id) : null;
+      const funds = available.get(r.payerId) ?? (payer?.gold ?? 0) + (eco?.income ?? 0);
+      const amount =
+        Math.round(Math.max(0, Math.min(funds, (eco?.grossIncome ?? 0) * r.rate)) * 100) / 100;
+      available.set(r.payerId, funds - amount);
+      return { ...r, amount };
+    });
 }

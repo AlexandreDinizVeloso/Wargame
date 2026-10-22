@@ -115,7 +115,21 @@ export function seedBrowserFixtures(filename: string) {
     general.xp = 100;
   }
   const sessions = new Map<string, FixtureSession[]>();
-  const rooms = [alerts, sandbox, transport, lobby, visual].map((game: GameState) => {
+  const gold = createGame('GOLD98', 'campaign', false, 98);
+  gold.matchConfig.ruleset = 'GOLD_098';
+  gold.matchConfig.createdVersion = '0.98.0';
+  gold.matchConfig.scenarioId = 'SHATTERED_EMPIRES';
+  gold.matchConfig.campaignId = 'browser-gold-098';
+  for (const nation of ['vespera', 'aurelia', 'kaldor'] as const)
+    addPlayer(gold, nation, false, nation);
+  startGame(gold);
+  gold.isPublic = false;
+  const goldWar = declareWar(gold, gold.players[0].id, gold.players[1].id, 'CONQUEST');
+  const captured = gold.provinces.filter((p) => p.ownerId === gold.players[1].id).slice(0, 2);
+  for (const p of captured) p.occupierId = gold.players[0].id;
+  goldWar.battleWins = 5;
+  resolveTurn(gold);
+  const rooms = [alerts, sandbox, transport, lobby, visual, gold].map((game: GameState) => {
     const auth = game.players.map((p) => ({
       code: game.code,
       playerId: p.id,
@@ -134,6 +148,7 @@ export function seedBrowserFixtures(filename: string) {
   });
   writeSnapshot(filename, rooms, Date.now());
   return {
+    gold: sessions.get('GOLD98')!,
     visual: sessions.get('VISRC9')!,
     lobby: sessions.get('LOBBY6')!,
     alerts: sessions.get('ALERT6')!,

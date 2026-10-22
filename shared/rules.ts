@@ -1,7 +1,9 @@
+import { FACTION_TRAITS, goldRules } from './factions';
+export { FACTION_TRAITS, FRIEND_PASS } from './factions';
 import { offensiveBlock } from './morale';
 import { maritimeIncome, BOMBARDMENT_COST } from './maritime';
 import { BUILDINGS, buildingLevel, constructionType, imperialInflation } from './development';
-import { realmLimits, maintenanceOf } from './economy';
+import { realmLimits, maintenanceOf, goldReparationPayments } from './economy';
 import { commanderFor, hasSkill } from './military';
 import { coalitionFighter, objectiveProgress, resourceCount } from './strategy';
 import type {
@@ -49,6 +51,7 @@ export const controller = (p: Province) => p.occupierId ?? p.ownerId;
 export const NATIONS: NationDefinition[] = [
   {
     id: 'aurelia',
+    factionTrait: FACTION_TRAITS.aurelia,
     name: 'Império Solar de Aurélia',
     color: '#d5ac68',
     emblem: 'eagle',
@@ -71,6 +74,7 @@ export const NATIONS: NationDefinition[] = [
   },
   {
     id: 'ferro_norte',
+    factionTrait: FACTION_TRAITS.ferro_norte,
     name: 'Clãs de Ferro-Norte',
     color: '#d8787d',
     emblem: 'dragon',
@@ -93,6 +97,7 @@ export const NATIONS: NationDefinition[] = [
   },
   {
     id: 'vespera',
+    factionTrait: FACTION_TRAITS.vespera,
     name: 'Liga Mercante de Véspera',
     color: '#70acd4',
     emblem: 'anchor',
@@ -115,6 +120,7 @@ export const NATIONS: NationDefinition[] = [
   },
   {
     id: 'sol_invicto',
+    factionTrait: FACTION_TRAITS.sol_invicto,
     name: 'Ordem do Sol Invicto',
     color: '#e6a26d',
     emblem: 'sun',
@@ -137,6 +143,7 @@ export const NATIONS: NationDefinition[] = [
   },
   {
     id: 'kaldor',
+    factionTrait: FACTION_TRAITS.kaldor,
     name: 'Forjas de Kaldor',
     color: '#b2bc75',
     emblem: 'castle',
@@ -161,6 +168,7 @@ export const NATIONS: NationDefinition[] = [
   },
   {
     id: 'turan',
+    factionTrait: FACTION_TRAITS.turan,
     name: 'Canato das Estepes de Turan',
     color: '#cf8b59',
     emblem: 'crescent',
@@ -180,6 +188,7 @@ export const NATIONS: NationDefinition[] = [
   },
   {
     id: 'sapiencia',
+    factionTrait: FACTION_TRAITS.sapiencia,
     name: 'Conclave de Sapiência',
     color: '#b295c8',
     emblem: 'lily',
@@ -202,6 +211,7 @@ export const NATIONS: NationDefinition[] = [
   },
   {
     id: 'veridia',
+    factionTrait: FACTION_TRAITS.veridia,
     name: 'Confederação Silvestre de Verídia',
     color: '#6db6a1',
     emblem: 'mountain',
@@ -441,7 +451,33 @@ export function effectiveTax(
         (policy === 'TOLERANCE' ? 0.9 : 1);
 }
 export const tradeIncomeOf = (p: Province) =>
-  (p.resource === 'trade' ? 2 * 0.55 : 0) + p.portLevel * 2.5 + p.marketLevel * 3;
+  (p.resource === 'trade' ? 2 * 0.55 : 0) +
+  p.portLevel * 2.5 +
+  p.marketLevel * 3 +
+  (p.strategicResource === 'SPICES' ? 2 : 0) +
+  (p.strategicResource === 'TIMBER' ? p.portLevel * 0.25 : 0) +
+  (p.strategicResource === 'GOLD' ? 2 : 0);
+export interface RealmEconomy {
+  owned: Province[];
+  reparationsNet: number;
+  taxes: number;
+  trade: number;
+  maritimeTrade: number;
+  tithes: number;
+  industry: number;
+  administration: number;
+  buildingUpkeep: number;
+  plunder: number;
+  grossIncome: number;
+  income: number;
+  upkeep: number;
+  net: number;
+  armyCap: number;
+  totalTroops: number;
+  overCap: number;
+  manpower: number;
+  manpowerCap: number;
+}
 export function realmEconomy(
   g: Pick<
     GameState,
@@ -456,9 +492,11 @@ export function realmEconomy(
     | 'globalEvent'
     | 'season'
     | 'turn'
-  >,
+  > &
+    Partial<Pick<GameState, 'reparations'>>,
   id: string,
-) {
+  includeReparations = true,
+): RealmEconomy {
   const actor = g.players.find((p) => p.id === id)!,
     nat = nationOf(actor.nationId),
     active = g.provinces.some((p) => p.kind === 'LAND' && p.ownerId === id),
@@ -566,14 +604,24 @@ export function realmEconomy(
     units.reduce(
       (n, a) =>
         n +
-        maintenanceOf(a) *
+        maintenanceOf(a, goldRules(g) ? actor.nationId : undefined) *
           capMultiplier *
           (a.isMercenary ? 2.2 : 1) *
           (coalitionFighter(g, id) ? 0.75 : 1) *
           (commanderFor(g, a)?.trait === 'QUARTERMASTER' ? 0.7 : 1),
       0,
     );
+  const reparationsNet =
+    goldRules(g) && includeReparations && g.reparations
+      ? goldReparationPayments({ ...g, reparations: g.reparations }, (payer) =>
+          realmEconomy(g, payer, false),
+        ).reduce(
+          (n, r) => n + (r.recipientId === id ? r.amount : 0) - (r.payerId === id ? r.amount : 0),
+          0,
+        )
+      : 0;
   return {
+    reparationsNet,
     owned,
     taxes: roundMoney(taxes),
     trade: roundMoney(trade),
@@ -586,7 +634,7 @@ export function realmEconomy(
     grossIncome,
     income,
     upkeep: roundMoney(upkeep),
-    net: roundMoney(income - roundMoney(upkeep)),
+    net: roundMoney(income - roundMoney(upkeep) + reparationsNet),
     armyCap: limits.armyCap,
     totalTroops,
     overCap,
@@ -614,7 +662,8 @@ export function orderCost(
   o: PlayerOrder,
   p?: Province,
   actor?: Player,
-  g?: Pick<GameState, 'globalEvent'> & Partial<Pick<GameState, 'provinces'>>,
+  g?: Pick<GameState, 'globalEvent'> &
+    Partial<Pick<GameState, 'provinces' | 'matchConfig' | 'turn'>>,
 ) {
   let gold = 0,
     manpower = 0,
@@ -663,8 +712,15 @@ export function orderCost(
       (actor && g?.provinces ? imperialInflation({ provinces: g.provinces }, actor.id) : 1);
     if (building === 'FORT')
       gold *= (actor?.faith === 'REFORMED' ? 0.75 : 1) * (actor?.nationId === 'kaldor' ? 0.7 : 1);
-  } else if (o.type === 'AUTO_TRANSPORT') gold = o.fleetId ? 0 : 15;
-  else if (o.type === 'PACIFY') gold = 8;
+    if (
+      goldRules(g) &&
+      actor?.nationId === 'sapiencia' &&
+      ['MARKET', 'BARRACKS', 'FORT', 'FOUNDRY'].includes(building)
+    )
+      gold *= 0.85;
+  } else if (o.type === 'AUTO_TRANSPORT')
+    gold = o.fleetId ? 0 : goldRules(g) && actor?.nationId === 'vespera' ? 7.5 : 15;
+  else if (o.type === 'PACIFY') gold = goldRules(g) && (g?.turn ?? 1) <= 8 ? 4 : 8;
   else if (o.type === 'CONVERT') {
     gold = 8;
     influence = 2;
@@ -820,6 +876,12 @@ export const RETREAT_LABELS = {
 };
 export function peaceDescription(term: import('./types').PeaceTerm, provinces: Province[]) {
   switch (term.type) {
+    case 'WHITE_PEACE':
+      return 'Paz Branca — restituição das ocupações';
+    case 'HUMILIATE_DEMILITARIZE':
+      return 'Humilhação: transferir 15 prestígio; desarmamento de quatro rodadas e trégua de seis';
+    case 'SUBJUGATE_VASSAL':
+      return 'Vassalagem ao vencedor';
     case 'CEDE_PROVINCES':
       return `Ceder definitivamente: ${term.provinceIds.map((id) => provinces.find((p) => p.id === id)?.name ?? id).join(', ')}`;
     case 'WAR_REPARATIONS':

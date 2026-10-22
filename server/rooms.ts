@@ -1,3 +1,5 @@
+import { exportCampaign, importCampaign } from './campaignSaves';
+import { SCENARIOS } from '../shared/scenarios';
 import { createMapPing, pingRecipients } from './mapPings';
 import { prepareTutorial } from './tutorial';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -100,7 +102,7 @@ export function attachRooms(server: Server, options: Options = {}) {
       now,
     );
   }
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 9 * 1024 * 1024 });
   const upgrade: Parameters<Server['on']>[1] = (
     request: import('node:http').IncomingMessage,
     socket: import('node:stream').Duplex,
@@ -200,6 +202,30 @@ export function attachRooms(server: Server, options: Options = {}) {
           msg && typeof msg === 'object' && !Array.isArray(msg) && typeof msg.type === 'string',
           'Mensagem inválida.',
         );
+        if (msg.type === 'import_campaign') {
+          assert(rooms.size < 200, 'Limite de salas atingido.');
+          let code = randomBytes(3).toString('hex').toUpperCase();
+          while (rooms.has(code)) code = randomBytes(3).toString('hex').toUpperCase();
+          const imported = importCampaign(msg.save, code),
+            g = imported.game;
+          g.persistenceEnabled = !!options.stateFile;
+          const room: Room = {
+            game: g,
+            sessions: new Map(),
+            touched: clock(),
+            remainingMs: g.turnSeconds * 1000,
+          };
+          const invites: import('../shared/types').SeatInvite[] = [];
+          for (const p of g.players.filter((p) => !p.bot && p.id !== imported.hostId)) {
+            const token = randomBytes(24).toString('hex');
+            room.sessions.set(p.id, { tokenHash: hashToken(token), socket: null });
+            invites.push({ code, playerId: p.id, name: p.name, token });
+          }
+          rooms.set(code, room);
+          bind(room, imported.hostId, randomBytes(24).toString('hex'));
+          send(ws, { type: 'seat_invites', invites });
+          return;
+        }
         if (msg.type === 'create') {
           assert(rooms.size < 200, 'Limite de salas atingido neste servidor.');
           let code = randomBytes(3).toString('hex').toUpperCase();
@@ -209,15 +235,27 @@ export function attachRooms(server: Server, options: Options = {}) {
             'Opção de tutorial inválida.',
           );
           const tutorial = msg.tutorial === true;
+          const scenarioId = msg.scenarioId === undefined ? 'CLASSIC' : String(msg.scenarioId);
+          const scenario = SCENARIOS.find((s) => s.id === scenarioId);
+          assert(scenario, 'Cenário desconhecido.');
           const g = createGame(
             code,
-            tutorial || msg.mode === 'campaign' ? 'campaign' : 'quick',
+            tutorial
+              ? 'campaign'
+              : (scenario.mode ?? (msg.mode === 'campaign' ? 'campaign' : 'quick')),
             msg.demo === true || tutorial,
             randomBytes(4).readUInt32LE(),
-            ['EUROPE', 'AMERICAS', 'ASIA'].includes(String(msg.theater))
-              ? (msg.theater as Theater)
-              : 'EUROPE',
+            scenario.theater ??
+              (['EUROPE', 'AMERICAS', 'ASIA'].includes(String(msg.theater))
+                ? (msg.theater as Theater)
+                : 'EUROPE'),
           );
+          if (!tutorial) {
+            g.matchConfig.campaignId = randomBytes(16).toString('hex');
+            g.matchConfig.ruleset = 'GOLD_098';
+            g.matchConfig.scenarioId = scenario.id;
+            g.matchConfig.createdVersion = '0.98.0';
+          }
           g.roomName =
             typeof msg.roomName === 'string' && msg.roomName.trim()
               ? msg.roomName.trim().slice(0, 60)
@@ -307,6 +345,10 @@ export function attachRooms(server: Server, options: Options = {}) {
           room.sessions.get(playerId)?.socket === ws,
           'Esta sessão está ativa em outra conexão.',
         );
+        if (msg.type === 'export_campaign') {
+          send(ws, { type: 'campaign_export', save: exportCampaign(room.game, playerId) });
+          return;
+        }
         if (msg.type === 'map_ping') {
           const now = clock();
           const limits = lastPings.get(room) ?? new Map<string, number>();

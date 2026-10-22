@@ -1,6 +1,15 @@
-# Concórdia — Atlas de Impérios · v0.95
+# Concórdia — Atlas de Impérios · v0.98
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
+
+## v0.98 · Gold Candidate
+
+- Cinco lentes de mapa (F1–F5), Outliner retrátil (O) e seleção de formações sem ordens (Tab).
+- Oito passivas de facção, três eras, tratados combináveis por War Score e IA diplomática.
+- Quatro cenários temáticos, saves completos com convites para retomar vagas e importação de relatórios como cenários.
+- Time-Lapse do mapa, perfil local com doze conquistas, Friend-Pass e cliente desktop Electron.
+
+Veja [regras, saves, desktop e validação v0.98](docs/V0_98.md). Novas salas usam regras Gold; campanhas anteriores mantêm suas regras e credenciais.
 
 ## v0.95 · Interface, controles e áudio
 
@@ -22,7 +31,7 @@ Veja [escopo e validação v0.95](docs/V0_95.md).
 - **Crônica interativa:** gráficos por nação, inspeção de rodadas, receitas/tesouro/território/forças/vitórias e quatro títulos com empates. Dados militares antigos ausentes aparecem como lacunas; informações privadas continuam protegidas.
 - **Docker Node 20 Alpine**, volume de salas, healthcheck e Compose/Caddy para HTTPS. Veja [deploy cloud](docs/DEPLOY_CLOUD.md).
 
-O motor mantém as [regras v0.7](docs/REGRAS_V7.md), com protocolo 7 compatível e campos opcionais de estatísticas. A v0.95 amplia a inspeção e retoma janelas móveis; consulte também o [RC anterior](docs/RELEASE_CANDIDATE.md) e o [histórico de balanceamento](docs/BALANCE.md).
+O motor mantém as [regras v0.7](docs/REGRAS_V7.md), com protocolo 7 compatível e campos opcionais de estatísticas. A v0.98 adiciona as regras Gold descritas acima e mantém as janelas móveis da v0.95; consulte também o [RC anterior](docs/RELEASE_CANDIDATE.md) e o [histórico de balanceamento](docs/BALANCE.md).
 
 ## Executar
 

@@ -1,9 +1,14 @@
+import { SCENARIOS } from '../shared/scenarios';
+import { eraTransition, botThreat } from './goldWorld';
+import { goldRules } from '../shared/factions';
+import { supplyConsumption, invasionAttrition } from '../shared/logistics';
+import { applyScenario } from './scenarios';
 import { realmTurnAnalytics } from '../shared/campaignAnalytics';
 import { friendlyRest, offensiveBlock, isDisorganized, markDisorganized } from '../shared/morale';
 import { neutralTarget } from '../shared/neutral';
 import { bombardmentBlock, seaTradeNodes } from '../shared/maritime';
 import { resolveBombardments } from './maritime';
-import { desertForMaintenance } from './economy';
+import { desertForMaintenance, recordGoldReparations } from './economy';
 import { WORLD_STARTS } from '../shared/map';
 import {
   buildingLevel,
@@ -259,12 +264,23 @@ export function addPlayer(
 }
 export function setMode(g: GameState, mode: GameMode, theater: Theater = g.theater) {
   assert(g.phase === 'lobby', 'Escolha o cenário antes de começar.');
+  const scenario = SCENARIOS.find((s) => s.id === g.matchConfig.scenarioId);
+  assert(
+    !goldRules(g) ||
+      ((!scenario?.mode || scenario.mode === mode) &&
+        (!scenario?.theater || scenario.theater === theater)),
+    'O cenário fixa o mapa e o teatro desta campanha.',
+  );
+  const config = g.matchConfig;
   const next = createGame(g.code, mode, g.demo, g.seed, theater);
   g.mode = mode;
   g.theater = theater;
   g.provinces = next.provinces;
   g.matchConfig = {
-    ...next.matchConfig,
+    ...config,
+    mode,
+    theater,
+    mapId: next.matchConfig.mapId,
     enableSecretObjectives: g.enableSecretObjectives,
     allowBotSecretVictory: g.allowBotSecretVictory,
     turnSeconds: g.turnSeconds,
@@ -438,6 +454,8 @@ export function startGame(g: GameState, _now = 0) {
     p.manpowerCap = l.manpowerCap;
     p.manpower = Math.min(p.manpower, l.manpowerCap);
   }
+  applyScenario(g);
+  eraTransition(g);
   g.phase = 'planning';
   g.deadline = null;
   g.turnDeadlineAt = null;
@@ -666,7 +684,7 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
             : (o.warships ?? 0) + (o.transports ?? 0) === 0 && landCount(o) > 0,
           'Não misture tropas e navios.',
         );
-        const recruitReason = recruitmentBlock(p, o, g.turn);
+        const recruitReason = recruitmentBlock(p, o, g.turn, actor, g);
         assert(!recruitReason, recruitReason ?? 'Recrutamento inválido.');
         if (o.isMercenary) {
           const pending = (g.orders[id] ?? []).find(
@@ -742,7 +760,7 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
 }
 function recruit(g: GameState, id: string, o: Extract<PlayerOrder, { type: 'RECRUIT_BATTALION' }>) {
   const local = provinceOf(g, o.provinceId);
-  const blocked = recruitmentBlock(local, o, g.turn);
+  const blocked = recruitmentBlock(local, o, g.turn, playerOf(g, id), g);
   assert(!blocked, blocked ?? 'Recrutamento indisponível.');
   local.recruitedThisTurn = recruitedCount(local, g.turn) + unitCount(o);
   local.recruitmentTurn = g.turn;
@@ -951,7 +969,7 @@ function resolveLocal(
         liveArmySize(g, id) + landCount(o) > Math.min(8, realmLimits(g, id).armyCap)
       )
         return;
-      if (recruitmentBlock(p, o, g.turn)) return;
+      if (recruitmentBlock(p, o, g.turn, actor, g)) return;
       recruit(g, id, o);
     }
     const building = constructionType(o as import('../shared/types').CityOrder);
@@ -964,6 +982,7 @@ function resolveLocal(
       const speed =
         (actor.faith === 'ANCESTRAL' ? 1.15 : 1) *
         (nationOf(actor.nationId).modifiers.pacification ?? 1) *
+        (goldRules(g) && actor.nationId === 'aurelia' ? 1.5 : 1) *
         (1 + 0.25 * (p?.templeLevel ?? 0));
       p.pacification = clamp(p.pacification + 35 * speed);
       p.unrest = clamp(p.unrest - 25);
@@ -1163,7 +1182,10 @@ function applySupply(g: GameState, report: TurnResolutionReport) {
     );
     for (const id of new Set(armies.map((a) => a.ownerId))) {
       const own = armies.filter((a) => a.ownerId === id),
-        total = own.reduce((n, a) => n + unitCount(a), 0);
+        total = own.reduce(
+          (n, a) => n + supplyConsumption(g, a, g.players.find((p) => p.id === id)?.nationId),
+          0,
+        );
       const group = own.filter(
           (a) =>
             commanderFor(g, a)?.trait !== 'QUARTERMASTER' &&
@@ -1179,7 +1201,8 @@ function applySupply(g: GameState, report: TurnResolutionReport) {
       const losses = Math.min(
         count,
         Math.ceil((attritionLoss(total, limit) * count) / Math.max(1, total)) *
-          (winterActive(g) && !immune && hostile ? 2 : 1),
+          (winterActive(g) && !immune && hostile ? 2 : 1) *
+          invasionAttrition(g, p.id, id),
       );
       const shares = group.map((a) => Math.floor((losses * unitCount(a)) / count));
       let left = losses - shares.reduce((n, x) => n + x, 0);
@@ -1223,7 +1246,18 @@ export function resolveTurn(g: GameState, _now = 0) {
       g.battalions.filter((a) => a.ownerId === p.id).reduce((n, a) => n + unitCount(a), 0),
     ]),
   );
-  for (const a of g.battalions) markDisorganized(a);
+  for (const a of g.battalions) {
+    const province = g.provinces.find((p) => p.id === a.provinceId),
+      actor = g.players.find((p) => p.id === a.ownerId);
+    if (goldRules(g)) {
+      a.moraleCap =
+        actor?.nationId === 'aurelia' && province?.religion === 'SOLAR' && province.templeLevel > 0
+          ? 110
+          : 100;
+      if (a.morale >= 100) a.morale = a.moraleCap;
+    }
+    markDisorganized(a);
+  }
   const startLog = g.log.length;
   const startNoticeIds = new Set(g.notifications.map((n) => n.id));
   for (const bot of g.players.filter((p) => p.bot)) planBot(g, bot);
@@ -1277,6 +1311,7 @@ export function resolveTurn(g: GameState, _now = 0) {
           15 *
             (actor.faith === 'ANCESTRAL' ? 1.15 : 1) *
             (nationOf(actor.nationId).modifiers.pacification ?? 1) *
+            (goldRules(g) && actor.nationId === 'aurelia' ? 1.5 : 1) *
             (1 + 0.25 * p.templeLevel),
       );
       p.unrest = clamp(p.unrest - 10);
@@ -1290,7 +1325,9 @@ export function resolveTurn(g: GameState, _now = 0) {
     if (p.templeLevel > 0) {
       p.unrest = clamp(p.unrest - 15 * p.templeLevel);
       actor.fervor += 2 * p.templeLevel;
-      actor.stability = clamp(actor.stability + 2 * p.templeLevel);
+      actor.stability = clamp(
+        actor.stability + (goldRules(g) && actor.nationId === 'aurelia' ? 4 : 2) * p.templeLevel,
+      );
     }
     if (p.pacification < 50 && total < 2) p.unrest = clamp(p.unrest + 15);
   }
@@ -1327,6 +1364,7 @@ export function resolveTurn(g: GameState, _now = 0) {
     const previousOwnerId = controller(p)!;
     p.ownerId = null;
     p.occupierId = null;
+    if (goldRules(g)) p.siege = null;
     p.unrest = 40;
     p.pacification = 0;
     createBattalion(
@@ -1397,6 +1435,7 @@ export function resolveTurn(g: GameState, _now = 0) {
   );
   syncWars(g);
   const economies = new Map(g.players.map((p) => [p.id, realmEconomy(g, p.id)]));
+  if (goldRules(g)) recordGoldReparations(g, report);
   const starving = applySupply(g, report);
   for (const f of g.battalions.filter((a) => a.isFleet && a.embarkedArmyId)) {
     const cargo = g.battalions.find((a) => a.id === f.embarkedArmyId);
@@ -1427,6 +1466,8 @@ export function resolveTurn(g: GameState, _now = 0) {
             : moved.has(a.id)
               ? 0
               : moraleRecovery(g, a) + (commanderFor(g, a)?.trait === 'IRON_WALL' ? 15 : 0)),
+        0,
+        a.moraleCap ?? 100,
       );
       if (starving.has(a.id)) a.morale = clamp(a.morale - 20);
       markDisorganized(a);
@@ -1463,7 +1504,7 @@ export function resolveTurn(g: GameState, _now = 0) {
     });
   }
   applyEncirclement(g, report);
-  for (const r of g.reparations.filter((r) => r.untilTurn >= g.turn)) {
+  for (const r of g.reparations.filter((r) => !goldRules(g) && r.untilTurn >= g.turn)) {
     const payer = playerOf(g, r.payerId),
       recipient = playerOf(g, r.recipientId),
       amount = Math.min(
@@ -1595,7 +1636,7 @@ export function resolveTurn(g: GameState, _now = 0) {
     g.turnDeadlineAt = null;
     g.firstReadyPlayerName = null;
     g.season = seasonAt(g.turn);
-    advanceWorld(g, emptyTurnReport(g.turn, g.diet));
+    advanceWorld(g, emptyTurnReport(g.turn, g.diet), true);
   } else g.deadline = null;
   g.battalions = g.battalions.filter((a) => unitCount(a) > 0);
   return report;
@@ -1622,11 +1663,31 @@ function tryOrder(
   }
 }
 function botPeace(g: GameState, p: Player) {
+  if (goldRules(g)) updateWarScores(g);
   for (const war of g.wars.filter(
     (w) => w.active && [w.attackerLeaderId, w.defenderLeaderId].includes(p.id),
   )) {
     const score = war.warScore * (war.attackerLeaderId === p.id ? 1 : -1);
     try {
+      if (goldRules(g) && score <= -40 && p.warExhaustion >= 25) {
+        if (g.offers.some((o) => o.kind === 'peace' && o.warId === war.id && o.from === p.id))
+          continue;
+        const occupiers = war.attackerLeaderId === p.id ? war.defenderIds : war.attackerIds;
+        const ceded = g.provinces
+          .filter((q) => q.ownerId === p.id && q.occupierId && occupiers.includes(q.occupierId))
+          .slice(0, Math.floor(-score / 20))
+          .map((q) => q.id);
+        offerPeace(
+          g,
+          p.id,
+          war.id,
+          ceded.length
+            ? [{ type: 'CEDE_PROVINCES', provinceIds: ceded }]
+            : [{ type: 'WAR_REPARATIONS', immediateTribute: 0 }],
+          true,
+        );
+        continue;
+      }
       const loserId = war.attackerLeaderId === p.id ? war.defenderLeaderId : war.attackerLeaderId;
       const chosen = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId);
       if (
@@ -1636,7 +1697,7 @@ function botPeace(g: GameState, p: Player) {
         g.players.filter((q) => q.subjectOfId === p.id).length < 2 &&
         subjugationEligible(g, p.id, loserId)
       ) {
-        offerPeace(g, p.id, war.id, [{ type: 'SUBJUGATE' }]);
+        offerPeace(g, p.id, war.id, [{ type: goldRules(g) ? 'SUBJUGATE_VASSAL' : 'SUBJUGATE' }]);
         continue;
       }
       const otherIds = war.attackerLeaderId === p.id ? war.defenderIds : war.attackerIds;
@@ -1647,7 +1708,7 @@ function botPeace(g: GameState, p: Player) {
         const provinceIds: string[] = [];
         let cost = 0;
         for (const q of occupied) {
-          const next = 12 + q.baseTax;
+          const next = goldRules(g) ? 20 : 12 + q.baseTax;
           if (cost + next <= score) {
             provinceIds.push(q.id);
             cost += next;
@@ -1672,7 +1733,9 @@ export function planBot(g: GameState, p: Player) {
         const war = g.wars.find((w) => w.id === offer.warId);
         if (
           war &&
-          (p.warExhaustion >= 25 || (offer.terms?.length === 0 && g.turn - war.startedTurn >= 4))
+          (goldRules(g) ||
+            p.warExhaustion >= 25 ||
+            (offer.terms?.length === 0 && g.turn - war.startedTurn >= 4))
         )
           answerOffer(g, p.id, offer.id, true);
       } else answerOffer(g, p.id, offer.id, true);
@@ -1680,7 +1743,7 @@ export function planBot(g: GameState, p: Player) {
       continue;
     }
   for (const target of g.players.filter(
-    (q) => q.id !== p.id && q.aggressiveExpansion >= 60 && !p.subjectOfId,
+    (q) => q.id !== p.id && botThreat(g, p, q) && !p.subjectOfId,
   )) {
     try {
       let c = g.coalitions.find((c) => c.targetId === target.id);
@@ -2178,7 +2241,7 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
         declareWar(g, actorId, command.targetRealmId, command.casusBelli, command.offensiveAllyIds);
       break;
     case 'OFFER_PEACE':
-      offerPeace(g, actorId, command.warId, command.terms);
+      offerPeace(g, actorId, command.warId, command.terms, command.concession);
       break;
     case 'CALL_TO_ARMS':
       callToArms(g, actorId, command.warId, command.allyId);
@@ -2188,6 +2251,17 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
       break;
     case 'DECLARE_COALITION_WAR':
       coalitionWar(g, actorId, command.targetRealmId);
+      break;
+    case 'CAST_IMPERIAL_VOTE':
+      assert(
+        goldRules(g) &&
+          g.matchConfig.scenarioId === 'IRON_CROWN_EUROPE' &&
+          g.phase === 'planning' &&
+          g.diet.memberRealmIds.includes(actorId) &&
+          g.diet.memberRealmIds.includes(command.candidateId),
+        'Voto imperial indisponível.',
+      );
+      g.diet.votes[actorId] = command.candidateId;
       break;
     case 'CHOOSE_SECRET_OBJECTIVE':
       assert(

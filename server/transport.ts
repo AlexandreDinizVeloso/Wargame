@@ -1,6 +1,6 @@
 import { offensiveBlock } from '../shared/morale';
 import type { GameState, PlayerOrder, TurnResolutionReport } from '../shared/types';
-import { roundMoney, unitCount } from '../shared/rules';
+import { orderCost, roundMoney, unitCount } from '../shared/rules';
 import { legalBridge, crossingOptions } from '../shared/naval';
 import { resolveBattle } from './combat';
 import { assert, battalionOf, provinceOf } from './state';
@@ -54,7 +54,7 @@ export function resolveBridges(
           ? !!fleet &&
             fleet.provinceId === origins.get(fleet.id) &&
             unitCount(a) + (used.get(fleet.id) ?? 0) <= fleet.transports * 4
-          : p.gold >= 15);
+          : p.gold >= orderCost(o, undefined, p, g).gold);
       if (!legal || !a || !target) {
         report.events.push(
           'Uma travessia foi cancelada: ponte naval indisponível ou fretamento bloqueado.',
@@ -62,7 +62,7 @@ export function resolveBridges(
         continue;
       }
       if (fleet) used.set(fleet.id, (used.get(fleet.id) ?? 0) + unitCount(a));
-      else p.gold = roundMoney(p.gold - 15);
+      else p.gold = roundMoney(p.gold - orderCost(o, undefined, p, g).gold);
       const from = a.provinceId;
       a.provinceId = target.id;
       a.pathQueue = [];

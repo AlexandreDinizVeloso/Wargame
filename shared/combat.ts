@@ -1,3 +1,4 @@
+import { goldRules, hasFoundry } from './factions';
 import type { Battalion, Province, GameState, GameView } from './types';
 import { commanderFor, hasSkill } from './military';
 import { hasReligiousWar, isCamouflaged, resourceCount } from './strategy';
@@ -42,6 +43,8 @@ export function compositionPower(
       coalitionMorale(g, a.ownerId) *
       (zeal ? 1.2 : 1) *
       (actor && actor.moraleBonusUntil >= g.turn ? 1.15 : 1),
+    0,
+    a.moraleCap ?? 100,
   );
   const flat = ['plains', 'coastal'].includes(p.terrain),
     rough = ['forest', 'hills', 'mountains'].includes(p.terrain),
@@ -61,6 +64,17 @@ export function compositionPower(
     (actor?.faith === 'SOLAR' && !defending ? 1.15 : 1) *
     (nation?.modifiers.infantry ?? 1) *
     (1 + Math.min(0.24, resourceCount(g, a.ownerId, 'IRON') * 0.08)) *
+    (goldRules(g) &&
+    actor?.nationId === 'ferro_norte' &&
+    !defending &&
+    g.wars.some(
+      (w) =>
+        w.active &&
+        w.startedTurn === g.turn &&
+        [...w.attackerIds, ...w.defenderIds].includes(a.ownerId),
+    )
+      ? 1.15
+      : 1) *
     a.infantryPower *
     (defending && hasSkill(g, a.ownerId, 'INF_T1') ? 1.12 : 1) *
     (!defending && hasSkill(g, a.ownerId, 'INF_T2B') ? 1.2 : 1) *
@@ -75,6 +89,7 @@ export function compositionPower(
   const artillery =
     (actor?.faith === 'REFORMED' ? 1.2 : 1) *
     (nation?.modifiers.artillery ?? 1) *
+    (goldRules(g) && actor?.nationId === 'kaldor' && hasFoundry(g, a.ownerId) ? 1.15 : 1) *
     a.artilleryPower *
     (!defending && hasSkill(g, a.ownerId, 'ART_T1') ? 1.15 : 1) *
     (hasSkill(g, a.ownerId, 'ART_T2B') ? 1.25 : 1);
@@ -95,6 +110,16 @@ export function compositionPower(
     );
   return (
     value *
+    (goldRules(g) && actor?.nationId === 'veridia' && ['forest', 'mountains'].includes(p.terrain)
+      ? 1.2
+      : 1) *
+    (goldRules(g) &&
+    actor?.nationId === 'turan' &&
+    !defending &&
+    p.terrain === 'plains' &&
+    a.cavalry > a.infantry + a.artillery
+      ? 1.2
+      : 1) *
     a.training *
     veteran *
     (0.5 + (0.5 * morale) / 100) *
@@ -143,6 +168,11 @@ export function combatPowers(
     (naval
       ? 1
       : p.terrainDefenseBonus *
+        (goldRules(g) &&
+        p.fortLevel > 0 &&
+        g.players.find((q) => q.id === p.ownerId)?.nationId === 'sol_invicto'
+          ? 1.25
+          : 1) *
         (1 + (p.fortLevel - neutralizedFortLevels) * 0.15) *
         blockadeModifier *
         bombardmentModifier);

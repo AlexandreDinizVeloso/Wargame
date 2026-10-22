@@ -1,3 +1,5 @@
+import { technologyCost } from '../shared/world';
+import { goldRules, factionXP } from '../shared/factions';
 import type {
   Battalion,
   CommanderTrait,
@@ -57,7 +59,9 @@ export function recruitCommander(
   g.commanders.push(c);
   return c;
 }
-export function commanderXP(g: GameState, a: Battalion, amount: number) {
+export function commanderXP(g: GameState, a: Battalion, amount: number, military = false) {
+  const owner = g.players.find((p) => p.id === a.ownerId);
+  if (military && goldRules(g) && owner) owner.militaryXP += factionXP(g, owner.nationId, amount);
   const c = commanderFor(g, a);
   if (c) {
     c.xp += amount;
@@ -181,10 +185,10 @@ export function autoMerge(g: GameState, moved?: Set<string>) {
 export function unlockSkill(g: GameState, id: string, skillId: import('../shared/types').SkillId) {
   const p = playerOf(g, id);
   assert(!p.ready, 'Reabra as ordens antes de pesquisar.');
-  const blocked = skillBlock(p, skillId);
+  const blocked = skillBlock(p, skillId, g);
   assert(!blocked, blocked ?? 'Doutrina indisponível.');
   const s = SKILLS.find((s) => s.id === skillId)!;
-  p.militaryXP -= s.cost;
+  p.militaryXP -= technologyCost(g, s.tier, s.cost);
   p.unlockedSkills.push(skillId);
   log(g, `${p.nation} adotou ${s.name}.`);
 }

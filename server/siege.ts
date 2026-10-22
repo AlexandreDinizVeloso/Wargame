@@ -1,4 +1,4 @@
-import { siegeProgressPerTurn } from '../shared/siege';
+import { siegeProgressPerTurn, siegeResistance } from '../shared/siege';
 import { isDisorganized, markDisorganized } from '../shared/morale';
 import { notify } from './notifications';
 import type { Battalion, GameState, Province, TurnResolutionReport } from '../shared/types';
@@ -30,7 +30,7 @@ export function beginSiege(g: GameState, a: Battalion, p: Province) {
   p.siege = {
     attackerOwnerId: a.ownerId,
     progress: 1,
-    required: 2 + p.fortLevel * 2,
+    required: siegeResistance(g, p),
     turnsUnderSiege: 1,
     startedTurn: g.turn,
     lastProgressTurn: g.turn,
@@ -145,12 +145,12 @@ export function advanceSieges(g: GameState, report: TurnResolutionReport) {
       p.siege = null;
       continue;
     }
-    s.required = 2 + p.fortLevel * 2;
+    s.required = siegeResistance(g, p);
     if (s.lastProgressTurn < g.turn) {
       s.progress += siegeProgressPerTurn(g, s.attackerOwnerId, troops, p);
       s.turnsUnderSiege++;
       s.lastProgressTurn = g.turn;
-      for (const a of troops) commanderXP(g, a, 5);
+      for (const a of troops) commanderXP(g, a, 5, true);
     }
     if (s.progress >= s.required && s.startedTurn < g.turn)
       completeSiege(g, s.attackerOwnerId, p, report);

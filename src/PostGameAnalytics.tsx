@@ -1,3 +1,4 @@
+import MapTimeLapse from './MapTimeLapse';
 import { useMemo, useState } from 'react';
 import type { GameView } from '../shared/types';
 import {
@@ -74,148 +75,166 @@ export default function PostGameAnalytics({
             {t.label}
           </button>
         ))}
+        <button role="tab" aria-selected={tab === 'map'} onClick={() => setTab('map')}>
+          🎬 Time-Lapse do Mapa
+        </button>
       </nav>
-      <label className="analytics-metric">
-        Medida
-        <select
-          aria-label="Medida do gráfico"
-          value={metric}
-          onChange={(e) => setMetric(e.target.value as CampaignMetric)}
-        >
-          {TABS.find((t) => t.id === tab)!.metrics.map((m) => (
-            <option key={m} value={m}>
-              {LABELS[m]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="analytics-chart">
-        <svg
-          viewBox="0 0 800 330"
-          role="img"
-          aria-label={`Linha do tempo: ${LABELS[metric]}`}
-          onPointerMove={(e) => {
-            const box = e.currentTarget.getBoundingClientRect();
-            const value = ((e.clientX - box.left) / box.width) * 800;
-            setInspection(minTurn + ((value - 64) / 700) * (maxTurn - minTurn));
-          }}
-          onPointerLeave={() => setInspection(null)}
-        >
-          <title>
-            {LABELS[metric]}, rodadas {minTurn} a {maxTurn}
-          </title>
-          {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-            <g key={f}>
-              <path d={`M64 ${y(minValue + span * f)}H764`} stroke="#a5b8b5" strokeOpacity=".18" />
-              <text x="53" y={y(minValue + span * f) + 4} textAnchor="end">
-                {number(minValue + span * f, maxValue < 10 ? 1 : 0)}
-              </text>
-            </g>
-          ))}
-          {[minTurn, ...(maxTurn > minTurn ? [Math.round((maxTurn + minTurn) / 2), maxTurn] : [])]
-            .filter((t, i, a) => a.indexOf(t) === i)
-            .map((t) => (
-              <text key={t} x={x(t)} y="302" textAnchor="middle">
-                Rod. {t}
-              </text>
-            ))}
-          {visible.map((s) => {
-            let pen = false;
-            const d = s.points
-              .map((p) => {
-                const value = p[metric];
-                if (value === null) {
-                  pen = false;
-                  return '';
-                }
-                const out = `${pen ? 'L' : 'M'}${x(p.turn).toFixed(2)} ${y(value).toFixed(2)}`;
-                pen = true;
-                return out;
-              })
-              .join(' ');
-            return (
-              <g key={s.id} data-chart-series={s.id}>
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={s.color}
-                  strokeWidth="2.8"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                />
-                {s.points.length === 1 && s.points[0][metric] !== null && (
-                  <circle
-                    cx={x(s.points[0].turn)}
-                    cy={y(s.points[0][metric]!)}
-                    r="4"
-                    fill={s.color}
+      {tab === 'map' ? (
+        <MapTimeLapse game={game} />
+      ) : (
+        <>
+          <label className="analytics-metric">
+            Medida
+            <select
+              aria-label="Medida do gráfico"
+              value={metric}
+              onChange={(e) => setMetric(e.target.value as CampaignMetric)}
+            >
+              {TABS.find((t) => t.id === tab)!.metrics.map((m) => (
+                <option key={m} value={m}>
+                  {LABELS[m]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="analytics-chart">
+            <svg
+              viewBox="0 0 800 330"
+              role="img"
+              aria-label={`Linha do tempo: ${LABELS[metric]}`}
+              onPointerMove={(e) => {
+                const box = e.currentTarget.getBoundingClientRect();
+                const value = ((e.clientX - box.left) / box.width) * 800;
+                setInspection(minTurn + ((value - 64) / 700) * (maxTurn - minTurn));
+              }}
+              onPointerLeave={() => setInspection(null)}
+            >
+              <title>
+                {LABELS[metric]}, rodadas {minTurn} a {maxTurn}
+              </title>
+              {[0, 0.25, 0.5, 0.75, 1].map((f) => (
+                <g key={f}>
+                  <path
+                    d={`M64 ${y(minValue + span * f)}H764`}
+                    stroke="#a5b8b5"
+                    strokeOpacity=".18"
                   />
-                )}
-              </g>
-            );
-          })}
-          <path
-            d={`M${x(selectedTurn)} 36V276`}
-            stroke="#dfc482"
-            strokeDasharray="4 5"
-            opacity=".6"
-          />
-          {!values.length && (
-            <text x="400" y="155" textAnchor="middle">
-              Sem registros disponíveis para esta medida.
-            </text>
-          )}
-        </svg>
-      </div>
-      <div className="chart-legends" aria-label="Nações no gráfico">
-        {series.map((s) => (
-          <button
-            key={s.id}
-            aria-pressed={!hidden.includes(s.id)}
-            onClick={() =>
-              setHidden((v) => (v.includes(s.id) ? v.filter((id) => id !== s.id) : [...v, s.id]))
-            }
-          >
-            <i style={{ background: s.color }} />
-            {s.name}
-          </button>
-        ))}
-      </div>
-      <label className="chart-scrubber">
-        Inspecionar rodada {selectedTurn}
-        <input
-          type="range"
-          aria-label="Inspecionar rodada"
-          min={minTurn}
-          max={maxTurn}
-          step="1"
-          value={selectedTurn}
-          onChange={(e) => setInspection(Number(e.target.value))}
-        />
-      </label>
-      <dl className="chart-values">
-        {visible.map((s) => (
-          <div key={s.id}>
-            <dt style={{ color: s.color }}>{s.name}</dt>
-            <dd>
-              {s.points.find((p) => p.turn === selectedTurn)?.[metric] === null
-                ? 'Sem registro'
-                : number(
-                    s.points.find((p) => p.turn === selectedTurn)?.[metric] ?? 0,
-                    metric === 'gold' || metric === 'grossIncome' ? 1 : 0,
-                  )}
-            </dd>
+                  <text x="53" y={y(minValue + span * f) + 4} textAnchor="end">
+                    {number(minValue + span * f, maxValue < 10 ? 1 : 0)}
+                  </text>
+                </g>
+              ))}
+              {[
+                minTurn,
+                ...(maxTurn > minTurn ? [Math.round((maxTurn + minTurn) / 2), maxTurn] : []),
+              ]
+                .filter((t, i, a) => a.indexOf(t) === i)
+                .map((t) => (
+                  <text key={t} x={x(t)} y="302" textAnchor="middle">
+                    Rod. {t}
+                  </text>
+                ))}
+              {visible.map((s) => {
+                let pen = false;
+                const d = s.points
+                  .map((p) => {
+                    const value = p[metric];
+                    if (value === null) {
+                      pen = false;
+                      return '';
+                    }
+                    const out = `${pen ? 'L' : 'M'}${x(p.turn).toFixed(2)} ${y(value).toFixed(2)}`;
+                    pen = true;
+                    return out;
+                  })
+                  .join(' ');
+                return (
+                  <g key={s.id} data-chart-series={s.id}>
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke={s.color}
+                      strokeWidth="2.8"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                    {s.points.length === 1 && s.points[0][metric] !== null && (
+                      <circle
+                        cx={x(s.points[0].turn)}
+                        cy={y(s.points[0][metric]!)}
+                        r="4"
+                        fill={s.color}
+                      />
+                    )}
+                  </g>
+                );
+              })}
+              <path
+                d={`M${x(selectedTurn)} 36V276`}
+                stroke="#dfc482"
+                strokeDasharray="4 5"
+                opacity=".6"
+              />
+              {!values.length && (
+                <text x="400" y="155" textAnchor="middle">
+                  Sem registros disponíveis para esta medida.
+                </text>
+              )}
+            </svg>
           </div>
-        ))}
-      </dl>
-      <p className="fine-print">
-        Receitas e tesouro usam o fechamento das rodadas; o ponto atual mostra a previsão
-        disponível. Lacunas indicam dados que campanhas antigas não registravam.
-        {game.phase !== 'finished'
-          ? ' Totais militares adversários são revelados ao encerrar; sua inteligência e cartas continuam privadas.'
-          : ''}
-      </p>
-      <h3>Títulos da campanha</h3>
+          <div className="chart-legends" aria-label="Nações no gráfico">
+            {series.map((s) => (
+              <button
+                key={s.id}
+                aria-pressed={!hidden.includes(s.id)}
+                onClick={() =>
+                  setHidden((v) =>
+                    v.includes(s.id) ? v.filter((id) => id !== s.id) : [...v, s.id],
+                  )
+                }
+              >
+                <i style={{ background: s.color }} />
+                {s.name}
+              </button>
+            ))}
+          </div>
+          <label className="chart-scrubber">
+            Inspecionar rodada {selectedTurn}
+            <input
+              type="range"
+              aria-label="Inspecionar rodada"
+              min={minTurn}
+              max={maxTurn}
+              step="1"
+              value={selectedTurn}
+              onChange={(e) => setInspection(Number(e.target.value))}
+            />
+          </label>
+          <dl className="chart-values">
+            {visible.map((s) => (
+              <div key={s.id}>
+                <dt style={{ color: s.color }}>{s.name}</dt>
+                <dd>
+                  {s.points.find((p) => p.turn === selectedTurn)?.[metric] === null
+                    ? 'Sem registro'
+                    : number(
+                        s.points.find((p) => p.turn === selectedTurn)?.[metric] ?? 0,
+                        metric === 'gold' || metric === 'grossIncome' ? 1 : 0,
+                      )}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          <p className="fine-print">
+            Receitas e tesouro usam o fechamento das rodadas; o ponto atual mostra a previsão
+            disponível. Lacunas indicam dados que campanhas antigas não registravam.
+            {game.phase !== 'finished'
+              ? ' Totais militares adversários são revelados ao encerrar; sua inteligência e cartas continuam privadas.'
+              : ''}
+          </p>
+          <h3>Títulos da campanha</h3>
+        </>
+      )}
       <div className="campaign-medals">
         {medals.map((m) => (
           <article key={m.id} data-medal={m.id}>

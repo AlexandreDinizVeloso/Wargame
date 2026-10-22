@@ -1,3 +1,4 @@
+import { goldRules } from './factions';
 import type { Battalion, GameState, Province } from './types';
 import { atWar, canTraverse, unitCount } from './rules';
 export function bridgeOptions(
@@ -148,7 +149,13 @@ export function crossingOptions(
           (p.portLevel >= 1 || p.capitalOf === army.ownerId),
       )
     )
-      options.push({ seaPath: path, cost: 15 });
+      options.push({
+        seaPath: path,
+        cost:
+          goldRules(g) && g.players.find((p) => p.id === army.ownerId)?.nationId === 'vespera'
+            ? 7.5
+            : 15,
+      });
   }
   return options.sort(
     (a, b) =>

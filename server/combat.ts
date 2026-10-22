@@ -1,3 +1,4 @@
+import { goldRules, factionXP } from '../shared/factions';
 import { combatPowers } from '../shared/combat';
 export { compositionPower, combatPowers } from '../shared/combat';
 import { markDisorganized } from '../shared/morale';
@@ -366,7 +367,7 @@ export function resolveBattle(
   }
   for (const ownerId of new Set(fighters.map((f) => f.ownerId))) {
     const p = g.players.find((p) => p.id === ownerId);
-    if (p) p.militaryXP += 15;
+    if (p) p.militaryXP += factionXP(g, p.nationId, 15);
   }
   for (const c of leaders) {
     c.xp += 20;
@@ -397,7 +398,10 @@ export function resolveBattle(
     report.events.push(`${winnerFleet.name} capturou um navio de guerra.`);
   }
   const winner = g.players.find((p) => p.id === battle.winnerId);
-  if (winner) winner.wonBattles++;
+  if (winner) {
+    winner.wonBattles++;
+    if (goldRules(g)) winner.prestige += g.turn >= 21 ? 4 : 2;
+  }
   for (const war of g.wars.filter((w) => w.active)) {
     const aSide = war.attackerIds.includes(a.ownerId)
       ? 1
@@ -406,7 +410,11 @@ export function resolveBattle(
         : 0;
     const opposite =
       defenderId && (aSide === 1 ? war.defenderIds : war.attackerIds).includes(defenderId);
-    if (aSide && opposite)
+    if (aSide && opposite && goldRules(g)) {
+      war.battleWins =
+        (war.battleWins ?? 0) + (attackWins ? aSide : -aSide) * (g.turn >= 21 ? 2 : 1);
+      war.battleScore = clamp(war.battleWins * 4, -40, 40);
+    } else if (aSide && opposite)
       war.battleScore = clamp(
         war.battleScore +
           (attackWins ? aSide : -aSide) *

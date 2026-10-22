@@ -1,3 +1,4 @@
+import { technologyCost } from './world';
 import type {
   Battalion,
   CommanderTrait,
@@ -90,11 +91,12 @@ export const hasSkill = (g: Pick<GameState, 'players'>, ownerId: string, id: Ski
   g.players.find((p) => p.id === ownerId)?.unlockedSkills.includes(id) ?? false;
 export const commanderFor = (g: Pick<GameState, 'commanders'>, army: Battalion) =>
   g.commanders.find((c) => c.assignedBattalionId === army.id && c.ownerId === army.ownerId);
-export function skillBlock(p: Player, id: SkillId): string | null {
+export function skillBlock(p: Player, id: SkillId, g?: Pick<GameState, 'turn'>): string | null {
   const s = SKILLS.find((s) => s.id === id);
   if (!s) return 'Doutrina desconhecida.';
   if (p.unlockedSkills.includes(id)) return 'Doutrina já desbloqueada.';
-  if (p.militaryXP < s.cost) return 'Experiência militar insuficiente.';
+  if (p.militaryXP < (g ? technologyCost(g, s.tier, s.cost) : s.cost))
+    return 'Experiência militar insuficiente.';
   if (s.tier > 1 && !p.unlockedSkills.includes(`${s.branch}_T1` as SkillId))
     return 'Desbloqueie o primeiro nível.';
   if (s.tier === 2 && p.unlockedSkills.some((i) => i.startsWith(`${s.branch}_T2`)))

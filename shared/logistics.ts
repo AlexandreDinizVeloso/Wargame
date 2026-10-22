@@ -1,3 +1,4 @@
+import { goldRules } from './factions';
 import type { Battalion, GameState } from './types';
 import { atWar, controller, getRelation, sameWarSide } from './rules';
 export function supplyConnected(
@@ -56,4 +57,29 @@ export function supplyConnected(
     }
   }
   return false;
+}
+
+export function supplyConsumption(g: unknown, army: Battalion, nation?: string) {
+  const total = army.infantry + army.cavalry + army.artillery;
+  return army.isFleet
+    ? army.warships + army.transports
+    : total *
+        (goldRules(g) && nation === 'turan' && army.cavalry > army.infantry + army.artillery
+          ? 0.75
+          : 1);
+}
+export function invasionAttrition(
+  g: Pick<GameState, 'players' | 'provinces'>,
+  provinceId: string,
+  attacker: string,
+) {
+  const p = g.provinces.find((p) => p.id === provinceId),
+    owner = g.players.find((a) => a.id === p?.ownerId);
+  return goldRules(g) &&
+    p &&
+    owner?.id !== attacker &&
+    owner?.nationId === 'veridia' &&
+    (p.pacification >= 80 || owner.originalCapitalId === p.id)
+    ? 2
+    : 1;
 }

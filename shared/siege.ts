@@ -1,3 +1,4 @@
+import { goldRules, hasFoundry } from './factions';
 import type { Battalion, GameState, GameView, Province } from './types';
 import { atWar, getRelation, sameWarSide } from './rules';
 import { commanderFor, hasSkill } from './military';
@@ -27,9 +28,24 @@ export function siegeProgressPerTurn(
     );
   return (
     1 +
+    (goldRules(g) && g.turn >= 21 ? 1 : 0) +
+    (goldRules(g) &&
+    g.players.find((p) => p.id === ownerId)?.nationId === 'kaldor' &&
+    hasFoundry(g, ownerId)
+      ? 1
+      : 0) +
     (artillery > 0 ? (artillery >= 3 || battery ? 2 : 1) : 0) +
     (artillery > 0 && battery ? 1 : 0) +
     (master ? 1 : 0) +
     (blockade ? 1 : 0)
   );
 }
+
+export const siegeResistance = (g: GameState | GameView, p: Province) =>
+  2 +
+  p.fortLevel * 2 +
+  (goldRules(g) &&
+  p.fortLevel > 0 &&
+  g.players.find((q) => q.id === p.ownerId)?.nationId === 'sol_invicto'
+    ? 1
+    : 0);

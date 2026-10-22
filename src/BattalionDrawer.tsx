@@ -1,3 +1,4 @@
+import { goldRules } from '../shared/factions';
 import { effectiveSupply } from '../shared/strategy';
 import { isDisorganized } from '../shared/morale';
 import { FleetOperations } from './MaritimePanel';
@@ -585,7 +586,8 @@ export function TacticalBar({
       <Meter label="Moral" value={army.morale} />
       {!army.isFleet && p.isCoastal && (
         <p className="transport-hint">
-          ⛵ Travessia Marítima (15 Ouro) · grátis com frota disponível; estreitos sem custo.
+          ⛵ Travessia Marítima ({goldRules(game) && actor.nationId === 'vespera' ? '7,5' : '15'}{' '}
+          Ouro) · grátis com frota disponível; estreitos sem custo.
         </p>
       )}
       {isDisorganized(army) && (

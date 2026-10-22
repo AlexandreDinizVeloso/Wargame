@@ -2,7 +2,7 @@ import { mapPoint, rightClickProvince } from './map-interactions';
 import assert from 'node:assert/strict';
 import { fork, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright-core';
@@ -486,9 +486,129 @@ try {
     'Efeitos sem osciladores sawtooth/square. Música desativada no smoke.',
   );
 
+  const gold = await open(fixtures.gold[0]);
+  await gold.page.locator('[data-campaign-era="ERA_EMPIRES"]').waitFor();
+  for (const [key, id] of [
+    ['F1', 'POLITICAL'],
+    ['F2', 'ECONOMIC'],
+    ['F3', 'LOGISTICS'],
+    ['F4', 'DIPLOMATIC'],
+    ['F5', 'UNREST'],
+  ] as const) {
+    await gold.page.keyboard.press(key);
+    await gold.page.locator(`[data-map-legend="${id}"]`).waitFor();
+  }
+  await gold.page.keyboard.press('F2');
+  assert.ok((await gold.page.locator('.lens-badge').count()) > 20);
+  const outliner = gold.page.getByRole('complementary', { name: 'Outliner militar e econômico' });
+  await outliner.waitFor();
+  const ownGold = gold.get().battalions.filter((a) => a.ownerId === gold.get().players[0].id);
+  assert.equal(await outliner.locator('[data-outliner-unit]').count(), ownGold.length);
+  await gold.page.keyboard.press('o');
+  assert.equal(
+    await outliner.getByRole('button', { name: 'Abrir Outliner', exact: true }).count(),
+    1,
+  );
+  await gold.page.keyboard.press('o');
+  await gold.page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await gold.page.keyboard.press('Tab');
+  await gold.page.locator('[data-window="battalion"]').waitFor();
+  await outliner.locator('[data-outliner-city]').first().click();
+  await gold.page.locator('[data-window="province"]').waitFor();
+  await gold.page.getByRole('button', { name: 'Diplomacia', exact: true }).click();
+  const treaty = gold.page.getByRole('region', { name: 'Mesa de Tratados de Paz' });
+  await treaty.waitFor();
+  assert.ok(gold.get().wars[0].warScore >= 25);
+  await treaty.getByRole('checkbox', { name: /Reparações de Guerra/ }).check();
+  await treaty.getByText('Custo das cláusulas: 25/', { exact: false }).waitFor();
+  await treaty.getByRole('button', { name: 'Enviar proposta de paz', exact: true }).click();
+  const proposal = await gold.until((g) => g.offers.some((o) => o.kind === 'peace'));
+  const goldPeer = await fixturePeer(base, fixtures.gold[1]);
+  goldPeer.send({
+    type: 'ANSWER_OFFER',
+    offerId: proposal.offers.find((o) => o.kind === 'peace')!.id,
+    accept: true,
+  });
+  await gold.until((g) => g.wars.every((w) => !w.active));
+  goldPeer.socket.close();
+  await gold.page.keyboard.press('Escape');
+  await gold.page.getByRole('button', { name: 'Estatísticas da campanha', exact: true }).click();
+  await gold.page.getByRole('tab', { name: '🎬 Time-Lapse do Mapa', exact: true }).click();
+  const timeLapse = gold.page.getByRole('region', { name: 'Time-Lapse do Mapa', exact: true });
+  await timeLapse.waitFor();
+  assert.ok((await timeLapse.locator('[data-history-province]').count()) > 40);
+  await timeLapse.getByLabel('Velocidade do Time-Lapse', { exact: true }).selectOption('4');
+  await timeLapse.getByRole('button', { name: 'Reproduzir Time-Lapse' }).click();
+  await timeLapse
+    .getByRole('img', { name: `História do mapa · rodada ${gold.get().turn}` })
+    .waitFor();
+  await timeLapse.getByRole('button', { name: 'Rodada anterior', exact: true }).click();
+  await gold.page.screenshot({ path: '.local/screenshots/gold-timelapse.png' });
+  await gold.page.keyboard.press('Escape');
+  await gold.page.getByRole('button', { name: 'Perfil do Estrategista', exact: true }).click();
+  const profile = gold.page.getByRole('dialog', { name: '🏅 Perfil do Estrategista', exact: true });
+  await profile.waitFor();
+  assert.equal(await profile.locator('[data-achievement]').count(), 12);
+  await profile.getByLabel('Nome do estrategista', { exact: true }).fill('Estrategista Gold');
+  await gold.page.screenshot({ path: '.local/screenshots/gold-profile.png' });
+  await gold.page.keyboard.press('Escape');
+  await gold.page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
+  const saveEvent = gold.page.waitForEvent('download');
+  await gold.page.getByRole('button', { name: '💾 Exportar Save JSON', exact: true }).click();
+  const saveFile = await saveEvent;
+  const savePath = '.local/exports/gold-save.json';
+  await mkdir('.local/exports', { recursive: true });
+  await saveFile.saveAs(savePath);
+  const saveData = await readFile(savePath, 'utf8');
+  assert.equal(JSON.parse(saveData).format, 'CONCORDIA_SAVE_098');
+  assert.ok(!('sessions' in JSON.parse(saveData)));
+  const imported = await open();
+  await imported.page
+    .getByLabel('Importar Cenário / Save JSON', { exact: true })
+    .setInputFiles(savePath);
+  await imported.until((g) => g.code !== gold.get().code && g.matchConfig.ruleset === 'GOLD_098');
+  assert.equal(imported.get().isPublic, false);
+  assert.equal(imported.get().turn, gold.get().turn);
+  assert.deepEqual(imported.get().battalions, gold.get().battalions);
+  await imported.page
+    .getByRole('button', { name: /🔗 Convite privado de/ })
+    .first()
+    .waitFor();
+  await gold.page.reload();
+  await gold.page.locator('[data-interface]').waitFor();
+  await gold.page.getByRole('button', { name: 'Perfil do Estrategista', exact: true }).click();
+  await gold.page.getByLabel('Nome do estrategista', { exact: true }).waitFor();
+  assert.equal(
+    await gold.page.getByLabel('Nome do estrategista', { exact: true }).inputValue(),
+    'Estrategista Gold',
+  );
+  const roomUI = await open();
+  await roomUI.page.getByRole('button', { name: 'Criar uma sala', exact: true }).click();
+  await roomUI.page
+    .getByLabel('Cenário de Campanha', { exact: true })
+    .selectOption('IRON_CROWN_EUROPE');
+  await roomUI.page.getByRole('button', { name: 'Reunir o conselho' }).click();
+  await roomUI.until(
+    (g) => g.phase === 'lobby' && g.matchConfig.scenarioId === 'IRON_CROWN_EUROPE',
+  );
+  await roomUI.page.getByText('✨ Friend-Pass Ativo:', { exact: false }).waitFor();
+  await roomUI.context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+  await roomUI.page
+    .getByRole('button', { name: '🔗 Copiar Link de Convite da Sala', exact: true })
+    .click();
+  const invitation = await roomUI.page.evaluate(() => navigator.clipboard.readText());
+  assert.equal(new URL(invitation).searchParams.get('room'), roomUI.get().code);
+  const friend = await open();
+  await friend.page.goto(invitation);
+  assert.equal(
+    await friend.page.getByLabel('Código da sala', { exact: true }).inputValue(),
+    roomUI.get().code,
+  );
   assert.deepEqual(errors, []);
   console.log(
-    'v0.95 cartográfico passou: SVG sem caixas, seis construções, neve/cerco, inspeção 480×540, seleção/movimento/pan, janelas persistentes, sinais efêmeros, replay limitado a 4s, áudio Foley, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas.',
+    'v0.98 cartográfico passou: SVG sem caixas, seis construções, neve/cerco, inspeção 480×540, seleção/movimento/pan, janelas persistentes, sinais efêmeros, replay limitado a 4s, áudio Foley, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas; cinco lentes F1–F5, outliner O/Tab, tratados Gold, time-lapse, perfil persistente, save portátil e Friend-Pass.',
   );
 } catch (error) {
   await debugPage?.screenshot({ path: '.local/screenshots/rc-failure.png' }).catch(() => {});

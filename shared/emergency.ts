@@ -1,3 +1,4 @@
+import { goldRules } from './factions';
 import type { GameState } from './types';
 export function levyReason(
   g: Pick<GameState, 'players' | 'wars' | 'provinces' | 'battalions' | 'turn' | 'phase'>,
@@ -6,8 +7,9 @@ export function levyReason(
   const p = g.players.find((p) => p.id === id);
   if (!p) return 'Nação inexistente.';
   if (g.phase !== 'planning' || p.ready) return 'Reabra suas ordens para convocar a defesa.';
-  if (p.emergencyLevyTurn !== null && g.turn - p.emergencyLevyTurn < 8)
-    return `Disponível na rodada ${p.emergencyLevyTurn + 8}.`;
+  const cooldown = goldRules(g) && p.nationId === 'sol_invicto' ? 6 : 8;
+  if (p.emergencyLevyTurn !== null && g.turn - p.emergencyLevyTurn < cooldown)
+    return `Disponível na rodada ${p.emergencyLevyTurn + cooldown}.`;
   if (!g.wars.some((w) => w.active && w.defenderIds.includes(id)))
     return 'Exige participação em guerra defensiva.';
   if (
