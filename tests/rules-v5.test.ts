@@ -219,7 +219,7 @@ test('ZoC impede avanço a outra terra inimiga e permite recuo ou avanço após 
     submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['france'] }),
   );
   p.occupierId = a.id;
-  assert.deepEqual(unitPath(g, u, 'france'), ['france']);
+  assert.deepEqual(unitPath(g, u, 'france'), ['aquitaine', 'france']);
 });
 test('cerco perde progresso se os sitiantes saem ou fazem paz', () => {
   const {
@@ -358,9 +358,9 @@ test('quatro árvores respeitam custos, pré-requisitos e exclusividade A/B', ()
   assert.equal(SKILLS.length, 16);
   for (const branch of Object.keys(BRANCHES)) {
     assert.throws(() => unlockSkill(g, a.id, `${branch}_T3` as SkillId));
-    const before = a.militaryXP;
+    const before = a.influence + a.prestige + a.militaryXP;
     unlockSkill(g, a.id, `${branch}_T1` as SkillId);
-    assert.equal(a.militaryXP, before - 25);
+    assert.equal(a.influence + a.prestige + a.militaryXP, before - 25);
     unlockSkill(g, a.id, `${branch}_T2A` as SkillId);
     assert.throws(() => unlockSkill(g, a.id, `${branch}_T2B` as SkillId));
     unlockSkill(g, a.id, `${branch}_T3` as SkillId);
@@ -469,7 +469,7 @@ test('quartéis treinam/reduzem recrutamento, fundição melhora equipamento e c
   p.strategicResource = 'IRON';
   assert.equal(realmEconomy(g, a.id).buildingUpkeep, 0);
 });
-test('mercado gera comércio e templo pacifica, reduz revolta e gera fervor', () => {
+test('mercado gera comércio e templo pacifica, reduz revolta e gera Autoridade', () => {
   const {
     g,
     players: [a],
@@ -483,12 +483,12 @@ test('mercado gera comércio e templo pacifica, reduz revolta e gera fervor', ()
   p.templeLevel = 1;
   p.unrest = 40;
   p.pacification = 50;
-  const fervor = a.fervor;
+  const experience = a.militaryXP;
   army(g, a.id, p.id, { infantry: 3 });
   resolveTurn(g);
   assert.equal(p.pacification, 68.75);
   assert.equal(p.unrest, 15);
-  assert.equal(a.fervor, fervor + 2);
+  assert.equal(a.militaryXP, experience + 12);
 });
 test('inflação e corrupção limitam rendimento marginal sem reduzir a taxa básica inicial', () => {
   const {
@@ -717,9 +717,9 @@ test('dominação exige 75% com metade do peso de vassalos e não tem atalho de 
   const lands = g.provinces.filter((p) => p.kind === 'LAND');
   b.subjectOfId = a.id;
   c.subjectOfId = a.id;
-  lands.forEach((p, i) => (p.ownerId = i < 27 ? a.id : b.id));
+  lands.forEach((p, i) => (p.ownerId = i < Math.ceil(lands.length * 0.5) - 1 ? a.id : b.id));
   assert.equal(victoryStatus(g), null);
-  lands[27].ownerId = a.id;
+  lands[Math.ceil(lands.length * 0.5) - 1].ownerId = a.id;
   assert.equal(victoryStatus(g)?.winnerId, a.id);
 });
 test('cartas escalam para continente e mundo; rivalidade exige a capital original', () => {
@@ -782,14 +782,16 @@ test('objetivo secreto precisa de três rodadas, dispara aviso global e revela c
     card = a.secretObjectives.find((c) => c.kind === 'WEALTH')!;
   a.selectedObjectiveId = card.id;
   const lands = g.provinces.filter((p) => p.kind === 'LAND');
-  lands.slice(0, 23).forEach((p, i) => {
-    p.ownerId = a.id;
-    p.occupierId = null;
-    p.pacification = 100;
-    p.unrest = 0;
-    p.religion = a.faith;
-    if (i < 2) p.strategicResource = 'RELIC';
-  });
+  lands
+    .slice(0, Math.ceil(g.provinces.filter((p) => p.kind === 'LAND').length * 0.4))
+    .forEach((p, i) => {
+      p.ownerId = a.id;
+      p.occupierId = null;
+      p.pacification = 100;
+      p.unrest = 0;
+      p.religion = a.faith;
+      if (i < 2) p.strategicResource = 'RELIC';
+    });
   lands.at(-1)!.ownerId = g.players[1].id;
   lands.at(-2)!.ownerId = g.players[2].id;
   a.gold = 950;
@@ -876,7 +878,7 @@ test('Manobra Envolvente exige metade de cavalaria para ampliar alcance', () => 
       players: [a],
     } = setup();
     a.unlockedSkills = ['CAV_T1', 'CAV_T2B', 'CAV_T3'];
-    for (const id of ['castile', 'france']) {
+    for (const id of ['castile', 'aquitaine']) {
       province(g, id).ownerId = a.id;
       province(g, id).terrain = 'plains';
     }
@@ -886,12 +888,12 @@ test('Manobra Envolvente exige metade de cavalaria para ampliar alcance', () => 
     submitOrder(g, a.id, {
       type: 'MOVE_BATTALION',
       battalionId: u.id,
-      path: ['castile', 'france'],
+      path: ['castile', 'aquitaine'],
     });
     resolveTurn(g);
     return u;
   };
-  assert.equal(run(5).provinceId, 'france');
+  assert.equal(run(5).provinceId, 'aquitaine');
   assert.equal(run(4).provinceId, 'castile');
 });
 test('ponte naval respeita zona de controle do forte de origem', () => {
@@ -948,7 +950,7 @@ test('Pax mantém três rodadas militares e depois três rodadas de condição c
   a.gold = 10000;
   a.stability = 90;
   const lands = g.provinces.filter((p) => p.kind === 'LAND');
-  lands.slice(0, 31).forEach((p) => {
+  lands.slice(0, Math.ceil(lands.length * 0.55)).forEach((p) => {
     p.ownerId = a.id;
     p.occupierId = null;
     p.pacification = 100;

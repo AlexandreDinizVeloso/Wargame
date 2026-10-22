@@ -18,7 +18,7 @@ export const ERAS = {
     name: 'Era da Guerra Total & Hegemonia',
     act: 'ATO III',
     icon: '👑',
-    description: 'Cerco +1; prestígio e pontuação de batalha dobrados.',
+    description: 'Cerco +1; Autoridade e pontuação de batalha dobrados.',
   },
 } as const;
 export const campaignEra = (turn: number): CampaignEra =>

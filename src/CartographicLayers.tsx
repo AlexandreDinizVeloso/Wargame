@@ -1,3 +1,4 @@
+import { WORLD_RIVERS, impassableFeatures } from '../shared/map';
 export { ProvinceStructuresVisual as InfrastructureSymbols } from './MapMiniatures';
 import type { Province } from '../shared/types';
 export function CartographicDefs() {
@@ -150,6 +151,66 @@ export function ProvinceShading({
           </g>
         </>
       )}
+    </g>
+  );
+}
+
+export function GeographyLayers({ provinces }: { provinces: Province[] }) {
+  const ids = new Set(provinces.map((p) => p.id));
+  const smooth = (points: number[][]) =>
+    points
+      .map(([x, y], i) =>
+        i === 0 ? `M${x},${y}` : `Q${(points[i - 1][0] + x) / 2},${points[i - 1][1]} ${x},${y}`,
+      )
+      .join(' ');
+  return (
+    <g className="geography-layer" pointerEvents="none" aria-hidden="true">
+      {WORLD_RIVERS.filter((r) => r.provinces.some((id) => ids.has(id))).map((river) => (
+        <g key={river.id} data-world-river={river.id}>
+          <path
+            d={smooth(river.points)}
+            fill="none"
+            stroke="#38bdf8"
+            strokeOpacity=".16"
+            strokeWidth="4"
+          />
+          <path
+            d={smooth(river.points)}
+            fill="none"
+            stroke="#38bdf8"
+            strokeOpacity=".85"
+            strokeWidth=".9"
+          />
+          <title>{`${river.name} · travessia: −15% ataque`}</title>
+        </g>
+      ))}
+      {impassableFeatures
+        .filter((f) => f.provinces.some((id) => ids.has(id)))
+        .map((feature) => (
+          <g key={feature.id} data-natural-feature={feature.id}>
+            {feature.points.map(([x, y], i) => (
+              <g key={i} transform={`translate(${x} ${y})`} opacity=".8">
+                {feature.kind === 'desert' ? (
+                  <>
+                    <path
+                      d="M-10 6Q-3-8 7 6Q12-2 18 7"
+                      fill="#b59b60"
+                      stroke="#d8bd7a"
+                      strokeWidth=".6"
+                    />
+                    <path d="M-8 6Q-2 0 7 6" fill="none" stroke="#6e613d" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M-9 7L0-12L11 7Z" fill="#263d40" stroke="#a5b9b5" strokeWidth=".6" />
+                    <path d="M-4-3L0-12L5-3L1-5L-1-2Z" fill="#edf0da" />
+                  </>
+                )}
+                <title>{feature.name}</title>
+              </g>
+            ))}
+          </g>
+        ))}
     </g>
   );
 }

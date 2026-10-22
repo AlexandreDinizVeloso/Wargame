@@ -1,3 +1,4 @@
+import { getNationAuthority } from '../shared/economy';
 import PeaceTreatyTable from './PeaceTreatyTable';
 import { goldRules, FACTION_TRAITS } from '../shared/factions';
 import { useEffect, useState } from 'react';
@@ -114,6 +115,10 @@ export default function DiplomacyDrawer({
       >
         ⚔️ Declarar Guerra a {target.nation}
       </button>
+      <p className="fine-print">
+        Pactos, acesso militar, vassalagem, espionagem, embargo e apoio a rebeldes custam 3 👑
+        Autoridade por ação, além do Ouro indicado.
+      </p>
       <div className="realm-list">
         {game.players.map((p) => {
           const rel = p.id === playerId ? null : getRelation(game, playerId, p.id);
@@ -173,8 +178,8 @@ export default function DiplomacyDrawer({
         </div>
         <div className="ledger-grid">
           <div>
-            <small>PRESTÍGIO</small>
-            <strong>{number(target.prestige)}</strong>
+            <small>AUTORIDADE</small>
+            <strong>{getNationAuthority(target)}</strong>
           </div>
           <div>
             <small>DESGASTE</small>
@@ -359,9 +364,7 @@ export default function DiplomacyDrawer({
               {o.kind === 'tribute' ? ` · ${o.amount} ouro por rodada` : ''}
             </small>
             {o.kind === 'call_to_arms' && o.defensive && (
-              <p className="fine-print">
-                Recusar rompe a aliança e custa 15 prestígio e 5 autoridade imperial.
-              </p>
+              <p className="fine-print">Recusar rompe a aliança e compromete 15 Autoridade.</p>
             )}
             {o.terms && (
               <p className="fine-print">

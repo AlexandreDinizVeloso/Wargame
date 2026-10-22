@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { makeMap, makeStaticMap, THEATERS, TERRAIN_DEFENSE } from '../shared/map';
 import { NATIONS, RELIGIONS, shortestPath, holyCityId, zeroComposition } from '../shared/rules';
 import type { Battalion } from '../shared/types';
-test('mapa mundial tem 56 terras orgânicas e zonas marítimas JSON puras', () => {
+test('mapa mundial tem 95 terras orgânicas e zonas marítimas JSON puras', () => {
   const map = makeStaticMap();
   assert.deepEqual(JSON.parse(JSON.stringify(map)), map);
-  assert.equal(map.filter((p) => p.kind === 'LAND').length, 56);
+  assert.equal(map.filter((p) => p.kind === 'LAND').length, 95);
   assert.ok(map.some((p) => p.kind === 'SEA_ZONE'));
   for (const p of map) {
     assert.equal(p.terrainDefenseBonus, p.kind === 'SEA_ZONE' ? 1 : TERRAIN_DEFENSE[p.terrain]);
@@ -16,11 +16,23 @@ test('mapa mundial tem 56 terras orgânicas e zonas marítimas JSON puras', () =
   }
   assert.ok(map.find((p) => p.id === 'france')!.rings.some((r) => r.length > 10));
 });
-test('cada teatro rápido contém 16 terras e caminhos BFS válidos', () => {
+test('cada teatro rápido contém suas subdivisões e caminhos BFS válidos', () => {
   for (const theater of THEATERS) {
     const map = makeMap('quick', theater);
-    assert.equal(map.filter((p) => p.kind === 'LAND').length, 16);
-    assert.ok(map.every((p) => p.kind === 'SEA_ZONE' || p.continent === theater));
+    assert.equal(
+      map.filter((p) => p.kind === 'LAND').length,
+      { EUROPE: 34, ASIA: 28, AMERICAS: 23 }[theater],
+    );
+    assert.ok(
+      map.every(
+        (p) =>
+          p.kind === 'SEA_ZONE' ||
+          p.continent === theater ||
+          (theater === 'ASIA' && p.id === 'persia') ||
+          (theater === 'EUROPE' &&
+            ['anatolia', 'levant', 'nile', 'maghreb', 'algiers', 'tripoli'].includes(p.id)),
+      ),
+    );
     for (const faith of Object.keys(RELIGIONS))
       assert.ok(map.some((p) => p.id === holyCityId(faith as keyof typeof RELIGIONS, map)));
     const land = map.filter((p) => p.kind === 'LAND');

@@ -1,6 +1,17 @@
-# Concórdia — Atlas de Impérios · v0.99
+# Concórdia — Atlas de Impérios · v1.0
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
+
+## v1.0 · Geografia, decisões e regência
+
+- 95 terras e 13 mares, grandes rios com penalidade de travessia e gargalos naturais.
+- Ouro, Recrutas e Autoridade em todas as gavetas; guarnições pacificadas pagam metade da manutenção.
+- Dez dilemas nacionais, duas escolhas a cada quatro rodadas.
+- IA tática dedicada com defesa de fronteira e concentração de forças.
+- Salas públicas com entrada em bots permanentes e regência temporária anti-AFK.
+- Cinco efeitos WAV reais, gerados pelo projeto e incluídos no build.
+
+Veja [regras, compatibilidade e validação v1.0](docs/V1_0.md). Saves preservam seu tabuleiro e credenciais; as novas regras de recursos, logística e dilemas passam a valer também nas campanhas carregadas.
 
 ## v0.99 · Vertical Slice Reborn
 
@@ -10,7 +21,7 @@ Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **
 - Replay em três fases e palco tático animado, móvel e redimensionável.
 - Fontes locais e áudio híbrido, com síntese automática quando não houver gravações.
 
-Veja [regras, compatibilidade e validação v0.99](docs/V0_99.md). Salas anteriores preservam suas regras e saves.
+Veja [regras, compatibilidade e validação v0.99](docs/V0_99.md). O histórico abaixo descreve a versão anterior; a compatibilidade atual está em [v1.0](docs/V1_0.md).
 
 ## v0.98 · Gold Candidate
 
@@ -115,7 +126,7 @@ Sem banco externo, chave de API ou assets remotos. No cloud com cache pessoal se
 | Sapiência   | Recruta com treinamento 1,20×; vê intenções inimigas em províncias adjacentes                                       |
 | Verídia     | Camuflagem em mata/colinas próprias; defesa local com +50% poder de emboscada                                       |
 
-As 56 terras e 13 zonas marítimas usam geometria Natural Earth incorporada, de domínio público. Os teatros Europa, Américas e Ásia têm 16 terras cada. As nações são ficcionais sobre geografia terrestre; o mapa não pretende reconstruir fronteiras de 1550. Quatro religiões fictícias mantêm doutrinas e cidades sagradas.
+As 95 terras e 13 zonas marítimas usam geometria Natural Earth incorporada, de domínio público. Os teatros Europa/Mediterrâneo, Américas e Ásia/Pérsia têm 34, 23 e 28 terras, respectivamente. As nações são ficcionais sobre geografia terrestre; o mapa não pretende reconstruir fronteiras de 1550. Quatro religiões fictícias mantêm doutrinas e cidades sagradas.
 
 Trigo, ferro, cavalos, minas de ouro e relíquias aparecem no mapa e alteram recrutamento, ataque, suprimento, renda e moral. Primavera, verão, outono e inverno formam um ano. Uma crise a cada quatro rodadas dura duas rodadas; expansão excessiva permite coalizões de contenção.
 

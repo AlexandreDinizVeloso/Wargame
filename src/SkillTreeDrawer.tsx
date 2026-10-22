@@ -1,8 +1,7 @@
 import { getNationAuthority } from '../shared/economy';
-import { verticalRules } from '../shared/fogOfWar';
-import { technologyCost } from '../shared/world';
-import type { GameView } from '../shared/types';
 import { BRANCHES, SKILLS, skillBlock } from '../shared/military';
+import type { GameView } from '../shared/types';
+import { technologyCost } from '../shared/world';
 import type { Command } from './ui';
 export default function SkillTreeDrawer({
   game,
@@ -18,9 +17,7 @@ export default function SkillTreeDrawer({
     <div className="skill-tree-ledger">
       <h2>🎖️ Doutrinas & Árvore de Tropas</h2>
       <p className="xp-balance">
-        {verticalRules(game)
-          ? `${getNationAuthority(me)} Autoridade · doutrinas, diplomacia e decretos`
-          : `${me.militaryXP} XP militar · +10 por rodada, +15 por batalha e +8 ao treinar`}
+        {getNationAuthority(me)} Autoridade · doutrinas, diplomacia e decretos
       </p>
       {Object.entries(BRANCHES).map(([branch, title]) => (
         <section className="skill-branch" key={branch}>
@@ -35,8 +32,7 @@ export default function SkillTreeDrawer({
                   key={s.id}
                 >
                   <small>
-                    NÍVEL {s.tier} · {technologyCost(game, s.tier, s.cost)}{' '}
-                    {verticalRules(game) ? 'Autoridade' : 'XP'}
+                    NÍVEL {s.tier} · {technologyCost(game, s.tier, s.cost)} Autoridade
                     {s.tier === 2 ? ' · ESCOLHA EXCLUSIVA A/B' : ''}
                   </small>
                   <strong>{s.name}</strong>
@@ -51,7 +47,7 @@ export default function SkillTreeDrawer({
                       : me.ready
                         ? 'Reabra suas ordens'
                         : (reason ??
-                          `Desbloquear · ${technologyCost(game, s.tier, s.cost)} ${verticalRules(game) ? 'Autoridade' : 'XP'}`)}
+                          `Desbloquear · ${technologyCost(game, s.tier, s.cost)} Autoridade`)}
                   </button>
                 </article>
               );

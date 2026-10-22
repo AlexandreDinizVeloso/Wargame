@@ -177,8 +177,8 @@ test('Aurélia recebe vassalagem consentida, renda e províncias de dominação'
   close(b.gold, before + eco.net - eco.grossIncome * 0.25);
   assert.ok(r.events.some((e) => e.includes('vassalagem')));
   const lands = g.provinces.filter((p) => p.kind === 'LAND');
-  lands.slice(0, 45).forEach((p, i) => {
-    p.ownerId = i < 43 ? a.id : b.id;
+  lands.slice(0, Math.ceil(lands.length * 0.75) + 2).forEach((p, i) => {
+    p.ownerId = i < Math.ceil(lands.length * 0.75) ? a.id : b.id;
     p.occupierId = null;
   });
   assert.equal(victoryStatus(g)?.winnerId, a.id);
@@ -244,7 +244,7 @@ test('Sol Invicto ganha ouro, Fervor e poder em guerra religiosa', () => {
   assert.ok(compositionPower(g, unit, p) > before * 1.19);
   submitOrder(g, a.id, { type: 'CONVERT', targetProvinceId: p.id });
   const r = resolveTurn(g);
-  assert.equal(a.fervor, 10);
+  assert.equal(a.militaryXP, 20);
   assert.ok(r.conversions.length === 1);
   close(a.gold, 75 - 8 + 25 + r.economy.find((e) => e.playerId === a.id)!.net);
 });
@@ -296,7 +296,7 @@ test('Turan cavalaria pura percorre duas terras planas e arrasa uma conquista um
   a.nationId = 'turan';
   g.provinces.find((p) => p.id === 'japan')!.ownerId = g.players[1].id;
   g.provinces.find((p) => p.id === 'korea')!.ownerId = g.players[2].id;
-  for (const id of ['castile', 'france']) {
+  for (const id of ['castile', 'aquitaine']) {
     const p = g.provinces.find((p) => p.id === id)!;
     p.ownerId = a.id;
     p.terrain = 'plains';
@@ -306,11 +306,11 @@ test('Turan cavalaria pura percorre duas terras planas e arrasa uma conquista um
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
-    path: ['castile', 'france'],
+    path: ['castile', 'aquitaine'],
   });
   resolveTurn(g);
-  assert.equal(unit.provinceId, 'france');
-  const neutral = g.provinces.find((p) => p.id === 'lowlands')!;
+  assert.equal(unit.provinceId, 'aquitaine');
+  const neutral = g.provinces.find((p) => p.id === 'burgundy')!;
   neutral.ownerId = null;
   neutral.fortLevel = 0;
   neutral.terrain = 'plains';
@@ -323,6 +323,8 @@ test('Turan cavalaria pura percorre duas terras planas e arrasa uma conquista um
   assert.equal(neutral.ownerId, null);
   resolveTurn(g);
   assert.equal(neutral.ownerId, a.id);
+  a.activeDilemma = null;
+  a.lastDilemmaTurn = g.turn;
   const before = a.gold;
   submitOrder(g, a.id, { type: 'RAZE_PROVINCE', battalionId: unit.id });
   const r = resolveTurn(g);
@@ -347,6 +349,7 @@ test('Sapiência recruta treinado e só recebe intenções inimigas adjacentes',
     targetProvinceId: 'france',
   });
   assert.deepEqual(viewFor(g, a.id).battalions.find((a) => a.id === enemy.id)?.pathQueue, [
+    'aquitaine',
     'france',
   ]);
   a.nationId = 'aurelia';

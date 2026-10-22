@@ -93,6 +93,9 @@ export default function BattlePreviewTooltip({
         <b>{Math.round(preview.defensePower)}</b>
       </div>
       <ul>
+        {preview.riverCrossingModifier < 1 && (
+          <li className="danger">🌊 Travessia de Rio: −15% de ataque</li>
+        )}
         <li>
           Terreno: {TERRAIN_LABELS[province.terrain]} · defesa +
           {Math.round((province.terrainDefenseBonus - 1) * 100)}%

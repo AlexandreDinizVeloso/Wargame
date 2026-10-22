@@ -1,3 +1,4 @@
+import { logisticsPosture } from '../shared/economy';
 import { useEffect, useState } from 'react';
 import type { Battalion, GameView, Province } from '../shared/types';
 import { unitCount } from '../shared/rules';
@@ -71,6 +72,11 @@ export default function OutlinerDock({
             : `${unitCount(a)} tropas`}
         </span>
         <small>{status.label}</small>
+        {!a.isFleet && (
+          <small data-logistics-posture={logisticsPosture(game, a).id}>
+            {logisticsPosture(game, a).label}
+          </small>
+        )}
         <meter
           min={0}
           max={a.moraleCap ?? 100}

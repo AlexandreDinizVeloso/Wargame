@@ -1,3 +1,5 @@
+import { getNationAuthority } from '../shared/economy';
+import { dilemmaDefinition } from '../shared/dilemmas';
 import { mapPoint, rightClickProvince } from './map-interactions';
 import assert from 'node:assert/strict';
 import { fork, type ChildProcess } from 'node:child_process';
@@ -132,7 +134,16 @@ try {
   const { page, until, get } = await open(fixtures.transport[0]);
   await page.locator('[data-interface="cartographic"]').waitFor();
   await viewport(page);
-  assert.equal(await page.locator('.province-relief').count(), 56);
+  assert.equal(await page.locator('.province-relief').count(), 95);
+  assert.equal(await page.locator('[data-world-river]').count(), 11);
+  assert.equal(await page.locator('[data-natural-feature]').count(), 4);
+  const audioAssets = await page.request.get(`${base}/api/audio-assets`);
+  assert.equal(audioAssets.status(), 200);
+  for (const name of ['cannon', 'march', 'sail', 'horn', 'coin']) {
+    const wav = await page.request.get(`${base}/assets/sfx/${name}.wav`);
+    assert.equal(wav.status(), 200);
+    assert.equal((await wav.body()).toString('ascii', 0, 4), 'RIFF');
+  }
   assert.equal(await page.locator('[data-miniature="compass"]').count(), 13);
   assert.ok((await page.locator('[data-miniature="army"]').count()) > 0);
   assert.ok((await page.locator('[data-miniature="fleet"]').count()) > 0);
@@ -250,10 +261,10 @@ try {
   assert.ok(
     await page.evaluate(
       (before) =>
-        (window as unknown as { foleyStats: { buffers: number } }).foleyStats.buffers >= before + 3,
+        (window as unknown as { foleyStats: { buffers: number } }).foleyStats.buffers >= before + 1,
       buffersBefore,
     ),
-    'Travessia pelo estreito deve usar ruídos de navegação.',
+    'Travessia pelo estreito deve tocar o buffer WAV de navegação.',
   );
   await page.getByRole('button', { name: '❌ Cancelar Ordem Atual', exact: true }).click();
   await until((g) => !g.plannedOrders.some((o) => 'battalionId' in o && o.battalionId === main.id));
@@ -284,7 +295,7 @@ try {
   assert.ok(
     await page.evaluate(
       (before) =>
-        (window as unknown as { foleyStats: { buffers: number } }).foleyStats.buffers >= before + 3,
+        (window as unknown as { foleyStats: { buffers: number } }).foleyStats.buffers >= before + 1,
       beforeSail,
     ),
   );
@@ -402,6 +413,19 @@ try {
   await page.screenshot({ path: '.local/screenshots/rc-map-mobile.png' });
   const visuals = await open(fixtures.visual[0]);
   await visuals.page.locator('[data-winter-frost]').first().waitFor();
+  const council = visuals.page.getByRole('region', { name: 'Dilema Nacional', exact: true });
+  await council.waitFor();
+  const nation = visuals.get().players[0],
+    choice = dilemmaDefinition(nation.activeDilemma!)!.options[1];
+  await visuals.page.screenshot({ path: '.local/screenshots/v100-dilemma-geography.png' });
+  await council.getByRole('button').nth(1).click();
+  const decided = await visuals.until((g) => !g.players[0].activeDilemma);
+  assert.equal(decided.players[0].gold, nation.gold + choice.gold);
+  assert.equal(
+    getNationAuthority(decided.players[0]),
+    getNationAuthority(nation) + choice.authority,
+  );
+  assert.equal(await council.count(), 0);
   assert.equal(await visuals.page.locator('.siege-flame').count(), 0);
   assert.ok((await visuals.page.locator('.siege-progress-label').count()) > 0);
   for (const kind of ['FORT', 'BARRACKS', 'MARKET', 'PORT', 'FOUNDRY', 'TEMPLE'])
@@ -434,6 +458,14 @@ try {
     const next = lesson.get().turn + 1;
     await lesson.page.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
     await lesson.until((g) => g.turn === next);
+    if (lesson.get().players[0].activeDilemma) {
+      await lesson.page
+        .getByRole('region', { name: 'Dilema Nacional', exact: true })
+        .getByRole('button')
+        .first()
+        .click();
+      await lesson.until((g) => !g.players[0].activeDilemma);
+    }
   }
   await step(3);
   await lesson.page.keyboard.press('Escape');
@@ -639,7 +671,7 @@ try {
   // Relógio controlado verifica cada fase independentemente da taxa de quadros do CI.
   const replayTime = new Date();
   await cinema.page.clock.install({ time: replayTime });
-  await cinema.page.clock.pauseAt(replayTime);
+  await cinema.page.clock.pauseAt(new Date(replayTime.getTime() + 60_000));
   await cinema.page.getByRole('button', { name: 'Rever Animação do Turno', exact: true }).click();
   await cinema.page.locator('[data-cinematic-phase="decrees"]').waitFor();
   await cinema.page.clock.fastForward(1600);
@@ -672,7 +704,7 @@ try {
   await shader.context.close();
   assert.deepEqual(errors, []);
   console.log(
-    'v0.99 cartográfico passou: SVG sem caixas, seis construções, neve/cerco, inspeção 480×540, seleção/movimento/pan, janelas persistentes, sinais efêmeros, replay limitado a 4s, áudio Foley, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas; cinco lentes F1–F5, outliner O/Tab, tratados Gold, time-lapse, perfil persistente, save portátil e Friend-Pass.',
+    'v1.0 cartográfico passou: 95 terras, onze rios, quatro barreiras, dilema nacional e WAVs PCM; SVG sem caixas, seis construções, neve/cerco, inspeção 480×540, seleção/movimento/pan, janelas persistentes, sinais efêmeros, replay limitado a 4s, áudio Foley, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas; cinco lentes F1–F5, outliner O/Tab, tratados Gold, time-lapse, perfil persistente, save portátil e Friend-Pass.',
   );
 } catch (error) {
   await debugPage?.screenshot({ path: '.local/screenshots/rc-failure.png' }).catch(() => {});

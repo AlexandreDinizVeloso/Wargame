@@ -244,6 +244,7 @@ test('v098: Sol Invicto tem fortes 25% mais resistentes e defesa veterana com re
   g.turn = 6;
   assert.match(levyReason(g, b.id)!, /rodada 7/);
   g.turn = 7;
+  b.militaryXP += 15;
   assert.equal(levyReason(g, b.id), null);
 });
 test('v098: Verídia recebe 20% em terreno e duplica atrito em terras pacificadas', () => {
@@ -477,6 +478,10 @@ test('v098: reparações são 25% do bruto durante exatamente cinco resoluções
   w.warScore = 100;
   applyPeace(g, w, a.id, [{ type: 'WAR_REPARATIONS', immediateTribute: 0 }]);
   for (let i = 0; i < 6; i++) {
+    for (const p of g.players) {
+      p.activeDilemma = null;
+      p.lastDilemmaTurn = g.turn;
+    }
     const forecast = realmEconomy(g, b.id),
       before = b.gold;
     const report = resolveTurn(g);

@@ -109,6 +109,9 @@ test('servidor headless responde sem frontend e recupera a campanha após SIGKIL
     map: { terrain: string; path: string }[];
     orderTypes: string[];
     skills: unknown[];
+    dilemmas: unknown[];
+    rivers: unknown[];
+    impassableFeatures: unknown[];
     commanderTraits: Record<string, unknown>;
     buildings: Record<string, unknown>;
   };
@@ -116,9 +119,12 @@ test('servidor headless responde sem frontend e recupera a campanha após SIGKIL
   for (const type of ['BUILD_BUILDING', 'DEMOLISH_BUILDING', 'ASSAULT_SIEGE', 'NAVAL_BRIDGE'])
     assert.ok(schema.orderTypes.includes(type));
   assert.equal(schema.skills.length, 16);
+  assert.equal(schema.dilemmas.length, 10);
+  assert.equal(schema.rivers.length, 11);
+  assert.equal(schema.impassableFeatures.length, 4);
   assert.equal(Object.keys(schema.commanderTraits).length, 6);
   assert.equal(Object.keys(schema.buildings).length, 6);
-  assert.equal(schema.map.filter((p) => p.terrain).length, 69);
+  assert.equal(schema.map.filter((p) => p.terrain).length, 108);
   assert.ok(schema.map.every((p) => p.terrain && p.path));
   assert.equal((await fetch(`http://127.0.0.1:${initial.port}/`)).status, 404);
   const socket = await connect(initial.port);

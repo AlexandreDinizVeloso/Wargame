@@ -1,11 +1,10 @@
 import { getNationAuthority, spendNationAuthority } from '../shared/economy';
-import { verticalRules } from '../shared/fogOfWar';
-import { goldRules } from '../shared/factions';
-import type { GameState } from '../shared/types';
 import { levyReason } from '../shared/emergency';
+import { goldRules } from '../shared/factions';
 import { atWar, compositionOf, reservedResources } from '../shared/rules';
-import { assert, createBattalion, playerOf } from './state';
+import type { GameState } from '../shared/types';
 import { notify } from './notifications';
+import { assert, createBattalion, playerOf } from './state';
 export function emergencyLevy(g: GameState, id: string) {
   const p = playerOf(g, id),
     reason = levyReason(g, id),
@@ -30,13 +29,13 @@ export function emergencyLevy(g: GameState, id: string) {
       (a, b) => Number(b.capitalOf === id) - Number(a.capitalOf === id) || a.id.localeCompare(b.id),
     )[0];
   assert(target, 'Sem província segura para mobilização.');
-  if (verticalRules(g)) {
+  {
     assert(
       getNationAuthority(p) - reserved.influence >= 15,
       'Libere 15 Autoridade reservada antes de convocar.',
     );
     spendNationAuthority(p, 15);
-  } else p.stability -= 15;
+  }
   p.gold -= 50;
   p.emergencyLevyTurn = g.turn;
   p.homelandDefenseUntil = g.turn + 1;

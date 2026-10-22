@@ -130,6 +130,7 @@ export function spendNationAuthority(nation: AuthorityNation, cost: number): boo
     nation[key] -= amount;
     remaining -= amount;
   }
+  syncNationAuthority(nation);
   return true;
 }
 
@@ -137,4 +138,50 @@ export function integerEventText(text: string): string {
   return text.replace(/(?<![\w.])(-?\d+)[.,](\d+)(?![\d.])/g, (value) =>
     String(integerValue(Number(value.replace(',', '.')))),
   );
+}
+
+export function syncNationAuthority(nation: AuthorityNation & { authority?: number }) {
+  nation.authority = getNationAuthority(nation);
+  return nation.authority;
+}
+export function logisticsPosture(
+  g: Pick<GameState, 'provinces' | 'turn'> &
+    Partial<Pick<GameState, 'orders'>> & { plannedOrders?: import('./types').PlayerOrder[] },
+  army: Battalion,
+): { id: 'GARRISON' | 'CAMPAIGN'; multiplier: number; label: string } {
+  const province = g.provinces.find((p) => p.id === army.provinceId);
+  const orders = g.orders?.[army.ownerId] ?? g.plannedOrders ?? [];
+  const marching =
+    army.pathQueue.length > 0 ||
+    army.lastMovedTurn === g.turn ||
+    orders.some(
+      (o) =>
+        'battalionId' in o &&
+        o.battalionId === army.id &&
+        ['MOVE_BATTALION', 'AUTO_TRANSPORT', 'NAVAL_BRIDGE', 'EMBARK_BATTALION'].includes(o.type),
+    );
+  if (
+    !army.isFleet &&
+    !army.embarkedOnId &&
+    !army.stranded &&
+    province?.ownerId === army.ownerId &&
+    !province.occupierId &&
+    province.pacification >= 80 &&
+    !province.siege &&
+    !marching
+  )
+    return { id: 'GARRISON', multiplier: 0.5, label: '🛡️ Em Guarnição (-50% custo)' };
+  const distant =
+    !army.isFleet &&
+    province?.kind === 'LAND' &&
+    !!province.ownerId &&
+    province.ownerId !== army.ownerId &&
+    !province.neighbors.some((id) =>
+      g.provinces.some((p) => p.id === id && p.ownerId === army.ownerId && !p.occupierId),
+    );
+  return {
+    id: 'CAMPAIGN',
+    multiplier: distant ? 1.25 : 1,
+    label: distant ? '⚔️ Em Campanha (+25% logística distante)' : '⚔️ Em Campanha (Custo total)',
+  };
 }

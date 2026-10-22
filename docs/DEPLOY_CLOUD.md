@@ -1,4 +1,4 @@
-# Concórdia na nuvem · v0.99
+# Concórdia na nuvem · v1.0
 
 Um processo Node atende o site, `/api/health` e `/ws` na mesma porta. Amigos acessam um link HTTPS; não precisam de Radmin, Node instalado ou IP público em casa. A imagem usa **Node 20 Alpine**, com versão mínima 20.19 para Vite, build em estágio separado, dependências de produção e usuário sem privilégios.
 
@@ -39,7 +39,7 @@ Uma VPS Linux com Docker Compose, aproximadamente **1 vCPU e 1 GB de RAM**, serv
 4. Clone a branch e execute:
 
 ```sh
-git clone --branch feat/v0.99-webgl-poda-cinematic \
+git clone --branch feat/v1.0-purge-geography-ai \
   https://github.com/AlexandreDinizVeloso/Wargame.git
 cd Wargame
 export GAME_DOMAIN=play.seu-dominio.com

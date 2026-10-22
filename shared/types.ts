@@ -31,6 +31,8 @@ export interface Composition {
   transports: number;
 }
 export interface Battalion extends Composition {
+  lastMovedTurn?: number;
+  previousProvinceId?: string;
   moraleCap?: 100 | 110;
   id: string;
   ownerId: string;
@@ -236,6 +238,12 @@ export interface Player {
   selectedObjectiveId: string | null;
   objectiveStreak: number;
   originalCapitalId: string | null;
+  authority?: number;
+  lastDilemmaTurn?: number;
+  activeDilemma?: import('./dilemmas').ActiveDilemma | null;
+  botTargetProvinceId?: string;
+  afkStreak?: number;
+  afkRegent?: boolean;
   militaryXP: number;
   unlockedSkills: SkillId[];
   paxStreak: number;
@@ -275,6 +283,7 @@ export interface Reparation {
   rate: number;
 }
 export interface BattleReport {
+  riverCrossingModifier?: number;
   attackerCompositionBefore?: Composition;
   defenderCompositionBefore?: Composition;
   id: string;
@@ -468,7 +477,7 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0' | '0.99.0';
+  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0' | '0.99.0' | '1.0.0';
   tutorial?: boolean;
   enableSecretObjectives: boolean;
   allowBotSecretVictory: boolean;
@@ -543,6 +552,7 @@ export type GameView = Omit<
   readNotificationIds: string[];
 };
 export type GameCommand =
+  | { type: 'CHOOSE_DILEMMA'; option: 0 | 1 }
   | { type: 'EMERGENCY_LEVY' }
   | { type: 'CAST_IMPERIAL_VOTE'; candidateId: string }
   | { type: 'CONTINUE_SANDBOX' }
@@ -740,6 +750,10 @@ export interface PublicRoom {
   maxPlayers: number;
   status: 'LOBBY' | 'IN_GAME';
   turn: number;
+  scenario?: string;
+  joinable?: boolean;
+  replaceableBots?: number;
+  humanPlayersCount?: number;
 }
 export const OBJECTIVES: Record<Objective, { name: string; description: string }> = {
   DOMINATION: {

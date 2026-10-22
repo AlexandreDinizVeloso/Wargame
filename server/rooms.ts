@@ -1,3 +1,6 @@
+import { syncNationAuthority } from '../shared/economy';
+import { applyAfkRegency, restoreRegency, replaceableBot } from './regency';
+import { issueDilemmas } from './dilemmas';
 import { exportCampaign, importCampaign } from './campaignSaves';
 import { SCENARIOS } from '../shared/scenarios';
 import { createMapPing, pingRecipients } from './mapPings';
@@ -68,7 +71,8 @@ export function attachRooms(server: Server, options: Options = {}) {
     for (const saved of readSnapshot(options.stateFile)) {
       saved.game.persistenceEnabled = true;
       saved.game.players.forEach((p) => {
-        p.online = p.bot;
+        p.online = p.bot && !p.afkRegent;
+        syncNationAuthority(p);
       });
       if (saved.game.phase === 'planning') {
         saved.game.paused = true;
@@ -173,7 +177,11 @@ export function attachRooms(server: Server, options: Options = {}) {
       room.sessions.set(id, { tokenHash: hashToken(token), socket: ws });
       current = { room, playerId: id };
       room.touched = clock();
-      room.game.players.find((p) => p.id === id)!.online = true;
+      const resumed = room.game.players.find((p) => p.id === id)!;
+      restoreRegency(resumed);
+      syncNationAuthority(resumed);
+      resumed.online = true;
+      issueDilemmas(room.game);
       if (!room.game.players.find((p) => p.id === room.game.hostId)?.online) room.game.hostId = id;
       if (room.game.phase === 'planning' && room.game.paused) {
         room.game.paused = false;
@@ -254,7 +262,7 @@ export function attachRooms(server: Server, options: Options = {}) {
             g.matchConfig.campaignId = randomBytes(16).toString('hex');
             g.matchConfig.ruleset = 'GOLD_098';
             g.matchConfig.scenarioId = scenario.id;
-            g.matchConfig.createdVersion = '0.99.0';
+            g.matchConfig.createdVersion = '1.0.0';
             g.matchConfig.verticalSlice = true;
           }
           g.roomName =
@@ -309,12 +317,38 @@ export function attachRooms(server: Server, options: Options = {}) {
           const room = rooms.get(String(msg.code).trim().toUpperCase());
           assert(room, 'Sala não encontrada. Confira o código e o servidor.');
           assert(!room.game.matchConfig.tutorial, 'O tutorial é uma mesa de treino individual.');
-          const p = addPlayer(
-            room.game,
-            typeof msg.name === 'string' ? msg.name : 'Estrategista',
-            false,
-            nationOfMessage(msg.nationId),
+          const requested = nationOfMessage(msg.nationId);
+          const availableBot = room.game.players.find(
+            (p) =>
+              replaceableBot(p) &&
+              !room.sessions.has(p.id) &&
+              (!requested || p.nationId === requested),
           );
+          let p;
+          if (room.game.phase !== 'lobby' || room.game.players.length >= 8) {
+            assert(
+              room.game.isPublic || room.game.phase === 'lobby',
+              'Somente salas públicas permitem assumir um bot em campanha.',
+            );
+            assert(availableBot, 'Não há bot disponível para assumir.');
+            p = availableBot;
+            p.bot = false;
+            p.afkRegent = false;
+            p.afkStreak = 0;
+            p.online = false;
+            p.ready = false;
+            p.name =
+              typeof msg.name === 'string'
+                ? msg.name.trim().slice(0, 30) || 'Convidado'
+                : 'Convidado';
+            room.game.orders[p.id] = [];
+          } else
+            p = addPlayer(
+              room.game,
+              typeof msg.name === 'string' ? msg.name : 'Estrategista',
+              false,
+              requested,
+            );
           bind(room, p.id, randomBytes(24).toString('hex'));
           return;
         }
@@ -371,7 +405,16 @@ export function attachRooms(server: Server, options: Options = {}) {
         const previousTouched = room.touched;
         const replacedSession =
           command.type === 'REPLACE_WITH_BOT' ? room.sessions.get(command.playerId) : undefined;
-        room.game = executeCommand(previous, playerId, command, clock());
+        const input = structuredClone(previous);
+        restoreRegency(input.players.find((p) => p.id === playerId)!);
+        if (input.paused) {
+          input.paused = false;
+          input.deadline = input.firstReadyPlayerName
+            ? clock() + Math.max(1000, room.remainingMs)
+            : null;
+          input.turnDeadlineAt = input.deadline;
+        }
+        room.game = executeCommand(input, playerId, command, clock());
         room.touched = clock();
         if (command.type === 'REPLACE_WITH_BOT') room.sessions.delete(command.playerId);
         try {
@@ -413,7 +456,13 @@ export function attachRooms(server: Server, options: Options = {}) {
       ) {
         const previous = room.game,
           next = structuredClone(previous);
+        if (previous.deadline !== null && clock() >= previous.deadline) applyAfkRegency(next);
         resolveTurn(next, clock());
+        if (!next.players.some((p) => !p.bot && p.online)) {
+          next.paused = true;
+          next.deadline = null;
+          next.turnDeadlineAt = null;
+        }
         room.game = next;
         try {
           persist();
@@ -454,10 +503,24 @@ export function attachRooms(server: Server, options: Options = {}) {
   timer.unref();
   return {
     rooms,
-    listPublicRooms: (): PublicRoom[] =>
+    listPublicRooms: (onlyJoinable = false): PublicRoom[] =>
       [...rooms.values()]
-        .filter((r) => r.game.isPublic && r.game.phase !== 'finished')
+        .filter(
+          (r) =>
+            r.game.isPublic &&
+            r.game.phase !== 'finished' &&
+            (!onlyJoinable ||
+              (r.game.phase === 'lobby' && r.game.players.length < 8) ||
+              r.game.players.some((p) => replaceableBot(p) && !r.sessions.has(p.id))),
+        )
         .map(({ game: g }) => ({
+          scenario:
+            SCENARIOS.find((s) => s.id === g.matchConfig.scenarioId)?.name ?? 'Configuração livre',
+          replaceableBots: g.players.filter((p) => replaceableBot(p)).length,
+          humanPlayersCount: g.players.filter((p) => !p.bot || p.afkRegent).length,
+          joinable:
+            (g.phase === 'lobby' && g.players.length < 8) ||
+            g.players.some((p) => replaceableBot(p)),
           roomId: g.code,
           roomName: g.roomName,
           hostName: g.players.find((p) => p.id === g.hostId)?.name ?? 'Anfitrião',

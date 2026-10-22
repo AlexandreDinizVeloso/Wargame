@@ -1,22 +1,27 @@
+import { useState } from 'react';
+import { getNationAuthority, logisticsPosture } from '../shared/economy';
 import { goldRules } from '../shared/factions';
-import { effectiveSupply } from '../shared/strategy';
-import { isDisorganized } from '../shared/morale';
-import { FleetOperations } from './MaritimePanel';
-const CommanderPanel = lazy(() => import('./CommanderPanel'));
 import { commanderFor, TRAITS } from '../shared/military';
-import { lazy, useMemo, useState } from 'react';
+import { isDisorganized } from '../shared/morale';
+import { reservedResources } from '../shared/rules';
+import { effectiveSupply } from '../shared/strategy';
+import type { Battalion, CommanderTrait, GameView } from '../shared/types';
+import { FleetOperations } from './MaritimePanel';
+import type { Command } from './ui';
+
 import { Anchor, ArrowUpRight, Merge, Shield, Split, Swords, Target } from 'lucide-react';
-import type { Battalion, Composition, GameView, PlayerOrder } from '../shared/types';
+import { useMemo } from 'react';
 import {
   canTransit,
   compositionOf,
+  controller,
+  splitHalf,
   UNIT_KEYS,
   unitCount,
-  splitHalf,
   unitPath,
-  controller,
 } from '../shared/rules';
-import { Empty, Meter, number, type Command } from './ui';
+import type { Composition, PlayerOrder } from '../shared/types';
+import { Empty, Meter, number } from './ui';
 export default function BattalionDrawer({
   game,
   army,
@@ -32,6 +37,7 @@ export default function BattalionDrawer({
   onFocus: () => void;
   onSelect: (id: string) => void;
 }) {
+  const commanderControls = useCommanderControls({ game, army, playerId, command });
   const own = army.ownerId === playerId,
     active =
       own && game.phase === 'planning' && !game.players.find((p) => p.id === playerId)?.ready,
@@ -107,7 +113,12 @@ export default function BattalionDrawer({
       {own && army.isFleet && (
         <FleetOperations game={game} army={army} playerId={playerId} command={command} />
       )}
-      {own && <CommanderPanel game={game} army={army} playerId={playerId} command={command} />}
+      {own && (
+        <p className="posture-badge" data-logistics-posture={logisticsPosture(game, army).id}>
+          {logisticsPosture(game, army).label}
+        </p>
+      )}
+      {own && commanderControls}
       {own && (
         <label className="check-label">
           <input
@@ -605,4 +616,111 @@ export function TacticalBar({
       )}
     </section>
   );
+}
+
+function useCommanderControls({
+  game,
+  army,
+  playerId,
+  command,
+}: {
+  game: GameView;
+  army: Battalion;
+  playerId: string;
+  command: Command;
+}) {
+  const me = game.players.find((p) => p.id === playerId)!,
+    assigned = commanderFor(game, army),
+    leaders = game.commanders.filter((c) => c.ownerId === playerId && c.isAdmiral === army.isFleet),
+    [trait, setTrait] = useState<CommanderTrait>(army.isFleet ? 'SEA_WOLF' : 'SIEGE_MASTER');
+  const locked = me.ready || game.phase !== 'planning',
+    reserved = reservedResources({ ...game, orders: { [playerId]: game.plannedOrders } }, playerId);
+  return (
+    <section className="commander-panel">
+      <h3>{army.isFleet ? '⚓ Almirantado' : '🎖️ Estado-Maior'}</h3>
+      {assigned ? (
+        <div className="commander-card">
+          <strong>
+            {'★'.repeat(assigned.stars)} {assigned.name}
+          </strong>
+          <span>
+            {assigned.xp} XP · {TRAITS[assigned.trait].name}
+          </span>
+          <p>{TRAITS[assigned.trait].description}</p>
+          {assigned.trait === 'IRON_WALL' && (
+            <small>
+              {assigned.lastStandUsed
+                ? 'Proteção da primeira derrota consumida'
+                : 'Primeira derrota protegida contra aniquilação'}
+            </small>
+          )}
+        </div>
+      ) : (
+        <p>Sem líder atribuído.</p>
+      )}
+      <label>
+        Líder atribuído (instantâneo)
+        <select
+          disabled={locked}
+          aria-label="Líder atribuído (instantâneo)"
+          value={assigned?.id ?? ''}
+          onChange={(e) =>
+            command({
+              type: 'ASSIGN_LEADER',
+              battalionId: army.id,
+              commanderId: e.target.value || null,
+            })
+          }
+        >
+          <option value="">Sem comandante</option>
+          {leaders.map((c) => (
+            <option key={c.id} value={c.id}>
+              {'★'.repeat(c.stars)} {c.name} · {TRAITS[c.trait].name}
+              {c.assignedBattalionId && c.assignedBattalionId !== army.id ? ' (transferir)' : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Traço do novo {army.isFleet ? 'almirante' : 'general'}
+        <select
+          disabled={locked}
+          aria-label="Traço do novo líder"
+          value={trait}
+          onChange={(e) => setTrait(e.target.value as CommanderTrait)}
+        >
+          {Object.entries(TRAITS)
+            .filter(([id]) =>
+              army.isFleet
+                ? ['SEA_WOLF', 'QUARTERMASTER', 'IRON_WALL'].includes(id)
+                : id !== 'SEA_WOLF',
+            )
+            .map(([id, t]) => (
+              <option key={id} value={id}>
+                {t.name}
+              </option>
+            ))}
+        </select>
+      </label>
+      <button
+        disabled={
+          locked ||
+          game.commanders.filter((c) => c.ownerId === playerId).length >= 3 ||
+          me.gold - reserved.gold < 60 ||
+          getNationAuthority(me) - reserved.influence < 15
+        }
+        onClick={() => command({ type: 'RECRUIT_COMMANDER', isAdmiral: army.isFleet, trait })}
+      >
+        Recrutar líder · 60 ouro + 15 Autoridade
+      </button>
+      <small>
+        {game.commanders.filter((c) => c.ownerId === playerId).length}/3 líderes ·{' '}
+        {TRAITS[trait].description}
+      </small>
+    </section>
+  );
+}
+
+export function CommanderPanel(props: Parameters<typeof useCommanderControls>[0]) {
+  return useCommanderControls(props);
 }

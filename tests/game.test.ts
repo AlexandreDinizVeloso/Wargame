@@ -35,10 +35,10 @@ test('troca de teatro no lobby reconstrói apenas o tabuleiro', () => {
   addPlayer(g, 'A');
   setMode(g, 'quick', 'ASIA');
   assert.equal(g.players.length, 1);
-  assert.equal(g.provinces.filter((p) => p.kind === 'LAND').length, 16);
+  assert.equal(g.provinces.filter((p) => p.kind === 'LAND').length, 28);
   assert.ok(g.provinces.some((p) => p.id === 'japan'));
   setMode(g, 'campaign');
-  assert.equal(g.provinces.filter((p) => p.kind === 'LAND').length, 56);
+  assert.equal(g.provinces.filter((p) => p.kind === 'LAND').length, 95);
 });
 test('cidade e batalhão têm filas independentes; substituição e cancelamento liberam reservas', () => {
   const {
@@ -153,20 +153,21 @@ test('marcha continua uma aresta por rodada e atravessar fronteira exige guerra 
       players: [a, b],
     } = setup(),
     unit = army(g, a.id, 'portugal', { infantry: 8 });
+  g.provinces.find((p) => p.id === 'aquitaine')!.ownerId = g.players[2].id;
   assert.throws(() =>
     submitOrder(g, a.id, {
       type: 'MOVE_BATTALION',
       battalionId: unit.id,
-      targetProvinceId: 'france',
+      targetProvinceId: 'aquitaine',
     }),
   );
   declareWar(g, a.id, b.id, 'CONQUEST');
   g.provinces.find((p) => p.id === 'japan')!.ownerId = g.players[2].id;
-  g.provinces.find((p) => p.id === 'france')!.ownerId = a.id;
+  g.provinces.find((p) => p.id === 'aquitaine')!.ownerId = a.id;
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
-    path: ['castile', 'france'],
+    path: ['castile', 'aquitaine'],
   });
   resolveTurn(g);
   assert.equal(unit.provinceId, 'castile');
@@ -179,10 +180,10 @@ test('marcha continua uma aresta por rodada e atravessar fronteira exige guerra 
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
-    targetProvinceId: 'france',
+    targetProvinceId: 'aquitaine',
   });
   resolveTurn(g);
-  assert.equal(unit.provinceId, 'france');
+  assert.equal(unit.provinceId, 'aquitaine');
   assert.deepEqual(unit.pathQueue, []);
 });
 test('guarnição não é doada ao atravessar território com acesso militar', () => {

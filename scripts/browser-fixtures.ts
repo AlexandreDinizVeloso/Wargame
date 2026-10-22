@@ -45,7 +45,11 @@ export function seedBrowserFixtures(filename: string) {
     .filter((p) => p.kind === 'LAND')
     .forEach((p, i) => {
       p.ownerId =
-        i < 42 ? sandbox.players[0].id : i === 42 ? sandbox.players[1].id : sandbox.players[2].id;
+        i < Math.ceil(sandbox.provinces.filter((p) => p.kind === 'LAND').length * 0.75)
+          ? sandbox.players[0].id
+          : i === Math.ceil(sandbox.provinces.filter((p) => p.kind === 'LAND').length * 0.75)
+            ? sandbox.players[1].id
+            : sandbox.players[2].id;
       p.occupierId = null;
       p.pacification = 100;
       p.unrest = 0;

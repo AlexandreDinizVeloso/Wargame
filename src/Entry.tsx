@@ -98,7 +98,7 @@ export function Entry({
     [browserError, setBrowserError] = useState('');
   const refresh = async () => {
     try {
-      const r = await fetch('/api/rooms');
+      const r = await fetch('/api/rooms/public');
       if (!r.ok) throw new Error();
       setRooms((await r.json()) as PublicRoom[]);
       setBrowserError('');
@@ -401,7 +401,7 @@ export function Entry({
       </div>
       <section className="server-browser framed-panel">
         <div className="section-heading">
-          <h2>🌐 Salas Abertas (Server Browser)</h2>
+          <h2>🌐 Salas Abertas (Entrar em 1 Clique)</h2>
           <button onClick={() => void refresh()}>Atualizar salas</button>
         </div>
         {browserError && <p role="status">{browserError}</p>}
@@ -413,13 +413,18 @@ export function Entry({
               <div>
                 <strong>{r.roomName}</strong>
                 <small>
-                  {r.hostName} · {r.theater} · {r.playersCount}/{r.maxPlayers} ·{' '}
-                  {r.enableSecretObjectives ? '🎯 Objetivos secretos' : 'Dominação'} ·{' '}
-                  {r.status === 'LOBBY' ? 'No lobby' : `Em jogo · rodada ${r.turn}`}
+                  {r.hostName} · {r.theater} · {r.humanPlayersCount ?? r.playersCount}/
+                  {r.maxPlayers} jogadores · {r.scenario} · {r.replaceableBots ?? 0} bots
+                  substituíveis · {r.enableSecretObjectives ? '🎯 Objetivos secretos' : 'Dominação'}{' '}
+                  · {r.status === 'LOBBY' ? 'No lobby' : `Em jogo · rodada ${r.turn}`}
                 </small>
               </div>
               <button
-                disabled={!online || r.status !== 'LOBBY' || r.playersCount >= r.maxPlayers}
+                disabled={
+                  !online ||
+                  r.joinable === false ||
+                  (r.playersCount >= r.maxPlayers && !(r.replaceableBots ?? 0))
+                }
                 onClick={() =>
                   send({ type: 'join', code: r.roomId, name: name.trim() || 'Convidado' })
                 }

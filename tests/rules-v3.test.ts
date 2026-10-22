@@ -109,7 +109,7 @@ test('separar formações não cria suprimento nem reduz manutenção progressiv
   p.portLevel = 0;
   army(g, a.id, p.id, { infantry: 20 });
   army(g, a.id, p.id, { infantry: 20 });
-  close(realmEconomy(g, a.id).upkeep, 0.75 * (13 + (40 - 13) * 3));
+  close(realmEconomy(g, a.id).upkeep, 0.5 * 0.75 * (13 + (40 - 13) * 3));
 });
 test('infantaria tem ataque 1 e defesa 1,2; moral e treinamento entram no poder', () => {
   const {
@@ -557,9 +557,13 @@ test('dominação atinge exatamente 75% sem restrição sobre tamanho rival', ()
     players: [a, b, c],
   } = setup();
   const land = g.provinces.filter((p) => p.kind === 'LAND');
-  land.forEach((p, i) => (p.ownerId = i < 41 ? a.id : i < 50 ? b.id : c.id));
+  land.forEach(
+    (p, i) =>
+      (p.ownerId =
+        i < Math.ceil(land.length * 0.75) - 1 ? a.id : i < land.length - 1 ? b.id : c.id),
+  );
   assert.equal(victoryStatus(g), null);
-  land[41].ownerId = a.id;
+  land[Math.ceil(land.length * 0.75) - 1].ownerId = a.id;
   assert.equal(victoryStatus(g)?.objective, 'DOMINATION');
 });
 test('subjugar todos os demais não basta abaixo de 75% ponderados', () => {
@@ -595,7 +599,7 @@ test('atingir 75% encerra a rodada com vitória de dominação em estado export�
   } = setup();
   const land = g.provinces.filter((p) => p.kind === 'LAND');
   land.forEach((p, i) => {
-    p.ownerId = i < 42 ? a.id : i < 50 ? b.id : c.id;
+    p.ownerId = i < Math.ceil(land.length * 0.75) ? a.id : i < land.length - 1 ? b.id : c.id;
     p.occupierId = null;
     p.pacification = 100;
     p.unrest = 0;
@@ -686,7 +690,7 @@ test('recuo para aliado neutro preserva a formação sem doar tropas ou exigir a
   declareWar(g, c.id, b.id, 'CONQUEST');
   g.relations.find((r) => r.a === a.id && r.b === b.id)!.allied = true;
   const defender = army(g, b.id, 'castile', { infantry: 7 });
-  const invader = army(g, c.id, 'france', { infantry: 6, artillery: 3 });
+  const invader = army(g, c.id, 'aquitaine', { infantry: 6, artillery: 3 });
   submitOrder(g, c.id, {
     type: 'MOVE_BATTALION',
     battalionId: invader.id,

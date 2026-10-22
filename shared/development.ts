@@ -38,7 +38,7 @@ export const BUILDINGS: Record<
   },
   TEMPLE: {
     name: 'Templo / Catedral',
-    description: '−15 revolta, +25% pacificação e +2 Fervor/estabilidade por nível.',
+    description: '−15 revolta, +25% pacificação e +2 Autoridade e estabilidade por nível.',
     baseCost: 22,
     field: 'templeLevel',
   },

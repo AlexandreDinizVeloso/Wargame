@@ -1,25 +1,31 @@
-import { verticalRules } from './fogOfWar';
-import { FACTION_TRAITS, goldRules } from './factions';
-export { FACTION_TRAITS, FRIEND_PASS } from './factions';
-import { offensiveBlock } from './morale';
-import { maritimeIncome, BOMBARDMENT_COST } from './maritime';
+import { isImpassableCrossing } from './map';
 import { BUILDINGS, buildingLevel, constructionType, imperialInflation } from './development';
-import { realmLimits, maintenanceOf, goldReparationPayments } from './economy';
+import {
+  getNationAuthority,
+  goldReparationPayments,
+  logisticsPosture,
+  maintenanceOf,
+  realmLimits,
+} from './economy';
+import { FACTION_TRAITS, goldRules } from './factions';
+import { BOMBARDMENT_COST, maritimeIncome } from './maritime';
 import { commanderFor, hasSkill } from './military';
+import { offensiveBlock } from './morale';
 import { coalitionFighter, objectiveProgress, resourceCount } from './strategy';
 import type {
   Battalion,
   Composition,
   GameState,
   GameView,
+  ImperialDiet,
   NationDefinition,
   NationId,
   Player,
   PlayerOrder,
   Province,
   ReligionId,
-  ImperialDiet,
 } from './types';
+export { FACTION_TRAITS, FRIEND_PASS } from './factions';
 export const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(max, n));
 export const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 export const UNIT_KEYS = ['infantry', 'cavalry', 'artillery', 'warships', 'transports'] as const;
@@ -128,10 +134,10 @@ export const NATIONS: NationDefinition[] = [
     religion: 'SOLAR',
     homeProvinceId: 'arabia',
     style: 'Teocracia militar',
-    mechanic: 'Conversões +25 ouro e Fervor; guerra de outra fé +20% ataque e moral',
+    mechanic: 'Conversões +25 ouro e Autoridade; guerra de outra fé +20% ataque e moral',
     ideas: [
       'Teocracia militar',
-      'Conversões +25 ouro e Fervor; guerra de outra fé +20% ataque e moral',
+      'Conversões +25 ouro e Autoridade; guerra de outra fé +20% ataque e moral',
     ],
     modifiers: {},
     initial: {
@@ -369,6 +375,7 @@ export function canTraverse(
   from: Province,
   to: Province,
 ) {
+  if (isImpassableCrossing(from.id, to.id)) return false;
   if (!canUnitVisit(g, army, to) || offensiveBlock(g, army, to)) return false;
   const strait = from.straitSeaIds?.[to.id];
   if (
@@ -606,6 +613,7 @@ export function realmEconomy(
       (n, a) =>
         n +
         maintenanceOf(a, goldRules(g) ? actor.nationId : undefined) *
+          logisticsPosture(g, a).multiplier *
           capMultiplier *
           (a.isMercenary ? 2.2 : 1) *
           (coalitionFighter(g, id) ? 0.75 : 1) *
@@ -729,7 +737,6 @@ export function orderCost(
   else if (o.type === 'DIPLOMACY' && ['SEND_SUBSIDY', 'FUND_REBELS'].includes(o.action))
     gold = o.amount ?? 0;
   if (
-    verticalRules(g) &&
     o.type === 'DIPLOMACY' &&
     [
       'PROPOSE_ALLIANCE',
@@ -838,10 +845,10 @@ export function chronicle(view: GameView) {
       `Estações e crises: ${h.events.join('; ')}`,
     ]),
     '\nESTATÍSTICAS FINAIS',
-    'Nação | Ouro | Reservas | Prestígio | Desgaste | Terras | Tropas',
+    'Nação | Ouro | Recrutas | Autoridade | Desgaste | Terras | Tropas',
     ...view.players.map(
       (p) =>
-        `${p.nation} | ${p.gold.toFixed(2)} | ${p.manpower} | ${p.prestige} | ${p.warExhaustion} | ${view.provinces.filter((q) => q.ownerId === p.id).length} | ${view.battalions.filter((a) => a.ownerId === p.id).reduce((n, a) => n + unitCount(a), 0)}`,
+        `${p.nation} | ${p.gold.toFixed(2)} | ${p.manpower} | ${getNationAuthority(p)} | ${p.warExhaustion} | ${view.provinces.filter((q) => q.ownerId === p.id).length} | ${view.battalions.filter((a) => a.ownerId === p.id).reduce((n, a) => n + unitCount(a), 0)}`,
     ),
   ].join('\n');
 }
@@ -893,7 +900,7 @@ export function peaceDescription(term: import('./types').PeaceTerm, provinces: P
     case 'WHITE_PEACE':
       return 'Paz Branca — restituição das ocupações';
     case 'HUMILIATE_DEMILITARIZE':
-      return 'Humilhação: transferir 15 prestígio; desarmamento de quatro rodadas e trégua de seis';
+      return 'Humilhação: transferir 15 Autoridade; desarmamento de quatro rodadas e trégua de seis';
     case 'SUBJUGATE_VASSAL':
       return 'Vassalagem ao vencedor';
     case 'CEDE_PROVINCES':
@@ -901,7 +908,7 @@ export function peaceDescription(term: import('./types').PeaceTerm, provinces: P
     case 'WAR_REPARATIONS':
       return `Pagar ${term.immediateTribute} ouro imediato e 25% da renda bruta por cinco rodadas`;
     case 'HUMILIATE_DISARM':
-      return 'Humilhação: vencedor +20 prestígio e +15% moral; derrotado limitado a oito tropas por quatro rodadas';
+      return 'Humilhação: vencedor +20 Autoridade e +15% moral; derrotado limitado a oito tropas por quatro rodadas';
     case 'FORCE_EMPIRE_OR_RELIGION':
       return term.choice === 'EMPIRE'
         ? 'Ingressar na Dieta Imperial'

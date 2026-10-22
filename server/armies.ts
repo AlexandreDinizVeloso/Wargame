@@ -1,16 +1,15 @@
 import { getNationAuthority, spendNationAuthority } from '../shared/economy';
-import { verticalRules } from '../shared/fogOfWar';
-import { technologyCost } from '../shared/world';
-import { goldRules, factionXP } from '../shared/factions';
+import { factionXP, goldRules } from '../shared/factions';
+import { commanderFor, skillBlock, SKILLS } from '../shared/military';
+import { reservedResources, UNIT_KEYS, unitCount } from '../shared/rules';
 import type {
   Battalion,
-  CommanderTrait,
   Commander,
+  CommanderTrait,
   GameState,
   InstantArmyAction,
 } from '../shared/types';
-import { reservedResources, UNIT_KEYS, unitCount } from '../shared/rules';
-import { SKILLS, commanderFor, skillBlock } from '../shared/military';
+import { technologyCost } from '../shared/world';
 import {
   assert,
   battalionOf,
@@ -39,15 +38,11 @@ export function recruitCommander(
     const reserved = reservedResources(g, id);
     assert(!p.ready, 'Reabra suas ordens antes de recrutar um líder.');
     assert(
-      p.gold - reserved.gold >= 60 &&
-        (verticalRules(g) ? getNationAuthority(p) : p.influence) - reserved.influence >= 15,
-      verticalRules(g)
-        ? 'Líder exige 60 ouro e 15 Autoridade livres.'
-        : 'Líder exige 60 ouro e 15 influência livres.',
+      p.gold - reserved.gold >= 60 && getNationAuthority(p) - reserved.influence >= 15,
+      'Líder exige 60 ouro e 15 Autoridade livres.',
     );
     p.gold -= 60;
-    if (verticalRules(g)) spendNationAuthority(p, 15);
-    else p.influence -= 15;
+    spendNationAuthority(p, 15);
   }
   const c = {
     id: nextId(g, 'commander'),
@@ -85,6 +80,10 @@ export function combine(g: GameState, target: Battalion, source: Battalion) {
   const leader = commanderFor(g, source),
     existing = commanderFor(g, target);
   if (leader && !existing) leader.assignedBattalionId = target.id;
+  if ((source.lastMovedTurn ?? -1) > (target.lastMovedTurn ?? -1)) {
+    target.lastMovedTurn = source.lastMovedTurn;
+    target.previousProvinceId = source.previousProvinceId;
+  }
   target.movementCredit = Math.min(target.movementCredit, source.movementCredit);
   target.pathQueue = [];
   cancelArmyOrders(g, target.ownerId, [target.id, source.id]);
@@ -135,6 +134,8 @@ export function instantArmyAction(g: GameState, id: string, action: InstantArmyA
       training: a.training,
       morale: a.morale,
     });
+    b.lastMovedTurn = a.lastMovedTurn;
+    b.previousProvinceId = a.previousProvinceId;
     b.movementCredit = a.movementCredit;
     b.movementPoints = a.movementPoints;
     b.infantryPower = a.infantryPower;
@@ -194,14 +195,14 @@ export function unlockSkill(g: GameState, id: string, skillId: import('../shared
   const blocked = skillBlock(p, skillId, g);
   assert(!blocked, blocked ?? 'Doutrina indisponível.');
   const s = SKILLS.find((s) => s.id === skillId)!;
-  if (verticalRules(g)) {
+  {
     const reserved = reservedResources(g, id).influence;
     assert(
       getNationAuthority(p) - reserved >= technologyCost(g, s.tier, s.cost),
       'Libere Autoridade reservada antes de pesquisar.',
     );
     spendNationAuthority(p, technologyCost(g, s.tier, s.cost));
-  } else p.militaryXP -= technologyCost(g, s.tier, s.cost);
+  }
   p.unlockedSkills.push(skillId);
   log(g, `${p.nation} adotou ${s.name}.`);
 }

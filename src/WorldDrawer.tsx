@@ -20,8 +20,7 @@ export default function WorldDrawer({
           <h3>👑 Dieta Imperial · Coroa Continental</h3>
           <p>
             Imperador:{' '}
-            {game.players.find((p) => p.id === game.diet.emperorId)?.nation ?? 'Trono vago'} ·
-            Autoridade {game.diet.imperialAuthority}%
+            {game.players.find((p) => p.id === game.diet.emperorId)?.nation ?? 'Trono vago'}
           </p>
           <label>
             Seu voto imperial
@@ -41,8 +40,8 @@ export default function WorldDrawer({
             </select>
           </label>
           <small>
-            Eleição a cada quatro rodadas; cada reino tem um voto. A Coroa concede prestígio e, com
-            75 de autoridade, renda adicional.
+            Eleição a cada quatro rodadas; cada reino tem um voto. A Coroa concede Autoridade e
+            fortalece a receita do Conselho.
           </small>
         </section>
       )}

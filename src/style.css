@@ -6602,3 +6602,67 @@ button:hover:not(:disabled) {
     top: 300px;
   }
 }
+
+.posture-badge {
+  color: #d5c48a;
+  border: 1px solid #b998584d;
+  padding: 7px 10px;
+  background: #9a854410;
+  font-size: 11px;
+}
+.dilemma-card {
+  position: fixed;
+  z-index: 81;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  width: min(530px, calc(100vw - 24px));
+  max-height: 60dvh;
+  overflow: auto;
+  padding: 16px;
+}
+.dilemma-card > small {
+  color: var(--muted);
+  font-size: 10px;
+  display: block;
+  line-height: 1.5;
+}
+.dilemma-card h3 {
+  color: var(--gold-light);
+  margin: 7px 0;
+}
+.dilemma-card > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0;
+}
+.dilemma-card button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  min-height: 124px;
+  text-align: left;
+}
+.dilemma-card button span {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.dilemma-card button b {
+  font-size: 10px;
+  color: #d8c28a;
+}
+@media (max-width: 700px) {
+  .dilemma-card {
+    bottom: 80px;
+    padding: 11px;
+  }
+  .dilemma-card > div {
+    grid-template-columns: 1fr;
+  }
+  .dilemma-card button {
+    min-height: 95px;
+  }
+}
