@@ -80,7 +80,11 @@ export default function PersonalAlerts({
   playerId,
   command,
   onFocus,
+  compact = false,
+  onShowAll,
 }: {
+  compact?: boolean;
+  onShowAll?: () => void;
   game: GameView;
   playerId: string;
   command: Command;
@@ -107,9 +111,12 @@ export default function PersonalAlerts({
   if (!pending.length) return null;
   return (
     <aside className="personal-alerts" aria-label="Alertas pessoais críticos" aria-live="polite">
-      <div className="alert-count">{pending.length} alerta(s) pendente(s)</div>
+      <div className="alert-count">
+        {pending.length} alerta(s) pendente(s)
+        {compact && pending.length > 1 && <button onClick={onShowAll}>Ver todos</button>}
+      </div>
       {pending
-        .slice(-3)
+        .slice(compact ? -1 : -3)
         .reverse()
         .map((n) => (
           <NotificationCard

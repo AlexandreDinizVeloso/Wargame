@@ -2,6 +2,12 @@
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
 
+## Prévia visual desta branch
+
+Esta branch inclui o **protótipo cartográfico 2,5D da v0.7**, sobre o motor e protocolo v0.6. O mapa tem relevo ilustrado, costas e símbolos de infraestrutura. Um único painel contextual alterna entre cidade e formação; consultas abrem ao centro. No **Conselho da nação**, desmarque **Mapa cartográfico · painel único** para comparar com a interface clássica. A preferência é salva no navegador.
+
+Veja [escopo e validação da prévia](docs/PREVIA_V7.md). As propostas de novos limites de moral, neutros evolutivos e comércio naval estão no [plano de regras](docs/PLANO_V7.md); o protótipo visual usa as regras v0.6.
+
 ## Executar
 
 Node.js **22.12+** (validado com Node 24).
@@ -92,6 +98,7 @@ JSON e TXT podem ser baixados na HUD e na tela final. O relatório inclui todas 
 npm run build
 npm test
 npx tsx scripts/smoke-browser.ts
+npm run test:cartographic
 npx tsx scripts/simulate-balance.ts --games=100 --seed=20261022 --mode=mixed --max-turns=159
 ```
 

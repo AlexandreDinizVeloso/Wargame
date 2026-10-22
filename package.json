@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "server:headless": "tsx server/index.ts --headless",
-    "simulate:balance": "tsx scripts/simulate-balance.ts"
+    "simulate:balance": "tsx scripts/simulate-balance.ts",
+    "test:cartographic": "tsx scripts/smoke-cartographic.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

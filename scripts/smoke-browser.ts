@@ -105,7 +105,11 @@ try {
   await mkdir('.local/screenshots', { recursive: true });
   await mkdir('.local/exports', { recursive: true });
   const contexts = await Promise.all(
-    [0, 1, 2].map(() => browser.newContext({ viewport: { width: 1440, height: 960 } })),
+    [0, 1, 2].map(async () => {
+      const c = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+      await c.addInitScript(() => localStorage.setItem('concordia-interface', 'classic'));
+      return c;
+    }),
   );
   const pages = await Promise.all(contexts.map((c) => c.newPage())),
     states = pages.map(observe),
@@ -421,6 +425,7 @@ try {
   if (fixtures) {
     const openFixture = async (session: FixtureSession) => {
       const context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+      await context.addInitScript(() => localStorage.setItem('concordia-interface', 'classic'));
       await context.addInitScript(
         (s) => sessionStorage.setItem('concordia-session', JSON.stringify(s)),
         session,
