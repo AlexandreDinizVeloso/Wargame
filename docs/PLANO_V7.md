@@ -4,7 +4,7 @@
 
 **Mapa cartográfico 2,5D no navegador, com um único painel contextual.** Manter o motor TypeScript headless e o acesso por link. O primeiro protótipo visual usa o renderer SVG existente, com camadas de relevo, costa, terreno e símbolos; não exige trocar de engine para avaliar legibilidade e navegação.
 
-O alvo no desktop é manter cerca de 80% do tabuleiro descoberto: contexto fixo no canto inferior esquerdo, província ou formação por vez. Construir, recrutar e negociar viram abas explícitas. Doutrinas, objetivos, mundo e relatórios abrem consultas centrais sob demanda, fechadas com Esc. No celular, usar folha inferior com altura limitada e conteúdo rolável, preservando uma área útil de mapa.
+Atualização após a revisão do usuário: todas as consultas usam popups móveis, redimensionáveis e minimizáveis, sem escurecer ou bloquear o mapa. Província e formação alternam um contexto; consultas globais podem coexistir. Construir, recrutar e negociar usam abas explícitas. Esc fecha a janela ativa. Tamanho e posição persistem localmente, com limites de viewport no celular. O alvo de área livre refere-se à abertura padrão de um contexto, pois o jogador pode ampliar as janelas.
 
 ## O que a partida de 36 rodadas confirma
 
@@ -18,9 +18,9 @@ China–Japão e Países Baixos–Grã-Bretanha eram adjacências terrestres exp
 
 O estado final contém 25/128/164 tropas terrestres de Verídia/Sapiência/Aurélia, respectivamente; contando navios, os totais são 29/131/167. Esses valores sustentam a necessidade de revisar reposição e economia, sem confundir frota com exército terrestre.
 
-## Experimentos de regras após avaliar a v0.6
+## Experimentos implementados na v0.7
 
-As propostas abaixo precisam ser comparadas com a nova economia antes de virar regras definitivas.
+Os parâmetros iniciais estão descritos em [REGRAS_V7.md](REGRAS_V7.md). A tabela registra as hipóteses de desenho; os resultados atuais ficam em [BALANCE.md](BALANCE.md).
 
 | Problema                            | Experimento                                                                                                   | Cuidado / medida                                                                                                           |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
@@ -45,6 +45,6 @@ Godot também exporta para web; não exige obrigatoriamente distribuir `.exe`. T
 ## Sequência de entrega
 
 1. Publicar v0.6 validada, com escolha da nação dos bots pelo anfitrião e edição do próprio nome no lobby/campanha.
-2. Criar protótipo visual separado: painel único, consultas centrais, ícones de infraestrutura, relevo cartográfico e mapa menos carregado.
+2. Criar protótipo visual separado: contexto compacto, popups ajustáveis, ícones de infraestrutura, relevo cartográfico e mapa menos carregado.
 3. Jogar uma partida curta com humanos; medir área do mapa coberta, tempo para emitir ordem, erros de clique e fluidez.
 4. Escolher parâmetros de moral, atrito, neutros e marinha usando a telemetria da v0.6. Migrar renderer/engine somente se o protótipo e medições indicarem necessidade.

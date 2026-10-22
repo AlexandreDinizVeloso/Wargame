@@ -1,3 +1,5 @@
+import { offensiveBlock } from './morale';
+import { maritimeIncome, BOMBARDMENT_COST } from './maritime';
 import { BUILDINGS, buildingLevel, constructionType, imperialInflation } from './development';
 import { realmLimits, maintenanceOf } from './economy';
 import { commanderFor, hasSkill } from './military';
@@ -356,7 +358,7 @@ export function canTraverse(
   from: Province,
   to: Province,
 ) {
-  if (!canUnitVisit(g, army, to)) return false;
+  if (!canUnitVisit(g, army, to) || offensiveBlock(g, army, to)) return false;
   const strait = from.straitSeaIds?.[to.id];
   if (
     !army.isFleet &&
@@ -405,7 +407,7 @@ export const supplyLimit = (p: Province) =>
   (p.isCoastal ? p.portLevel * 4 : 0) +
   (p.pacification >= 80 ? 2 : 0);
 export const attritionLoss = (troops: number, limit: number) =>
-  troops > limit ? Math.max(1, Math.ceil((troops - limit) * 0.15)) : 0;
+  troops > limit ? Math.max(1, Math.ceil((troops - limit) * 0.25)) : 0;
 export function armyUpkeep(troops: number, mercenaries: number, limit: number, base = 0.75) {
   const excess = Math.max(0, troops - limit);
   return troops === 0
@@ -497,10 +499,12 @@ export function realmEconomy(
   let embargo = 1;
   for (const r of g.relations.filter((r) => r.a === id || r.b === id))
     for (const issuer of r.embargoes) embargo *= issuer === id ? 0.95 : 0.85;
+  const maritimeTrade = active ? maritimeIncome(g, id) : 0;
   const trade =
+    maritimeTrade +
     owned.reduce((n, p) => n + revenue(p, actor).trade * (raiders(p).length ? 0.65 : 1), 0) *
-    embargo *
-    (nat.modifiers.trade ?? 1);
+      embargo *
+      (nat.modifiers.trade ?? 1);
   const holyCities = Object.keys(RELIGIONS)
     .map((f) => ({
       faith: f as ReligionId,
@@ -573,6 +577,7 @@ export function realmEconomy(
     owned,
     taxes: roundMoney(taxes),
     trade: roundMoney(trade),
+    maritimeTrade,
     tithes: roundMoney(tithes),
     industry: roundMoney(industry),
     administration: roundMoney(administration),
@@ -597,7 +602,7 @@ export function orderKey(o: PlayerOrder) {
       : `city:${o.type === 'CONVERT' ? o.targetProvinceId : 'provinceId' in o ? o.provinceId : ''}`;
 }
 export function orderProvinceId(o: PlayerOrder, g?: Pick<GameState, 'battalions'>) {
-  return o.type === 'CONVERT'
+  return o.type === 'CONVERT' || o.type === 'BOMBARD_COAST'
     ? o.targetProvinceId
     : 'provinceId' in o
       ? o.provinceId
@@ -614,7 +619,8 @@ export function orderCost(
   let gold = 0,
     manpower = 0,
     influence = 0;
-  if (o.type === 'RECRUIT_BATTALION') {
+  if (o.type === 'BOMBARD_COAST') gold = BOMBARDMENT_COST;
+  else if (o.type === 'RECRUIT_BATTALION') {
     gold =
       (o.infantry ?? 0) * 3 * (p?.strategicResource === 'IRON' ? 0.85 : 1) +
       (o.cavalry ?? 0) *
@@ -732,7 +738,7 @@ export const dietSnapshot = (diet: ImperialDiet, turn: number) => ({
 export function telemetry(view: GameView) {
   const { history, ...finalState } = structuredClone(view);
   return {
-    schemaVersion: 6 as const,
+    schemaVersion: 7 as const,
     matchConfig: view.matchConfig,
     nations: view.players,
     turnByTurnHistory: history,

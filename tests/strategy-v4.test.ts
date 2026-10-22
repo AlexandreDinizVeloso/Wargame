@@ -522,7 +522,7 @@ test('migração v3 preserva sala e tesouro, desativa objetivos retroativos e ar
   legacy.version = 3;
   legacy.players[0].nationId = 'PORTUGAL';
   const next = migrateV3(legacy);
-  assert.equal(next.version, 6);
+  assert.equal(next.version, 7);
   assert.equal(next.players[0].gold, g.players[0].gold);
   assert.equal(next.players[0].nationId, 'vespera');
   assert.equal(next.enableSecretObjectives, false);
@@ -564,13 +564,13 @@ test('suprimento nacional de trigo reduz atrito e dividir pilhas não aumenta pe
       q.ownerId = a.id;
       q.strategicResource = 'GRAIN';
     }
-    army(g, a.id, p.id, { infantry: split ? 14 : 28 });
-    if (split) army(g, a.id, p.id, { infantry: 14 });
+    army(g, a.id, p.id, { infantry: split ? 15 : 30 });
+    if (split) army(g, a.id, p.id, { infantry: 15 });
     const r = resolveTurn(g);
     return r.attritionLosses.filter((r) => r.ownerId === a.id).reduce((n, r) => n + r.losses, 0);
   };
-  assert.equal(make(false, false), 2);
-  assert.equal(make(true, false), 1);
+  assert.equal(make(false, false), 3);
+  assert.equal(make(true, false), 2);
   assert.equal(make(false, true), make(false, false));
 });
 test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas penalidades', () => {
@@ -597,7 +597,7 @@ test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas pe
     return before - unitCount(u);
   };
   assert.equal(run(false, false), 1);
-  assert.equal(run(true, false), 4);
+  assert.equal(run(true, false), 6);
   assert.equal(run(true, true), 1);
 });
 test('moral própria recupera rapidamente; outono amplia receitas de trigo', () => {

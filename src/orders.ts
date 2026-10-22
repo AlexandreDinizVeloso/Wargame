@@ -7,6 +7,8 @@ export function orderName(o: PlayerOrder) {
       return 'Marchar / navegar';
     case 'AUTO_TRANSPORT':
       return o.fleetId ? 'Ponte naval automática (grátis)' : '⛵ Travessia Marítima (15 Ouro)';
+    case 'BOMBARD_COAST':
+      return 'Bombardear costa (6 ouro)';
     case 'NAVAL_BRIDGE':
       return 'Ponte naval';
     case 'ASSAULT_SIEGE':

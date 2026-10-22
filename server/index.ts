@@ -28,7 +28,7 @@ const server = http.createServer((req, res) => {
   if (req.url?.split('?')[0] === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
-      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.6.0', protocolVersion: 6 }),
+      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.7.0', protocolVersion: 7 }),
     );
     return;
   }
@@ -41,7 +41,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
-        protocolVersion: 6,
+        protocolVersion: 7,
         nations: NATIONS.map((n) => ({ ...n, emblemPath: EMBLEMS[n.emblem] })),
         religions: RELIGIONS,
         holyCities: Object.fromEntries(
@@ -91,6 +91,7 @@ const server = http.createServer((req, res) => {
           'ASSAULT_SIEGE',
           'NAVAL_BRIDGE',
           'AUTO_TRANSPORT',
+          'BOMBARD_COAST',
         ],
       }),
     );

@@ -43,6 +43,7 @@ export interface Battalion extends Composition {
   infantryPower: number;
   artilleryPower: number;
   encircled: boolean;
+  disorganized: boolean;
 }
 export type ArmyUnit = Battalion;
 export interface ProvinceRuntimeState {
@@ -59,6 +60,9 @@ export interface ProvinceRuntimeState {
   templeLevel: number;
   maxBuildingSlots: number;
   siege: Siege | null;
+  neutralDevelopmentLevel: number;
+  neutralDevelopmentTurn: number;
+  coastalBombardment: { ownerId: string; startedTurn: number; untilTurn: number } | null;
   recruitedThisTurn: number;
   recruitmentTurn: number;
   conversion: number;
@@ -87,6 +91,7 @@ export type BattalionOrder =
       battalionId: string;
     }
   | { type: 'MERGE_ALL'; battalionId: string }
+  | { type: 'BOMBARD_COAST'; battalionId: string; targetProvinceId: string }
   | { type: 'NAVAL_BRIDGE'; battalionId: string; fleetId: string; targetProvinceId: string }
   | {
       type: 'AUTO_TRANSPORT';
@@ -268,6 +273,7 @@ export interface BattleReport {
   fortLevel: number;
   neutralizedFortLevels: number;
   blockadeModifier: number;
+  bombardmentModifier?: number;
   infantryModifier: number;
   cavalryModifier: number;
   artilleryModifier: number;
@@ -332,6 +338,7 @@ export interface EconomyMetric {
   administration: number;
   buildingUpkeep: number;
   plunder: number;
+  maritimeTrade?: number;
 }
 export interface DietEvent {
   turn: number;
@@ -343,6 +350,20 @@ export interface DietEvent {
   votes: Record<string, string>;
 }
 export interface TurnResolutionReport {
+  bombardments: {
+    fleetId: string;
+    ownerId: string;
+    provinceId: string;
+    fortBefore: number;
+    fortAfter: number;
+    cost: number;
+  }[];
+  neutralDevelopments: {
+    provinceId: string;
+    level: number;
+    targetGarrison: number;
+    fortLevel: number;
+  }[];
   turn: number;
   battles: BattleReport[];
   movements: MovementReport[];
@@ -410,17 +431,17 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.6.0';
+  createdVersion: '0.7.0';
   enableSecretObjectives: boolean;
   allowBotSecretVictory: boolean;
   legacyResult?: {
     winnerId: string | null;
     objective: string | null;
-    version: '0.2.0' | '0.3.0' | '0.4.0' | '0.5.0';
+    version: '0.2.0' | '0.3.0' | '0.4.0' | '0.5.0' | '0.6.0';
   };
 }
 export interface GameState {
-  version: 6;
+  version: 7;
   allowBotSecretVictory: boolean;
   graceUntilTurn: number;
   sandboxContinued: boolean;
@@ -553,7 +574,7 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'left' };
 export interface MatchTelemetry {
-  schemaVersion: 6;
+  schemaVersion: 7;
   matchConfig: MatchConfig;
   nations: Player[];
   turnByTurnHistory: TurnHistory[];
@@ -664,6 +685,8 @@ export function emptyTurnReport(turn: number, diet: ImperialDiet): TurnResolutio
   return {
     turn,
     battles: [],
+    bombardments: [],
+    neutralDevelopments: [],
     movements: [],
     retreats: [],
     stackwipes: [],
@@ -692,6 +715,7 @@ export interface GameNotification {
     | 'PEACE_OFFER'
     | 'BATTALION_WIPED'
     | 'VICTORY_WARNING'
+    | 'BOMBARDMENT'
     | 'BATTLE'
     | 'ENCIRCLEMENT'
     | 'EMERGENCY_LEVY'

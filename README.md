@@ -1,12 +1,12 @@
-# Concórdia — Atlas de Impérios · v0.6
+# Concórdia — Atlas de Impérios · v0.7
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
 
-## Prévia visual desta branch
+## Interface e regras da v0.7
 
-Esta branch inclui o **protótipo cartográfico 2,5D da v0.7**, sobre o motor e protocolo v0.6. O mapa tem relevo ilustrado, costas e símbolos de infraestrutura. Um único painel contextual alterna entre cidade e formação; consultas abrem ao centro. No **Conselho da nação**, desmarque **Mapa cartográfico · painel único** para comparar com a interface clássica. A preferência é salva no navegador.
+Mapa cartográfico **2,5D** com HUD compacta. Mundo, Diplomacia, Doutrinas, objetivos, relatórios, manual, Conselho, confirmação de guerra e resultado abrem **popups móveis, redimensionáveis e minimizáveis**, sem escurecer o mapa. Arraste pelo título e redimensione pelo canto inferior direito; posição e tamanho ficam salvos neste navegador. Esc fecha a janela ativa. Consultas podem coexistir; província e formação alternam um único contexto.
 
-Veja [escopo e validação da prévia](docs/PREVIA_V7.md). As propostas de novos limites de moral, neutros evolutivos e comércio naval estão no [plano de regras](docs/PLANO_V7.md); o protótipo visual usa as regras v0.6.
+O motor agora impede ofensivas de formações desorganizadas, aumenta o atrito sobre o excedente de suprimento, desenvolve cidades neutras ricas e oferece comércio marítimo e bombardeio costeiro. Consulte [regras v0.7](docs/REGRAS_V7.md), [interface](docs/PREVIA_V7.md) e [validação](docs/BALANCE.md). A opção **Conselho da nação → Mapa cartográfico · HUD compacta** permite comparar com a interface clássica.
 
 ## Executar
 
@@ -38,7 +38,15 @@ npm run server:headless
 
 Sem banco externo, chave de API ou assets remotos. No cloud com cache pessoal sem permissão, use `npm ci --include=dev --cache /workspace/.cache/npm --no-audit --no-fund`.
 
-## Novidades da v0.6
+## Novidades da v0.7
+
+- Moral abaixo de 25 desorganiza o exército: ofensivas ficam bloqueadas até uma rodada de descanso em terra amiga; treinar, dividir e fundir não remove o estado.
+- Atrito agregado por proprietário/província: 25% do excedente de suprimento e −20 moral nas formações vulneráveis.
+- Cidades independentes ricas evoluem a cada quatro rodadas, até 12 guardas e forte 2.
+- Nós marítimos rendem 3–6 ouro para a maior presença de guerra e transporte, com teto nacional 12; empates e guerra interrompem a receita.
+- Bombardeio exige três navios de guerra e seis ouro: reduz um nível de forte e dá apoio terrestre de −15% de defesa até a rodada seguinte.
+
+## Recursos mantidos da v0.6
 
 - Estreitos terrestres visíveis no mapa e travessia entre costas em até duas zonas marítimas: frota própria disponível ou fretamento automático por 15 ouro.
 - Oito posições iniciais distribuídas pelo mundo e pacto de não agressão nas rodadas 1 e 2.
@@ -88,7 +96,7 @@ Não há limite de turnos em partidas humanas. Somente o simulador usa um corte 
 
 O servidor grava snapshots atômicos, backups e hashes de tokens. Preserve `.local/` em volume persistente e use um processo por arquivo. O código da sala permite entrar no lobby; recuperar um jogador existente exige o token privado da aba.
 
-Snapshots v0.5 migram para v0.6 com cópia `.v5-backup`. Sessões, tesouros, tropas e posições são preservados. Limites militares e de reservas são recalculados, reservas acima do teto são ajustadas, objetivos são reescalados e suas sequências são reiniciadas. Marchas, travessias e recrutamentos são cancelados para replanejamento; confirmações e relógios são reabertos. Os novos spawns e a calibração inicial de impostos valem para partidas novas. Resultados encerrados ficam arquivados com sua versão de origem. Snapshots v0.2/v0.3/v0.4 também são aceitos com backups próprios; campanhas anteriores à introdução das cartas não recebem objetivos retroativos.
+Snapshots v0.6 migram para v0.7 com cópia `.v6-backup`. Sessões, tesouros, tropas, posições e sequências de objetivos são preservados. Ordens ofensivas e rotas são canceladas para replanejamento; confirmações e relógios são reabertos. Cidades independentes iniciam o desenvolvimento no momento da migração, sem crescimento retroativo. Resultados encerrados conservam a versão de origem. Snapshots v0.2/v0.3/v0.4/v0.5 também são aceitos, passando pelas migrações históricas com seus respectivos ajustes e backups.
 
 JSON e TXT podem ser baixados na HUD e na tela final. O relatório inclui todas as rodadas, batalhas, economia, guerras, estações e coalizões, respeitando a visão de quem exportou. Tokens, semente privada e ordens ocultas não são exportados.
 
@@ -102,7 +110,7 @@ npm run test:cartographic
 npx tsx scripts/simulate-balance.ts --games=100 --seed=20261022 --mode=mixed --max-turns=159
 ```
 
-O smoke inicia um servidor isolado em porta livre e abre três navegadores Chromium. É preciso Chromium instalado (`CHROMIUM_PATH` opcional; padrão `/usr/bin/chromium`). `BASE_URL` permite apontar para um servidor v0.6 já iniciado. Artefatos ficam em `.local/`. O simulador informa vitórias e partidas ainda sem vencedor no corte, sem inventar resultado por pontos.
+O smoke inicia um servidor isolado em porta livre e abre três navegadores Chromium. É preciso Chromium instalado (`CHROMIUM_PATH` opcional; padrão `/usr/bin/chromium`). `BASE_URL` permite apontar para um servidor v0.7 já iniciado. Artefatos ficam em `.local/`. O simulador informa vitórias e partidas ainda sem vencedor no corte, sem inventar resultado por pontos.
 
 ## Arquitetura
 
@@ -114,6 +122,6 @@ O smoke inicia um servidor isolado em porta livre e abre três navegadores Chrom
 | `server/rooms.ts`, `storage.ts`, `migration.ts`                                                    | HTTP/WS, sessões, timer e persistência                           |
 | `src/`                                                                                             | Cliente React/SVG, HUD, áudio e janelas                          |
 
-`shared/` e `server/` não importam React, `src/` ou DOM. Um cliente Godot pode consumir o [protocolo 6](docs/PROTOCOL.md). Consulte [regras v0.6](docs/REGRAS_V6.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3/v0.4/v0.5 em `docs/` são arquivos históricos.
+`shared/` e `server/` não importam React, `src/` ou DOM. Um cliente Godot pode consumir o [protocolo 7](docs/PROTOCOL.md). Consulte [regras v0.7](docs/REGRAS_V7.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3/v0.4/v0.5/v0.6 em `docs/` são arquivos históricos.
 
-Próxima etapa: [protótipo 2,5D e interface com painel único](docs/PLANO_V7.md).
+Direção e análise das partidas anteriores: [plano da v0.7](docs/PLANO_V7.md).

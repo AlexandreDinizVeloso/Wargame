@@ -1,3 +1,5 @@
+import { SeaTradeCard } from './MaritimePanel';
+import { independentCity, neutralTarget, nextNeutralTurn } from '../shared/neutral';
 import CityDevelopment from './CityDevelopment';
 import { provinceRecruitLimit, recruitedCount, recruitmentBlock } from '../shared/economy';
 import { useState, useEffect } from 'react';
@@ -184,6 +186,21 @@ export default function ProvinceDrawer({
         </button>
       </div>
 
+      {province.kind === 'SEA_ZONE' && <SeaTradeCard game={game} sea={province} />}
+      {independentCity(province) && (
+        <p className="neutral-city-card">
+          🏛️ Cidade independente · desenvolvimento {province.neutralDevelopmentLevel}/5 ·
+          guarnição-alvo {neutralTarget(province)}. Próximo reforço: rodada{' '}
+          {nextNeutralTurn(game.turn)}; crescimento suspenso sob invasão ou cerco.
+        </p>
+      )}
+      {province.coastalBombardment && province.coastalBombardment.untilTurn >= game.turn && (
+        <p className="warning-box">
+          💥 Costa bombardeada: −15% defesa contra{' '}
+          {game.players.find((p) => p.id === province.coastalBombardment?.ownerId)?.nation} até a
+          rodada {province.coastalBombardment.untilTurn}.
+        </p>
+      )}
       {!compact && province.strategicResource && (
         <p className="success-box">
           {RESOURCES[province.strategicResource].icon} {RESOURCES[province.strategicResource].name}{' '}
@@ -306,8 +323,8 @@ export default function ProvinceDrawer({
         </div>
         {total > limit && (
           <p className="warning-box">
-            Atrito previsto: {Math.ceil((total - limit) * 0.15)} unidades. O atrito reduz a formação
-            enquanto houver excesso.
+            Atrito previsto: {Math.ceil((total - limit) * 0.25)} unidades. O atrito reduz a formação
+            enquanto houver excesso, com −20 moral por formação vulnerável.
           </p>
         )}
         {isBlockaded(game, province) && (

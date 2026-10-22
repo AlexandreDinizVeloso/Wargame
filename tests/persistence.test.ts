@@ -273,7 +273,7 @@ test('snapshot v2 é migrado sem perder tesouro, dono, tropas, ordens locais ou 
     }),
   );
   const room = readSnapshot(filename)[0];
-  assert.equal(room.game.version, 6);
+  assert.equal(room.game.version, 7);
   assert.equal(room.game.turn, 4);
   assert.equal(room.game.players[0].gold, 50);
   assert.equal(room.game.provinces[0].ownerId, 'OLD-p1');

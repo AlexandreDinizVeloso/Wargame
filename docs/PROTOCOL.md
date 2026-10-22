@@ -1,4 +1,4 @@
-# Protocolo 6 — servidor headless / Godot
+# Protocolo 7 — servidor headless / Godot
 
 `shared/` e `server/` não importam `src/`, React ou APIs DOM. O cliente utiliza JSON por HTTP/WS. Execute `npm run server:headless`; nenhum renderer Godot é incluído.
 
@@ -6,7 +6,7 @@
 
 | Rota              | Retorno                                                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------- |
-| `GET /api/health` | `status: ok`, `version: 0.6.0`, `protocolVersion: 6`                                        |
+| `GET /api/health` | `status: ok`, `version: 0.7.0`, `protocolVersion: 7`                                        |
 | `GET /api/schema` | Nações, mapas, recursos, crises, crenças, ordens, `skills`, `commanderTraits` e `buildings` |
 | `GET /api/rooms`  | Array de salas públicas não encerradas, sem sessão ou cartas privadas                       |
 | `/ws`             | WebSocket de mensagens JSON                                                                 |
@@ -78,13 +78,13 @@ Tratados: `CEDE_PROVINCES` (`provinceIds`), `WAR_REPARATIONS` (`immediateTribute
 
 ## Timer, privacidade e persistência
 
-`GameView.version` e `MatchTelemetry.schemaVersion` valem **6**. `turnDeadlineAt` é `null` no começo de cada rodada. O primeiro humano vivo a enviar `READY:true` define o prazo e `firstReadyPlayerName`. `deadline` é alias de compatibilidade. Todos prontos ou prazo expirado resolve; nova rodada zera ambos. Desconfirmar não adia o prazo. Após pausa, um relógio iniciado retoma o tempo restante; planejamento ainda sem primeiro pronto continua livre.
+`GameView.version` e `MatchTelemetry.schemaVersion` valem **7**. `turnDeadlineAt` é `null` no começo de cada rodada. O primeiro humano vivo a enviar `READY:true` define o prazo e `firstReadyPlayerName`. `deadline` é alias de compatibilidade. Todos prontos ou prazo expirado resolve; nova rodada zera ambos. Desconfirmar não adia o prazo. Após pausa, um relógio iniciado retoma o tempo restante; planejamento ainda sem primeiro pronto continua livre.
 
 `GameView` não contém `seed`, `nextId`, ordens alheias ou pendências internas. As cartas e seleção dos outros jogadores são removidas inclusive do histórico. Intenções são fornecidas apenas à própria visão, a soberano de súditos, contratos de visão e inteligência adjacente de Sapiência. Tropas camufladas de Verídia são removidas da visão adversária; não são enviadas como composição zero. A visão final revela as cartas.
 
 `reports`, `lastReport` e `history` incluem `world:{season,event,coalitions}`. Exportações têm `worldHistory`; `dietHistory` permanece apenas como arquivo legado. O histórico não recebe o corte interno do simulador em jogos humanos.
 
-Snapshots 2/3/4/5 são migrados para 6 com backups específicos. A migração v5 preserva tropas, tesouro, posições e sessões, recalcula limites, ajusta manpower ao teto e cancela marchas, travessias e recrutamentos. As sequências de objetivos são reiniciadas. Não há redistribuição retroativa das capitais. O arquivo usa escrita temporária, `fsync`, troca atômica e rollback quando uma gravação de comando falha. Não há autenticação por conta: o token privado da sessão é a credencial de reconexão.
+Snapshots 2/3/4/5/6 são migrados para 7 com backups específicos. A migração v6 preserva tropas, tesouro, posições, sessões e objetivos; inicializa os campos novos sem crescimento neutro retroativo, cancela ofensivas/rotas e reabre o planejamento. As migrações anteriores também aplicam os ajustes históricos de economia/limites/objetivos. Não há redistribuição retroativa das capitais. O arquivo usa escrita temporária, `fsync`, troca atômica e rollback quando uma gravação de comando falha. O token privado da sessão é a credencial de reconexão.
 
 ## Ações imediatas da v0.5
 
@@ -142,3 +142,25 @@ Declarações diretas contra outra nação principal são bloqueadas nas rodadas
 - `SET_BOT_NATION`: `playerId`, `nationId`. Somente anfitrião no lobby e somente para um bot. Atualiza nação, cor e fé. Se a nação pertencer a outro bot, troca ambas atomicamente; se pertencer a humano, rejeita. Nenhuma mudança de nação depois de iniciar.
 
 A carga de snapshots também remove as adjacências legadas China–Japão e Países Baixos–Grã-Bretanha; essas costas usam transporte. Os estreitos explicitamente cadastrados continuam sendo conexões terrestres.
+
+## Ordem e estado da v0.7
+
+`BOMBARD_COAST` é uma ordem de formação com `battalionId` e `targetProvinceId`. Reserva seis ouro, ocupa a ação da frota e é incompatível com movimento/ponte. Na resolução, frota, posição inicial, costa, guerra e recursos são revalidados; uma costa recebe no máximo um bombardeio por rodada. Exemplo:
+
+```json
+{
+  "type": "SUBMIT_ORDER",
+  "order": { "type": "BOMBARD_COAST", "battalionId": "fleet-1", "targetProvinceId": "italy" }
+}
+```
+
+- `Battalion.disorganized:boolean`: estado terrestre persistente. Moral <25 o ativa; descanso completo em terra amiga com moral ≥25 o remove. Todas as entradas ofensivas e assaltos são validados no envio e na resolução.
+- `Province.neutralDevelopmentLevel:0..5`, `neutralDevelopmentTurn:number`: crescimento de cidades independentes a cada quatro rodadas, protegido contra execução repetida.
+- `Province.coastalBombardment:null | {ownerId,startedTurn,untilTurn}`: apoio válido na rodada da ação e na seguinte.
+- `TurnResolutionReport.bombardments`: `{fleetId,ownerId,provinceId,fortBefore,fortAfter,cost}[]`.
+- `TurnResolutionReport.neutralDevelopments`: `{provinceId,level,targetGarrison,fortLevel}[]`.
+- `BattleReport.bombardmentModifier?`: `0.85` no apoio terrestre aplicável, `1` em combate naval/sem apoio.
+- `EconomyMetric.maritimeTrade?`: componente já incluído em `trade`, sem duplicar a receita.
+- Notificação pessoal `BOMBARDMENT`, severidade `WARNING`, com foco na costa.
+
+Nós comerciais são derivados de províncias, frotas e guerras por `shared/maritime.ts`; não exigem ordens comerciais persistidas. Consultas do cliente são janelas não modais e não pausam o planejamento.

@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { chromium, type Page } from 'playwright-core';
+import { chromium, type Page, type Locator } from 'playwright-core';
 import type { GameView } from '../shared/types';
 import { orderCost } from '../shared/rules';
 import { seedBrowserFixtures, fixturePeer } from './browser-fixtures';
@@ -26,6 +26,15 @@ async function viewport(page: Page) {
     ),
     'Viewport não deve ter rolagem externa.',
   );
+}
+async function gesture(page: Page, handle: Locator, dx: number, dy: number) {
+  const box = (await handle.boundingBox())!;
+  const x = box.x + Math.min(45, box.width / 2),
+    y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 12 });
+  await page.mouse.up();
 }
 try {
   await mkdir('.local/screenshots', { recursive: true });
@@ -124,13 +133,57 @@ try {
   await page.getByLabel('Líder atribuído (instantâneo)', { exact: true }).waitFor();
   await page.locator('.advanced-command > summary').click();
   await page.getByRole('button', { name: 'Mundo & Coalizões', exact: false }).click();
-  const world = page.getByRole('dialog', { name: 'Mundo & Coalizões', exact: true });
+  const world = page.getByRole('region', { name: 'Mundo & Coalizões', exact: true });
   await world.waitFor();
-  assert.equal(await page.locator('[data-context-panel]').count(), 0);
-  await page.keyboard.press('Tab');
-  assert.ok(await world.evaluate((e) => e.contains(document.activeElement)));
+  assert.equal(await page.locator('[data-context-panel]').count(), 1);
+  assert.equal(await page.locator('.modal-backdrop, .consultation-backdrop').count(), 0);
+  const beforeDrag = (await world.boundingBox())!;
+  await gesture(page, world.locator('.window-title'), -430, 30);
+  const afterDrag = (await world.boundingBox())!;
+  assert.ok(afterDrag.x < beforeDrag.x - 350 && afterDrag.y > beforeDrag.y + 20);
+  await gesture(
+    page,
+    world.getByRole('button', { name: 'Redimensionar Mundo & Coalizões' }),
+    120,
+    -80,
+  );
+  const resized = (await world.boundingBox())!;
+  assert.ok(resized.width > afterDrag.width + 100 && resized.height < afterDrag.height - 60);
+  await world.getByRole('button', { name: 'Minimizar Mundo & Coalizões' }).click();
+  assert.equal((await world.boundingBox())!.height, 42);
+  await world.getByRole('button', { name: 'Restaurar Mundo & Coalizões' }).click();
+  await page.getByRole('button', { name: 'Diplomacia', exact: true }).click();
+  const diplomacy = page.getByRole('region', { name: 'Diplomacia & Guerras', exact: true });
+  await diplomacy.waitFor();
+  await page.getByRole('button', { name: /Doutrinas & Árvore de Tropas/ }).click();
+  const skills = page.getByRole('region', { name: 'Doutrinas & Árvore de Tropas', exact: true });
+  await skills.waitFor();
+  assert.equal(await page.locator('.modal-backdrop, .consultation-backdrop').count(), 0);
+  await page.screenshot({ path: '.local/screenshots/v7-floating-consultations.png' });
+  await page.keyboard.press('Escape');
+  await skills.waitFor({ state: 'detached' });
+  await diplomacy.waitFor();
+  await page.keyboard.press('Escape');
+  await diplomacy.waitFor({ state: 'detached' });
+  await world.waitFor();
+  // Background map remains interactive, and consultations survive context changes.
+  await page.getByRole('button', { name: 'Fechar Comando de Batalhão', exact: true }).click();
+  await page.locator('.province-shape[data-province="brazil"]').click();
+  await page.getByRole('region', { name: 'Inspeção de Província', exact: true }).waitFor();
+  await world.waitFor();
+  await world.getByRole('button', { name: 'Fechar Mundo & Coalizões' }).click();
+  await page.getByRole('button', { name: 'Mundo & Coalizões', exact: true }).click();
+  const reopened = (await world.boundingBox())!;
+  assert.ok(Math.abs(reopened.x - resized.x) < 2 && Math.abs(reopened.width - resized.width) < 2);
   await page.keyboard.press('Escape');
   await world.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Como jogar', exact: true }).click();
+  const manual = page.getByRole('region', { name: 'Manual de campanha', exact: true });
+  await manual.waitFor();
+  await manual.getByRole('button', { name: 'Redimensionar Manual de campanha' }).waitFor();
+  assert.equal(await page.locator('.modal-backdrop').count(), 0);
+  await page.keyboard.press('Escape');
+  await manual.waitFor({ state: 'detached' });
   await page.locator(`[data-battalion="${main.id}"]`).press('Enter');
   await page.locator('.province-shape[data-province="brazil"]').press('Enter');
   await until((g) => g.plannedOrders.some((o) => o.type === 'AUTO_TRANSPORT' && !o.fleetId));
@@ -156,21 +209,27 @@ try {
     await viewport(page);
     const army = page.getByRole('region', { name: 'Comando de Batalhão', exact: true });
     const mobileBox = await army.boundingBox();
-    assert.ok(mobileBox && mobileBox.height <= 844 * 0.45);
+    assert.ok(
+      mobileBox &&
+        mobileBox.x >= 0 &&
+        mobileBox.y >= 0 &&
+        mobileBox.x + mobileBox.width <= 390 &&
+        mobileBox.y + mobileBox.height <= 844,
+    );
     await page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
-    const menu = page.getByRole('dialog', { name: 'Conselho da nação', exact: true });
+    const menu = page.getByRole('region', { name: 'Conselho da nação', exact: true });
     await menu.getByLabel('Seu nome', { exact: true }).fill('Capitã do Atlas');
     await menu.getByRole('button', { name: 'Salvar nome', exact: true }).click();
     await until((g) => g.players[0].name === 'Capitã do Atlas');
     const toggle = menu.getByRole('checkbox', {
-      name: 'Mapa cartográfico · painel único',
+      name: 'Mapa cartográfico · HUD compacta',
       exact: true,
     });
     await toggle.uncheck();
     await page.locator('[data-interface="classic"]').waitFor();
     await toggle.check();
     await page.locator('[data-interface="cartographic"]').waitFor();
-    await page.getByRole('button', { name: 'Fechar menu', exact: true }).click();
+    await page.getByRole('button', { name: 'Fechar Conselho da nação', exact: true }).click();
     await viewport(page);
     await page.screenshot({ path: '.local/screenshots/v7-cartographic-mobile.png' });
   } finally {
@@ -178,7 +237,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Protótipo cartográfico passou: relevo, infraestrutura, painel único <=20% no desktop, abas de cidade, quartel, recrutamento, comando avançado, consulta central, foco de teclado/Esc, fretamento com três participantes, alertas, nome, comparação clássica e celular.',
+    'Protótipo cartográfico passou: relevo, infraestrutura, contexto compacto, abas de cidade, quartel, recrutamento, comando avançado, popups móveis/redimensionáveis/minimizáveis, coexistência, geometria persistida, mapa interativo e Esc, fretamento com três participantes, alertas, nome, comparação clássica e celular.',
   );
 } finally {
   await browser.close();

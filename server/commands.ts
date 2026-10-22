@@ -66,7 +66,7 @@ export function parseOrder(value: unknown): PlayerOrder {
     assert(Object.hasOwn(BUILDINGS, String(o.building)), 'Edifício desconhecido.');
     return { type, provinceId: string(o.provinceId), building: o.building as BuildingType };
   }
-  if (type === 'AUTO_TRANSPORT')
+  if (type === 'AUTO_TRANSPORT' || type === 'BOMBARD_COAST')
     return {
       type,
       battalionId: string(o.battalionId),

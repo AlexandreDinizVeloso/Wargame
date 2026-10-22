@@ -1,3 +1,4 @@
+import { offensiveBlock } from '../shared/morale';
 import type { GameState, PlayerOrder, TurnResolutionReport } from '../shared/types';
 import { roundMoney, unitCount } from '../shared/rules';
 import { legalBridge, crossingOptions } from '../shared/naval';
@@ -7,6 +8,8 @@ export function prepareTransport(g: GameState, id: string, o: PlayerOrder): Play
   if (o.type !== 'AUTO_TRANSPORT') return o;
   const a = battalionOf(g, o.battalionId),
     target = provinceOf(g, o.targetProvinceId);
+  const reason = offensiveBlock(g, a, target);
+  assert(!reason, reason ?? 'Travessia bloqueada.');
   const option = crossingOptions(g, a, target, g.orders[id] ?? [])[0];
   assert(
     option,

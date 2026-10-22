@@ -702,7 +702,7 @@ test('migração v5 preserva ouro, tropas e locais; recalcula limites e reabre p
   const old = structuredClone(g) as unknown as { version: number };
   old.version = 5;
   const next = migrateV5(old);
-  assert.equal(next.version, 6);
+  assert.equal(next.version, 7);
   assert.equal(next.players[0].gold, 4015);
   assert.equal(next.battalions[0].infantry, 20);
   assert.ok(next.players[0].armyCap < 999);

@@ -1,3 +1,4 @@
+import { markDisorganized } from '../shared/morale';
 import { commanderFor, hasSkill } from '../shared/military';
 import { beginSiege } from './siege';
 import { hasReligiousWar, isCamouflaged, resourceCount } from '../shared/strategy';
@@ -156,6 +157,13 @@ export function combatPowers(
     master = attackers.some((a) => commanderFor(g, a)?.trait === 'SIEGE_MASTER');
   const neutralizedFortLevels = naval ? 0 : Math.min(p.fortLevel, artillery + (master ? 1 : 0)),
     blockadeModifier = naval ? 1 : isBlockaded(g, p) ? 0.8 : 1;
+  const bombardmentModifier =
+    !naval &&
+    p.coastalBombardment &&
+    p.coastalBombardment.untilTurn >= g.turn &&
+    attackers.some((a) => a.ownerId === p.coastalBombardment?.ownerId)
+      ? 0.85
+      : 1;
   const holy = !naval && attackers.some((a) => p.conversionInstigatorId === a.ownerId) ? 1.15 : 1;
   const attackPower =
     attackers.reduce((n, a) => n + compositionPower(g, a, p, false, defenders), 0) * holy;
@@ -165,13 +173,15 @@ export function combatPowers(
       ? 1
       : p.terrainDefenseBonus *
         (1 + (p.fortLevel - neutralizedFortLevels) * 0.15) *
-        blockadeModifier);
+        blockadeModifier *
+        bombardmentModifier);
   return {
     attackPower,
     defensePower,
     ratio: attackPower / Math.max(1, defensePower),
     neutralizedFortLevels,
     blockadeModifier,
+    bombardmentModifier,
   };
 }
 export function safestRetreat(g: GameState, a: Battalion, fromId = a.provinceId) {
@@ -464,6 +474,7 @@ export function resolveBattle(
   battle.defenderCompositionLosses = dLoss;
   battle.attackerCasualties = unitCount(aLoss);
   battle.defenderCasualties = unitCount(dLoss);
+  for (const unit of [a, ...enemies]) markDisorganized(unit);
   battle.attackerMoraleAfter = a.morale;
   battle.defenderMoraleAfter = average(enemies, 'morale');
   const winners = attackWins ? [a] : enemies,

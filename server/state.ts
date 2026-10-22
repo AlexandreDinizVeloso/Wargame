@@ -114,11 +114,16 @@ export function createBattalion(
     infantryPower: options.infantryPower ?? 1,
     artilleryPower: options.artilleryPower ?? 1,
     encircled: false,
+    disorganized: !options.isFleet && (options.morale ?? 70) < 25,
   };
   g.battalions.push(army);
   return army;
 }
 export function mergeBattalions(target: Battalion, source: Battalion) {
+  const disorganized =
+    target.disorganized ||
+    source.disorganized ||
+    (!target.isFleet && (target.morale < 25 || source.morale < 25));
   const a = unitCount(target),
     b = unitCount(source),
     total = a + b;
@@ -133,6 +138,7 @@ export function mergeBattalions(target: Battalion, source: Battalion) {
     const total = target[key] + source[key];
     if (total) target[power] = (target[power] * target[key] + source[power] * source[key]) / total;
   }
+  target.disorganized = disorganized;
   for (const key of UNIT_KEYS) target[key] += source[key];
 }
 export function removeUnits(army: Battalion, count: number, exposed = false): Composition {

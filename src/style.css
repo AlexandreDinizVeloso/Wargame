@@ -677,14 +677,12 @@ legend {
 }
 .table-scroll::-webkit-scrollbar,
 .window-body::-webkit-scrollbar,
-.game-modal::-webkit-scrollbar,
 .entry-form::-webkit-scrollbar,
 .lobby-panel::-webkit-scrollbar {
   width: 5px;
   height: 5px;
 }
 .window-body::-webkit-scrollbar-thumb,
-.game-modal::-webkit-scrollbar-thumb,
 .entry-form::-webkit-scrollbar-thumb,
 .lobby-panel::-webkit-scrollbar-thumb {
   background: #6b675447;
@@ -1644,45 +1642,7 @@ legend {
   border-color: #c2a2609c;
   background: #c5a05814;
 }
-.modal-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 250;
-  background: #030b15c9;
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-.game-modal {
-  background: linear-gradient(145deg, #17253b, #101d2d);
-  border: 1px solid #b59b64;
-  outline: 1px solid #b4924c32;
-  outline-offset: -5px;
-  box-shadow: 0 30px 100px #0007;
-  position: relative;
-  padding: 30px;
-  max-height: calc(100dvh - 48px);
-  max-width: 760px;
-  width: 100%;
-  overflow: auto;
-  border-radius: 4px;
-  user-select: text;
-}
-.game-modal > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-.game-modal > header > button {
-  padding: 4px;
-  min-height: 24px;
-  background: none;
-  border: 0;
-}
-.game-modal p {
+.popup-sheet p {
   font-size: 12px;
   color: #a7b8c0;
   line-height: 1.85;
@@ -1730,10 +1690,6 @@ legend {
   color: #c8b88d;
   margin-right: 5px;
 }
-.council-menu,
-.result-modal {
-  max-width: 420px;
-}
 .council-menu > svg {
   display: block;
   margin: 0 auto 15px;
@@ -1753,8 +1709,6 @@ legend {
 }
 .result-modal {
   text-align: center;
-  max-width: 480px;
-  padding: 32px;
 }
 .result-modal > svg {
   color: #d5b879;
@@ -2776,13 +2730,6 @@ legend {
     font-size: 10px;
     padding: 12px;
   }
-  .modal-backdrop {
-    padding: 12px;
-  }
-  .game-modal {
-    padding: 23px;
-    max-height: calc(100dvh - 24px);
-  }
   .manual-modal h2 {
     font-size: 30px;
   }
@@ -2792,9 +2739,6 @@ legend {
   }
   .manual-grid section h3 {
     margin-top: 12px;
-  }
-  .game-modal > header {
-    margin-bottom: 16px;
   }
   .council-menu h2 {
     font-size: 28px;
@@ -3350,9 +3294,6 @@ legend {
   line-height: 1.6;
   font-size: 12px;
 }
-.war-modal {
-  max-width: 560px;
-}
 .prominent-war {
   width: 100%;
   margin: 12px 0;
@@ -3839,7 +3780,7 @@ legend {
   font-size: 10px;
 }
 
-/* Cartographic preview: one context card, with separate on-demand consultations. */
+/* Compact cartographic HUD and floating consultations. */
 .cartographic-interface [hidden] {
   display: none !important;
 }
@@ -3873,19 +3814,10 @@ legend {
     0 16px 45px #06101980,
     inset 0 1px #e9d69d18;
 }
-.context-panel {
-  position: absolute;
-  z-index: 40;
-  left: 16px;
-  bottom: 70px;
-  width: clamp(300px, 25vw, 360px);
-  max-width: calc(100vw - 32px);
-  max-height: min(60vh, calc(100vh - 230px));
-}
 .campaign-panel .window-title {
   background: #182e38;
-  cursor: default;
-  touch-action: auto;
+  cursor: grab;
+  touch-action: none;
 }
 .campaign-panel .window-body {
   padding: 14px;
@@ -3933,22 +3865,22 @@ legend {
   color: #bfceb8;
   font-size: 10px;
 }
-.context-panel .province-facts .ledger-grid {
+.popup-context .province-facts .ledger-grid {
   margin-top: 12px;
 }
-.context-panel .field-heading {
+.popup-context .field-heading {
   margin: 15px 0 8px;
 }
-.context-panel .building-grid {
+.popup-context .building-grid {
   grid-template-columns: 1fr;
 }
-.context-panel .building-card {
+.popup-context .building-card {
   padding: 10px;
 }
-.context-panel .building-card p {
+.popup-context .building-card p {
   font-size: 9px;
 }
-.context-panel .tactical-hud {
+.popup-context .tactical-hud {
   position: static;
   transform: none;
   width: 100%;
@@ -3958,39 +3890,39 @@ legend {
   background: none;
   border-radius: 0;
 }
-.context-panel .tactical-hud > header {
+.popup-context .tactical-hud > header {
   display: block;
 }
-.context-panel .tactical-hud > header > strong {
+.popup-context .tactical-hud > header > strong {
   display: block;
   font-family: Georgia, serif;
   font-size: 20px;
 }
-.context-panel .tactical-hud > header > span {
+.popup-context .tactical-hud > header > span {
   display: block;
   margin: 8px 0;
 }
-.context-panel .tactical-hud > header > button {
+.popup-context .tactical-hud > header > button {
   display: none;
 }
-.context-panel .tactical-composition {
+.popup-context .tactical-composition {
   gap: 10px;
   font-size: 10px;
 }
-.context-panel .tactical-actions {
+.popup-context .tactical-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 5px;
 }
-.context-panel .tactical-actions button {
+.popup-context .tactical-actions button {
   font-size: 9px;
   padding: 8px 6px;
   text-align: left;
 }
-.context-panel .tactical-actions button:first-child {
+.popup-context .tactical-actions button:first-child {
   grid-column: 1/-1;
 }
-.context-panel .transport-hint {
+.popup-context .transport-hint {
   font-size: 9px;
 }
 .advanced-command {
@@ -4003,24 +3935,6 @@ legend {
 }
 .advanced-command .region-heading {
   display: none;
-}
-.consultation-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 65;
-  display: grid;
-  place-items: center;
-  padding: 28px;
-  background: #051622a6;
-  backdrop-filter: blur(4px);
-}
-.consultation-panel {
-  width: min(780px, calc(100vw - 32px));
-  max-height: calc(100dvh - 64px);
-  min-height: 240px;
-}
-.consultation-panel .window-body {
-  padding: 20px;
 }
 .cartographic-interface .army-token > rect:first-child {
   filter: drop-shadow(0 2px 1px #00101b99);
@@ -4048,24 +3962,8 @@ legend {
   .cartographic-interface .hud-navigation button {
     font-size: 9px;
   }
-  .context-panel {
-    left: 8px;
-    right: 8px;
-    bottom: 58px;
-    width: auto;
-    max-width: none;
-    max-height: 44dvh;
-    border-radius: 14px 14px 9px 9px;
-  }
-  .context-panel .window-body {
+  .popup-context .window-body {
     padding: 12px;
-  }
-  .consultation-backdrop {
-    padding: 10px;
-  }
-  .consultation-panel {
-    width: 100%;
-    max-height: calc(100dvh - 24px);
   }
   .cartographic-interface .personal-alerts {
     top: 184px;
@@ -4128,4 +4026,75 @@ legend {
   .game-viewport.cartographic-interface:has(.replay-indicator) .personal-alerts {
     top: 275px;
   }
+}
+
+/* All campaign consultations remain movable windows above an interactive map. */
+.campaign-popup {
+  max-width: none;
+  max-height: none;
+}
+.campaign-popup.popup-context {
+  bottom: auto;
+  right: auto;
+  max-width: none;
+  max-height: none;
+}
+.campaign-popup .window-title {
+  cursor: grab;
+  touch-action: none;
+}
+.campaign-popup .window-resize {
+  width: 24px;
+  height: 24px;
+}
+.campaign-popup .window-controls {
+  gap: 3px;
+}
+.campaign-popup .window-body {
+  padding-bottom: 24px;
+}
+.popup-sheet {
+  width: 100%;
+  max-width: none;
+  padding: 4px;
+}
+.popup-sheet h2 {
+  font-family: Georgia, serif;
+  font-size: 25px;
+}
+.popup-sheet .manual-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.popup-sheet .keyboard-guide {
+  flex-wrap: wrap;
+}
+.campaign-popup .window-title:active {
+  cursor: grabbing;
+}
+.sea-trade-card,
+.neutral-city-card,
+.fleet-operations {
+  margin: 12px 0;
+  padding: 11px;
+  background: #4e8d8b14;
+  border: 1px solid #8daeb446;
+  border-radius: 7px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.sea-trade-card small {
+  display: block;
+}
+.fleet-operations label,
+.fleet-operations button {
+  width: 100%;
+}
+.sea-trade-ledger {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+}
+.sea-trade-ledger > summary {
+  cursor: pointer;
+  color: var(--gold);
 }

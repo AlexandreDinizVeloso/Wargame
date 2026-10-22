@@ -130,6 +130,7 @@ export function instantArmyAction(g: GameState, id: string, action: InstantArmyA
     b.infantryPower = a.infantryPower;
     b.artilleryPower = a.artilleryPower;
     b.autoMerge = a.autoMerge;
+    b.disorganized = a.disorganized || a.morale < 25;
     b.entrenched = a.entrenched;
     return;
   }

@@ -92,12 +92,12 @@ test('limite, atrito, custo progressivo e manutenção mercenária seguem as fó
     p = g.provinces[0];
   Object.assign(p, { baseSupplyLimit: 10, fortLevel: 2, pacification: 80, portLevel: 0 });
   assert.equal(supplyLimit(p), 18);
-  assert.equal(attritionLoss(31, 18), 2);
+  assert.equal(attritionLoss(31, 18), 4);
   close(armyUpkeep(31, 0, 18), 0.75 * (18 + 13 * 3));
   close(armyUpkeep(31, 31, 18), armyUpkeep(31, 0, 18) * 2.2);
   army(g, a.id, p.id, { infantry: 31 });
   const r = resolveTurn(g);
-  assert.ok(r.attritionLosses.some((e) => e.losses === 2));
+  assert.ok(r.attritionLosses.some((e) => e.losses === 4));
 });
 test('separar formações não cria suprimento nem reduz manutenção progressiva', () => {
   const {

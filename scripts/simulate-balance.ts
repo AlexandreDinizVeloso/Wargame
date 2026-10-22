@@ -21,11 +21,15 @@ interface MatchResult {
   leaderXP: number;
   peakTroopsByTurn15: number;
   peakLandTroops: number;
-  peakGoldWithoutEconomicBuildings: number;
+  peakGoldWithoutEconomicInvestment: number;
   peakOverArmyCap: number;
   desertions: number;
   seaCrossings: number;
   encirclements: number;
+  maritimeEarnings: number;
+  bombardments: number;
+  neutralDevelopments: number;
+  disorganizedFormationTurns: number;
   mode: GameMode;
   theater: Theater;
   winnerId: string | null;
@@ -78,11 +82,15 @@ export function simulateBalance(
       leaderXP: 0,
       peakTroopsByTurn15: 0,
       peakLandTroops: 0,
-      peakGoldWithoutEconomicBuildings: 0,
+      peakGoldWithoutEconomicInvestment: 0,
       peakOverArmyCap: 0,
       desertions: 0,
       seaCrossings: 0,
       encirclements: 0,
+      maritimeEarnings: 0,
+      bombardments: 0,
+      neutralDevelopments: 0,
+      disorganizedFormationTurns: 0,
       mode,
       theater,
       winnerId: null,
@@ -104,11 +112,19 @@ export function simulateBalance(
       winnerNation: null,
       telemetryTurns: 0,
     };
+    const navalInvestors = new Set<string>();
     while (g.phase === 'planning' && g.history.length < maxTurns) {
       const r = resolveTurn(g, g.turn * g.turnSeconds * 1000);
       if (!validGame(g)) throw new Error(`Estado inválido: semente ${gameSeed}, rodada ${r.turn}.`);
       if (g.winnerObjective === 'SECRET_OBJECTIVE' && !allowBotSecretVictory)
         throw new Error('Bot venceu por carta sem autorização do host.');
+      for (const e of r.economy) if ((e.maritimeTrade ?? 0) > 0) navalInvestors.add(e.playerId);
+      result.maritimeEarnings += r.economy.reduce((n, e) => n + (e.maritimeTrade ?? 0), 0);
+      result.bombardments += r.bombardments.length;
+      result.neutralDevelopments += r.neutralDevelopments.length;
+      result.disorganizedFormationTurns += g.battalions.filter(
+        (a) => !a.isFleet && a.disorganized,
+      ).length;
       for (const a of g.players) {
         const troops = g.battalions
           .filter((u) => u.ownerId === a.id && !u.isFleet)
@@ -119,19 +135,20 @@ export function simulateBalance(
           troops - realmLimits(g, a.id).armyCap,
         );
         if (
+          !navalInvestors.has(a.id) &&
           !g.provinces.some(
             (q) =>
               (q.occupierId ?? q.ownerId) === a.id &&
               (q.marketLevel > 0 || q.foundryLevel > 0 || q.portLevel > 1),
           )
         ) {
-          result.peakGoldWithoutEconomicBuildings = Math.max(
-            result.peakGoldWithoutEconomicBuildings,
+          result.peakGoldWithoutEconomicInvestment = Math.max(
+            result.peakGoldWithoutEconomicInvestment,
             a.gold,
           );
           if (a.gold >= 1000)
             throw new Error(
-              `Tesouro sem infraestrutura atingiu 1000: ${gameSeed}/${r.turn}/${a.nationId}`,
+              `Tesouro sem investimento econômico atingiu 1000: ${gameSeed}/${r.turn}/${a.nationId}`,
             );
         }
         if (troops >= 200)
@@ -244,7 +261,7 @@ export function simulateBalance(
       | 'attritionLosses',
   ) => matches.reduce((n, m) => n + m[key], 0) / games;
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     allowBotSecretVictory,
     games,
     maxTurns,
@@ -293,7 +310,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.argv.includes('--allow-bot-secrets'),
   );
   console.log(
-    `\nConcórdia v0.6 · ${result.games} partidas reais do motor · 6 bots · cenário ${scenario} · semente ${result.seed}`,
+    `\nConcórdia v0.7 · ${result.games} partidas reais do motor · 6 bots · cenário ${scenario} · semente ${result.seed}`,
   );
   console.table([
     ...result.conditions.map((c) => ({

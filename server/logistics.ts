@@ -1,3 +1,4 @@
+import { markDisorganized } from '../shared/morale';
 import type { GameState, TurnResolutionReport } from '../shared/types';
 import { atWar, clamp, unitCount, supplyLimit } from '../shared/rules';
 import { commanderFor } from '../shared/military';
@@ -14,6 +15,7 @@ export function applyEncirclement(g: GameState, report: TurnResolutionReport) {
     a.encircled = true;
     const count = unitCount(a);
     a.morale = clamp(a.morale - 20);
+    markDisorganized(a);
     removeUnits(a, commanderFor(g, a)?.trait === 'QUARTERMASTER' ? 0 : Math.ceil(count * 0.15));
     report.encirclements.push({
       battalionId: a.id,

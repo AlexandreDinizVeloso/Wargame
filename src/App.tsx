@@ -75,21 +75,27 @@ function download(game: GameView, format: 'json' | 'txt') {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function Manual({ close }: { close: () => void }) {
+function Manual({
+  close,
+  active = true,
+  onActivate,
+}: {
+  close: () => void;
+  active?: boolean;
+  onActivate?: () => void;
+}) {
   return (
-    <div className="modal-backdrop">
-      <section
-        className="game-modal manual-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Manual de campanha"
-      >
-        <header>
-          <span className="eyebrow">A ARTE DE GOVERNAR</span>
-          <button aria-label="Fechar manual" onClick={close}>
-            <X size={18} />
-          </button>
-        </header>
+    <FloatingWindow
+      id="manual"
+      title="Manual de campanha"
+      width={760}
+      height={640}
+      active={active}
+      onActivate={onActivate}
+      onClose={close}
+    >
+      <section className="manual-modal popup-sheet">
+        <span className="eyebrow">A ARTE DE GOVERNAR</span>
         <h2>Um mundo. Dois legados.</h2>
         <div className="manual-grid">
           <section>
@@ -135,9 +141,10 @@ function Manual({ close }: { close: () => void }) {
         </p>
         <h3>Governe o território</h3>
         <p>
-          Conquistas precisam de pacificação. Mercados ampliam receitas; tropas além do suprimento
-          sofrem atrito. Cidades Sagradas recolhem dízimos de toda a sua fé. Inquisição converte em
-          uma missão e cria tensão; tolerância requer duas missões e reduz impostos em 10%.
+          Conquistas precisam de pacificação. Exércitos desorganizados devem descansar em terra
+          amiga. Mercados ampliam receitas; tropas além do suprimento sofrem atrito. Cidades
+          Sagradas recolhem dízimos limitados de nações ativas da sua fé. Inquisição converte em uma
+          missão e cria tensão; tolerância requer duas missões e reduz impostos em 10%.
         </p>
         <h3>O preço da guerra</h3>
         <p>
@@ -168,7 +175,7 @@ function Manual({ close }: { close: () => void }) {
           Convocar o conselho <ArrowIcon />
         </button>
       </section>
-    </div>
+    </FloatingWindow>
   );
 }
 function ArrowIcon() {
@@ -186,6 +193,23 @@ export default function App() {
     }
   });
   const PanelWindow = cartographic ? CampaignPanel : FloatingWindow;
+  const [focusedWindow, setFocusedWindow] = useState('');
+  const openMenu = () => {
+    setMenu(true);
+    setFocusedWindow('council-menu');
+  };
+  const closeMenu = () => {
+    setMenu(false);
+    focusRemaining('council-menu');
+  };
+  const openManual = () => {
+    setManual(true);
+    setFocusedWindow('manual');
+  };
+  const closeManual = () => {
+    setManual(false);
+    focusRemaining('manual');
+  };
   const [provinceTab, setProvinceTab] = useState<'build' | 'recruit' | 'diplomacy'>('build');
   const [panels, setPanels] = useState<Panel[]>([]),
     [provinceId, setProvince] = useState(''),
@@ -223,15 +247,48 @@ export default function App() {
     seenWars = useRef(new Set<string>()),
     seenWinner = useRef('');
   const open = (panel: Panel) => {
-    if (cartographic && panel !== 'province' && panel !== 'battalion') setArmy('');
-    setPanels((v) =>
-      cartographic ? [panel] : v.at(-1) === panel ? v : [...v.filter((p) => p !== panel), panel],
-    );
+    setFocusedWindow(panel);
+    setPanels((v) => [
+      ...v.filter(
+        (p) =>
+          p !== panel &&
+          (!(cartographic && (panel === 'province' || panel === 'battalion')) ||
+            (p !== 'province' && p !== 'battalion')),
+      ),
+      panel,
+    ]);
   };
   const close = (panel: Panel) => {
+    if (focusedWindow === panel) focusRemaining(panel);
     if (cartographic && panel === 'battalion') setArmy('');
     setPanels((v) => v.filter((p) => p !== panel));
   };
+  const focusRemaining = (excluded: string) =>
+    setFocusedWindow(
+      [
+        ...panels,
+        ...(manual ? ['manual'] : []),
+        ...(menu ? ['council-menu'] : []),
+        ...(warRequest ? ['war'] : []),
+        ...(endOpen ? ['result'] : []),
+      ]
+        .filter((id) => id !== excluded)
+        .at(-1) ?? '',
+    );
+  const closeWar = () => {
+    setWarRequest(null);
+    focusRemaining('war');
+  };
+  const closeResult = () => {
+    setEndOpen(false);
+    focusRemaining('result');
+  };
+  useEffect(() => {
+    if (warRequest) setFocusedWindow('war');
+  }, [warRequest]);
+  useEffect(() => {
+    if (endOpen) setFocusedWindow('result');
+  }, [endOpen]);
   const playReplay = useCallback(
     (report: TurnResolutionReport) => setReplay({ report, progress: 0, nonce: performance.now() }),
     [],
@@ -292,12 +349,13 @@ export default function App() {
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setArmy('');
-        if (warRequest) setWarRequest(null);
-        else if (manual) setManual(false);
-        else if (menu) setMenu(false);
-        else if (endOpen) setEndOpen(false);
-        else setPanels((v) => v.slice(0, -1));
+        if (focusedWindow === 'war' && warRequest) closeWar();
+        else if (focusedWindow === 'result' && endOpen) closeResult();
+        else if (focusedWindow === 'manual' && manual) closeManual();
+        else if (focusedWindow === 'council-menu' && menu) closeMenu();
+        else if (panels.includes(focusedWindow as Panel)) close(focusedWindow as Panel);
+        else if (manual) closeManual();
+        else if (menu) closeMenu();
         return;
       }
       if (typing(e.target)) return;
@@ -306,7 +364,7 @@ export default function App() {
     };
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
-  }, [manual, menu, endOpen, warRequest]);
+  }, [manual, menu, endOpen, warRequest, panels, focusedWindow]);
   const currentCode = game?.code;
   useEffect(() => {
     setPanels([]);
@@ -324,8 +382,14 @@ export default function App() {
   if (!game)
     return (
       <div className="application" onClickCapture={rootClick}>
-        <Entry send={send} online={status === 'online'} onHelp={() => setManual(true)} />
-        {manual && <Manual close={() => setManual(false)} />}
+        <Entry send={send} online={status === 'online'} onHelp={openManual} />
+        {manual && (
+          <Manual
+            close={closeManual}
+            active={focusedWindow === 'manual'}
+            onActivate={() => setFocusedWindow('manual')}
+          />
+        )}
         <ConnectionToast error={error} status={status} dismiss={() => setError('')} />
       </div>
     );
@@ -469,7 +533,7 @@ export default function App() {
         replay={replay}
       />
       <header className="top-bar framed-panel">
-        <button className="nation-heading" onClick={() => setMenu(true)} title="Conselho da nação">
+        <button className="nation-heading" onClick={openMenu} title="Conselho da nação">
           <CoatOfArms nationId={me.nationId} size={32} />
           <span>
             <strong>{me.nation}</strong>
@@ -482,7 +546,7 @@ export default function App() {
         <div className="top-resources">
           <div
             className="hud-stat"
-            title={`Impostos ${number(eco.taxes, 1)}, comércio ${number(eco.trade, 1)}, dízimos ${number(eco.tithes, 1)}; manutenção ${number(eco.upkeep, 1)}.`}
+            title={`Impostos ${number(eco.taxes, 1)}, comércio ${number(eco.trade, 1)}, dízimos ${number(eco.tithes, 1)}, nós marítimos ${number(eco.maritimeTrade, 1)} (incluídos no comércio); manutenção ${number(eco.upkeep, 1)}.`}
           >
             <Coins size={16} />
             <span>
@@ -583,7 +647,7 @@ export default function App() {
           >
             {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
           </button>
-          <button aria-label="Abrir menu" onClick={() => setMenu(true)}>
+          <button aria-label="Abrir menu" onClick={openMenu}>
             <Menu size={19} />
           </button>
         </div>
@@ -689,7 +753,7 @@ export default function App() {
         {game.enableSecretObjectives && (
           <button onClick={() => open('secret')}>🎯 Meu Objetivo Secreto</button>
         )}
-        <button aria-label="Como jogar" onClick={() => setManual(true)}>
+        <button aria-label="Como jogar" onClick={openManual}>
           <BookOpen size={16} />
         </button>
       </nav>
@@ -712,7 +776,7 @@ export default function App() {
         </button>
       </div>
       <div className="victory-tracker">
-        <button onClick={() => setMenu(true)}>
+        <button onClick={openMenu}>
           <Swords size={14} />
           <span>
             Dominação
@@ -742,13 +806,15 @@ export default function App() {
           playerId={playerId}
           {...warRequest}
           command={command}
-          close={() => setWarRequest(null)}
+          close={closeWar}
+          active={focusedWindow === 'war'}
+          onActivate={() => setFocusedWindow('war')}
         />
       )}
       {panels.includes('skills') && (
         <PanelWindow
           id="skills"
-          active={panels.at(-1) === 'skills'}
+          active={focusedWindow === 'skills'}
           onActivate={() => open('skills')}
           title="Doutrinas & Árvore de Tropas"
           width={660}
@@ -762,7 +828,7 @@ export default function App() {
       {panels.includes('secret') && (
         <PanelWindow
           id="secret"
-          active={panels.at(-1) === 'secret'}
+          active={focusedWindow === 'secret'}
           onActivate={() => open('secret')}
           title="Meu Objetivo Secreto"
           icon={<Flag size={15} />}
@@ -806,7 +872,7 @@ export default function App() {
       {panels.includes('province') && selected && (
         <PanelWindow
           id="province"
-          active={panels.at(-1) === 'province'}
+          active={focusedWindow === 'province'}
           onActivate={() => open('province')}
           title="Inspeção de Província"
           icon={<Castle size={15} />}
@@ -835,7 +901,7 @@ export default function App() {
       {panels.includes('battalion') && selectedArmy && (
         <PanelWindow
           id="battalion"
-          active={panels.at(-1) === 'battalion'}
+          active={focusedWindow === 'battalion'}
           onActivate={() => open('battalion')}
           title="Comando de Batalhão"
           icon={<Swords size={15} />}
@@ -918,7 +984,7 @@ export default function App() {
       {panels.includes('diplomacy') && (
         <PanelWindow
           id="diplomacy"
-          active={panels.at(-1) === 'diplomacy'}
+          active={focusedWindow === 'diplomacy'}
           onActivate={() => open('diplomacy')}
           title="Diplomacia & Guerras"
           icon={<Handshake size={15} />}
@@ -939,7 +1005,7 @@ export default function App() {
       {panels.includes('world') && (
         <PanelWindow
           id="world"
-          active={panels.at(-1) === 'world'}
+          active={focusedWindow === 'world'}
           onActivate={() => open('world')}
           title="Mundo & Coalizões"
           icon={<Crown size={15} />}
@@ -954,7 +1020,7 @@ export default function App() {
       {panels.includes('report') && (
         <PanelWindow
           id="report"
-          active={panels.at(-1) === 'report'}
+          active={focusedWindow === 'report'}
           onActivate={() => open('report')}
           title="Relatório do Turno"
           icon={<ScrollText size={15} />}
@@ -1077,19 +1143,17 @@ export default function App() {
         <span>Espaço + arraste · scroll para zoom</span>
       </div>
       {menu && (
-        <div className="modal-backdrop">
-          <section
-            className="game-modal council-menu"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Conselho da nação"
-          >
-            <header>
-              <span className="eyebrow">SOB A SUA BANDEIRA</span>
-              <button aria-label="Fechar menu" onClick={() => setMenu(false)}>
-                <X size={18} />
-              </button>
-            </header>
+        <FloatingWindow
+          id="council-menu"
+          title="Conselho da nação"
+          width={470}
+          height={620}
+          active={focusedWindow === 'council-menu'}
+          onActivate={() => setFocusedWindow('council-menu')}
+          onClose={closeMenu}
+        >
+          <section className="council-menu popup-sheet">
+            <span className="eyebrow">SOB A SUA BANDEIRA</span>
             <CoatOfArms nationId={me.nationId} size={48} />
             <h2>{me.nation}</h2>
             <p>
@@ -1112,7 +1176,7 @@ export default function App() {
                   } catch {}
                 }}
               />
-              Mapa cartográfico · painel único
+              Mapa cartográfico · HUD compacta
             </label>
             <PlayerNameForm name={me.name} command={command} />
             <label>
@@ -1136,7 +1200,7 @@ export default function App() {
               <button
                 onClick={() => {
                   setMenu(false);
-                  setManual(true);
+                  openManual();
                 }}
               >
                 <BookOpen size={15} />
@@ -1171,22 +1235,20 @@ export default function App() {
               </button>
             </div>
           </section>
-        </div>
+        </FloatingWindow>
       )}
       {endOpen && game.phase === 'finished' && (
-        <div className="modal-backdrop">
-          <section
-            className="game-modal result-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Resultado da campanha"
-          >
-            <header>
-              <span className="eyebrow">A CRÔNICA FOI ESCRITA</span>
-              <button aria-label="Fechar resultado" onClick={() => setEndOpen(false)}>
-                <X size={18} />
-              </button>
-            </header>
+        <FloatingWindow
+          id="result"
+          title="Resultado da campanha"
+          width={600}
+          height={650}
+          active={focusedWindow === 'result'}
+          onActivate={() => setFocusedWindow('result')}
+          onClose={closeResult}
+        >
+          <section className="result-modal popup-sheet">
+            <span className="eyebrow">A CRÔNICA FOI ESCRITA</span>
             <Crown size={50} />
             <h2>
               {game.winnerId
@@ -1261,7 +1323,7 @@ export default function App() {
               className="primary"
               onClick={() => {
                 download(game, 'json');
-                setEndOpen(false);
+                closeResult();
               }}
             >
               🏆 Encerrar Campanha e Baixar Relatório
@@ -1272,19 +1334,25 @@ export default function App() {
                 title={game.hostId !== playerId ? 'O anfitrião decide pela sala.' : ''}
                 onClick={() => {
                   command({ type: 'CONTINUE_SANDBOX' });
-                  setEndOpen(false);
+                  closeResult();
                 }}
               >
                 ⚔️ Continuar Jogando (Modo Dominação Livre)
               </button>
             )}
-            <button className="text-button" onClick={() => setEndOpen(false)}>
+            <button className="text-button" onClick={closeResult}>
               Explorar o mapa final
             </button>
           </section>
-        </div>
+        </FloatingWindow>
       )}
-      {manual && <Manual close={() => setManual(false)} />}
+      {manual && (
+        <Manual
+          close={closeManual}
+          active={focusedWindow === 'manual'}
+          onActivate={() => setFocusedWindow('manual')}
+        />
+      )}
       <ConnectionToast error={error} status={status} dismiss={() => setError('')} />
     </div>
   );
