@@ -500,7 +500,7 @@ export function TacticalBar({
           </>
         )}
         <span>Moral {Math.round(army.morale)}%</span>
-        <span>Treinamento {army.training.toFixed(2)}×</span>
+        <span>Treinamento {Math.round(army.training * 100)}%</span>
         <span>
           {commanderFor(game, army)
             ? `${'★'.repeat(commanderFor(game, army)!.stars)} ${TRAITS[commanderFor(game, army)!.trait].name}`
@@ -586,7 +586,7 @@ export function TacticalBar({
       <Meter label="Moral" value={army.morale} />
       {!army.isFleet && p.isCoastal && (
         <p className="transport-hint">
-          ⛵ Travessia Marítima ({goldRules(game) && actor.nationId === 'vespera' ? '7,5' : '15'}{' '}
+          ⛵ Travessia Marítima ({goldRules(game) && actor.nationId === 'vespera' ? '8' : '15'}{' '}
           Ouro) · grátis com frota disponível; estreitos sem custo.
         </p>
       )}

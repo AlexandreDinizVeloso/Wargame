@@ -246,6 +246,11 @@ export function resolveBattle(
     attackerBattalionIds: [a.id],
     defenderBattalionIds: enemies.map((b) => b.id),
     winnerId: defenderId,
+    attackerCompositionBefore: compositionOf(a),
+    defenderCompositionBefore: enemies.reduce((sum, unit) => {
+      for (const key of Object.keys(sum) as (keyof typeof sum)[]) sum[key] += unit[key];
+      return sum;
+    }, zeroComposition()),
     attackerTroops: beforeA,
     defenderTroops: beforeD,
     ...powers,

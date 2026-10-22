@@ -1,3 +1,5 @@
+import WebGLMapBackdrop from './WebGLMapBackdrop';
+import { computeVisibleProvinces, verticalRules } from '../shared/fogOfWar';
 import {
   MAP_LENSES,
   provinceLensColor,
@@ -52,6 +54,8 @@ export interface CameraHandle {
   focus: (p: Province) => void;
 }
 interface Props {
+  fogEnabled?: boolean;
+  onBattle?: (battle: import('../shared/types').BattleReport) => void;
   cartographic?: boolean;
   provinces: Province[];
   players: Player[];
@@ -76,6 +80,8 @@ const heat = (n: number) => `hsl(${145 - clamp(n, 0, 1) * 140} 36% ${38 + clamp(
 const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   {
     provinces,
+    fogEnabled = true,
+    onBattle,
     cartographic = false,
     players,
     mode,
@@ -108,7 +114,10 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
       return;
     }
     setIsTurnReplayPlaying(true);
-    const timer = setTimeout(() => setIsTurnReplayPlaying(false), 4000);
+    const timer = setTimeout(
+      () => setIsTurnReplayPlaying(false),
+      verticalRules(game) ? 6500 : 4000,
+    );
     return () => clearTimeout(timer);
   }, [replay?.nonce]);
   const extent = useMemo(() => {
@@ -269,7 +278,19 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     return owner?.color ?? '#536c67';
   };
   const tradeNodes = game ? seaTradeNodes(game) : [];
-  const armies = game?.battalions.filter((a) => !a.embarkedOnId) ?? [];
+  const visible = game
+    ? computeVisibleProvinces(game, viewerId ?? null)
+    : new Set(provinces.map((p) => p.id));
+  const fogActive =
+    !!game &&
+    verticalRules(game) &&
+    fogEnabled &&
+    game.phase !== 'finished' &&
+    game.winnerId === null;
+  const armies =
+    game?.battalions.filter(
+      (a) => !a.embarkedOnId && (!fogActive || visible.has(a.provinceId) || a.ownerId === viewerId),
+    ) ?? [];
   const routes = armies
     .filter((a) => a.ownerId === (viewerId ?? referenceId) || a.pathQueue.length > 0)
     .map((a) => {
@@ -451,6 +472,14 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         setGrabbing(false);
       }}
     >
+      <WebGLMapBackdrop
+        provinces={provinces}
+        camera={camera}
+        width={bounds.width}
+        height={bounds.height}
+        scale={scale}
+        season={game?.season}
+      />
       <svg
         className="world-map"
         viewBox={`${camera.x - bounds.width / scale / 2} ${camera.y - bounds.height / scale / 2} ${bounds.width / scale} ${bounds.height / scale}`}
@@ -459,7 +488,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
       >
         <defs>
           <MiniatureDefs />
-          {cartographic && <CartographicDefs />}
+          <CartographicDefs />
           <pattern id="ocean-grid" width="80" height="80" patternUnits="userSpaceOnUse">
             <path d="M80 0H0V80" fill="none" stroke="#a8c9cb" strokeWidth=".35" opacity=".13" />
           </pattern>
@@ -471,9 +500,6 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             patternTransform="rotate(35)"
           >
             <path d="M0 0V5" stroke="#f3d598" strokeWidth="1.5" opacity=".3" />
-          </pattern>
-          <pattern id="map-texture" width="6" height="6" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r=".5" fill="#f6e3bd" opacity=".13" />
           </pattern>
           <marker
             id="march-arrow"
@@ -487,34 +513,18 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             <path d="M0 0L10 5L0 10Z" fill="#e0c47c" />
           </marker>
         </defs>
-        {cartographic && (
-          <>
-            <rect
-              x="-5000"
-              y="-5000"
-              width="10000"
-              height="10000"
-              fill="url(#chart-water)"
-              pointerEvents="none"
-            />
-            <rect
-              x="-5000"
-              y="-5000"
-              width="10000"
-              height="10000"
-              fill="url(#chart-waves)"
-              pointerEvents="none"
-            />
-          </>
-        )}
-        <rect
-          x="-5000"
-          y="-5000"
-          width="10000"
-          height="10000"
-          fill="url(#ocean-grid)"
+        <g
+          filter="url(#shoreline-glow)"
           pointerEvents="none"
-        />
+          aria-hidden="true"
+          data-shoreline="double"
+        >
+          {provinces
+            .filter((p) => p.kind === 'LAND')
+            .map((p) => (
+              <path key={p.id} d={p.path} fill="white" />
+            ))}
+        </g>
         {!preview &&
           provinces
             .filter((p) => p.kind === 'LAND' && p.portLevel > 0)
@@ -587,7 +597,9 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   role="button"
                   aria-label={`${p.name}, ${owner?.nation ?? 'terra independente'}`}
                   fill={color(p)}
-                  fillOpacity={cartographic ? 0.94 : 0.78}
+                  fillOpacity={cartographic ? 0.94 : 0.88}
+                  filter={cartographic ? 'url(#province-relief)' : undefined}
+                  data-fogged={fogActive && !visible.has(p.id) ? 'true' : undefined}
                   stroke={
                     destination === 'attack'
                       ? '#ef4444'
@@ -723,9 +735,6 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   {destination === 'attack' ? '⚔️' : destination === 'naval' ? '⚓' : '👣'}
                 </text>
               )}
-              {p.kind === 'LAND' && (
-                <path d={p.path} fill="url(#map-texture)" pointerEvents="none" />
-              )}
               {p.kind === 'LAND' && !preview && (p.pacification < 50 || p.occupierId) && (
                 <path d={p.path} fill="url(#occupation)" pointerEvents="none" />
               )}
@@ -766,7 +775,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   textAnchor="middle"
                   pointerEvents="none"
                 >
-                  +{provinceIncome(game, p).toFixed(1)} 🪙
+                  +{Math.round(provinceIncome(game, p))} 🪙
                 </text>
               )}
               {p.kind === 'LAND' &&
@@ -825,6 +834,49 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             </g>
           );
         })}
+        {fogActive &&
+          provinces
+            .filter((p) => !visible.has(p.id))
+            .map((p) => (
+              <path
+                key={`fog-${p.id}`}
+                className="fog-province"
+                data-fog-province={p.id}
+                d={p.path}
+                fill="url(#fog-of-war-pattern)"
+                pointerEvents="none"
+              />
+            ))}
+        {!replay &&
+          game?.lastReport?.battles.map((battle) => {
+            const p = provinces.find((p) => p.id === battle.provinceId);
+            return p &&
+              (!fogActive ||
+                visible.has(p.id) ||
+                [battle.attackerId, battle.defenderId].includes(viewerId ?? '')) ? (
+              <g
+                key={battle.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Rever batalha em ${p.name}`}
+                data-battle-marker={battle.id}
+                className="historical-battle-marker"
+                transform={`translate(${p.x + 22 / scale} ${p.y - 24 / scale}) scale(${1 / scale})`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBattle?.(battle);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onBattle?.(battle);
+                }}
+              >
+                <circle r="11" fill="#1b2024" stroke="#cbb274" />
+                <text y="4" textAnchor="middle" fontSize="13">
+                  ⚔️
+                </text>
+              </g>
+            ) : null;
+          })}
         {routes.map(({ army, path }) => {
           const from = provinces.find((p) => p.id === army.provinceId)!,
             to = provinces.find((p) => p.id === path[0]);
@@ -928,22 +980,32 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
               const from = provinces.find((p) => p.id === m.fromProvinceId),
                 to = provinces.find((p) => p.id === m.toProvinceId);
               if (!from || !to) return null;
-              const t = Math.min(1, replay.progress / 0.48),
+              const t = verticalRules(game)
+                  ? Math.max(0, Math.min(1, (replay.progress * 6500 - 1500) / 2000))
+                  : Math.min(1, replay.progress / 0.48),
                 ease = t * t * (3 - 2 * t);
               return (
                 <g
                   key={`${m.battalionId}-${i}`}
                   transform={`translate(${from.x + (to.x - from.x) * ease} ${from.y + (to.y - from.y) * ease}) scale(${1 / scale})`}
-                  opacity={replay.progress < 0.6 ? 1 : Math.max(0, 1 - (replay.progress - 0.6) * 5)}
+                  opacity={
+                    verticalRules(game)
+                      ? replay.progress * 6500 >= 1500 && replay.progress * 6500 <= 3500
+                        ? 1
+                        : 0
+                      : replay.progress < 0.6
+                        ? 1
+                        : Math.max(0, 1 - (replay.progress - 0.6) * 5)
+                  }
                 >
                   <circle r="13" fill="#efcf83" fillOpacity=".3" stroke="#f9dea0" />
                   <text textAnchor="middle" y="4" fontSize="13" fill="#f3dfb5">
-                    {m.isFleet ? '⚓' : '➤'}
+                    {m.isFleet ? '⛵' : '⚑'}
                   </text>
                 </g>
               );
             })}
-            {replay.progress > 0.3 &&
+            {replay.progress > (verticalRules(game) ? 3500 / 6500 : 0.3) &&
               replay.report.battles.map((b) => {
                 const p = provinces.find((p) => p.id === b.provinceId);
                 if (!p) return null;

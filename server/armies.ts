@@ -1,3 +1,5 @@
+import { getNationAuthority, spendNationAuthority } from '../shared/economy';
+import { verticalRules } from '../shared/fogOfWar';
 import { technologyCost } from '../shared/world';
 import { goldRules, factionXP } from '../shared/factions';
 import type {
@@ -37,11 +39,15 @@ export function recruitCommander(
     const reserved = reservedResources(g, id);
     assert(!p.ready, 'Reabra suas ordens antes de recrutar um líder.');
     assert(
-      p.gold - reserved.gold >= 60 && p.influence - reserved.influence >= 15,
-      'Líder exige 60 ouro e 15 influência livres.',
+      p.gold - reserved.gold >= 60 &&
+        (verticalRules(g) ? getNationAuthority(p) : p.influence) - reserved.influence >= 15,
+      verticalRules(g)
+        ? 'Líder exige 60 ouro e 15 Autoridade livres.'
+        : 'Líder exige 60 ouro e 15 influência livres.',
     );
     p.gold -= 60;
-    p.influence -= 15;
+    if (verticalRules(g)) spendNationAuthority(p, 15);
+    else p.influence -= 15;
   }
   const c = {
     id: nextId(g, 'commander'),
@@ -188,7 +194,14 @@ export function unlockSkill(g: GameState, id: string, skillId: import('../shared
   const blocked = skillBlock(p, skillId, g);
   assert(!blocked, blocked ?? 'Doutrina indisponível.');
   const s = SKILLS.find((s) => s.id === skillId)!;
-  p.militaryXP -= technologyCost(g, s.tier, s.cost);
+  if (verticalRules(g)) {
+    const reserved = reservedResources(g, id).influence;
+    assert(
+      getNationAuthority(p) - reserved >= technologyCost(g, s.tier, s.cost),
+      'Libere Autoridade reservada antes de pesquisar.',
+    );
+    spendNationAuthority(p, technologyCost(g, s.tier, s.cost));
+  } else p.militaryXP -= technologyCost(g, s.tier, s.cost);
   p.unlockedSkills.push(skillId);
   log(g, `${p.nation} adotou ${s.name}.`);
 }

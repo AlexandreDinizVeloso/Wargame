@@ -9,7 +9,7 @@ export function orderName(o: PlayerOrder, game?: GameView, playerId?: string) {
     case 'AUTO_TRANSPORT':
       return o.fleetId
         ? 'Ponte naval automática (grátis)'
-        : `⛵ Travessia Marítima (${goldRules(game) && game?.players.find((p) => p.id === playerId)?.nationId === 'vespera' ? '7,5' : '15'} Ouro)`;
+        : `⛵ Travessia Marítima (${goldRules(game) && game?.players.find((p) => p.id === playerId)?.nationId === 'vespera' ? '8' : '15'} Ouro)`;
     case 'BOMBARD_COAST':
       return 'Bombardear costa (6 ouro)';
     case 'NAVAL_BRIDGE':

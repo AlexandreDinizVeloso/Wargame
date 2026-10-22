@@ -1,5 +1,15 @@
 export type Sound =
-  'click' | 'coins' | 'march' | 'sail' | 'ping' | 'cannon' | 'war' | 'peace' | 'victory' | 'alert';
+  | 'horn'
+  | 'click'
+  | 'coins'
+  | 'march'
+  | 'sail'
+  | 'ping'
+  | 'cannon'
+  | 'war'
+  | 'peace'
+  | 'victory'
+  | 'alert';
 type Ambience = 'peace' | 'war' | 'off';
 const saved = (key: string, fallback: number) => {
   try {
@@ -15,6 +25,49 @@ class Synthesizer {
   private music: GainNode | null = null;
   private musicTimer: ReturnType<typeof setInterval> | null = null;
   private musicNodes = new Set<OscillatorNode>();
+  private samples = new Map<string, AudioBuffer>();
+  private loadingSamples = false;
+  private async loadSamples() {
+    if (this.loadingSamples || !this.context) return;
+    this.loadingSamples = true;
+    const context = this.context;
+    try {
+      const response = await fetch('/api/audio-assets');
+      if (!response.ok) return;
+      const files: unknown = await response.json();
+      if (!Array.isArray(files)) return;
+      await Promise.allSettled(
+        ['cannon', 'march', 'sail', 'horn', 'coin'].map(async (name) => {
+          for (const extension of ['ogg', 'mp3']) {
+            const filename = `${name}.${extension}`;
+            if (!files.includes(filename)) continue;
+            try {
+              const response = await fetch(`/assets/sfx/${filename}`);
+              if (!response.ok) continue;
+              const bytes = await response.arrayBuffer();
+              if (!bytes.byteLength) continue;
+              this.samples.set(name, await context.decodeAudioData(bytes));
+              return;
+            } catch {}
+          }
+        }),
+      );
+    } catch {}
+  }
+  private sample(name: string): boolean {
+    const buffer = this.samples.get(name);
+    if (!buffer || !this.context || !this.effects) return false;
+    const node = this.context.createBufferSource();
+    node.buffer = buffer;
+    node.connect(this.effects);
+    this.effectNodes.add(node);
+    node.onended = () => {
+      node.disconnect();
+      this.effectNodes.delete(node);
+    };
+    node.start();
+    return true;
+  }
   private noiseBuffers = new Map<string, AudioBuffer>();
   private effectNodes = new Set<AudioScheduledSourceNode>();
   private reverb: GainNode | null = null;
@@ -112,6 +165,7 @@ class Synthesizer {
         convolver.connect(this.effects);
         this.music.connect(this.context.destination);
         this.applyVolumes();
+        void this.loadSamples();
       }
       if (this.context.state === 'suspended')
         void this.context
@@ -307,6 +361,7 @@ class Synthesizer {
   }
   playCombatSound() {
     if (!this.ready()) return;
+    if (this.sample('cannon')) return;
     this.resonance(110, 28, 0, 0.45, 0.24);
     this.burst('brown', 0, 0.65, 'lowpass', 220, 0.9, 0.7, undefined, true);
     this.burst('white', 0.015, 0.13, 'lowpass', 800, 0.17, 0.7, undefined, true);
@@ -319,6 +374,7 @@ class Synthesizer {
   }
   playMarchSound() {
     if (!this.ready()) return;
+    if (this.sample('march')) return;
     const step = 60 / 115 / 3;
     [0, step, step * 2, step * 3].forEach((at, i) => {
       this.burst('brown', at, 0.15, 'lowpass', i % 2 ? 220 : 180, 0.6);
@@ -328,6 +384,7 @@ class Synthesizer {
   }
   playSailSound() {
     if (!this.ready()) return;
+    if (this.sample('sail')) return;
     this.burst('pink', 0, 0.7, 'lowpass', 300, 0.3, 0.7, 900);
     this.burst('brown', 0.09, 0.28, 'bandpass', 400, 0.16, 1.2);
     this.burst('brown', 0.25, 0.35, 'bandpass', 180, 0.12, 10, 270);
@@ -336,7 +393,7 @@ class Synthesizer {
     );
   }
   play(sound: Sound) {
-    if (sound === 'cannon' || sound === 'war') {
+    if (sound === 'cannon') {
       this.playCombatSound();
       return;
     }
@@ -349,6 +406,12 @@ class Synthesizer {
       return;
     }
     if (!this.ready()) return;
+    if (sound === 'horn' || sound === 'war') {
+      if (this.sample('horn')) return;
+      [174.61, 261.63, 349.23].forEach((hz, i) => this.tone(hz, i * 0.12, 0.65, 'sawtooth', 0.025));
+      return;
+    }
+    if (sound === 'coins' && this.sample('coin')) return;
     if (sound === 'click') this.burst('brown', 0, 0.04, 'bandpass', 850, 0.1, 1);
     if (sound === 'coins')
       [2300, 3181, 4769].forEach((hz, i) => this.resonance(hz, hz * 0.998, i * 0.035, 0.16, 0.025));

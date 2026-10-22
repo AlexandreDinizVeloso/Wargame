@@ -1,3 +1,5 @@
+import { getNationAuthority } from '../shared/economy';
+import { verticalRules } from '../shared/fogOfWar';
 import { rightClickProvince } from './map-interactions';
 import { seedBrowserFixtures, fixturePeer, type FixtureSession } from './browser-fixtures';
 import { chromium, type Page } from 'playwright-core';
@@ -136,7 +138,7 @@ try {
   await page.getByLabel('Cenário de Campanha', { exact: true }).selectOption('CLASSIC');
   await page.getByRole('button', { name: /Teatro continental/ }).click();
   await page.getByLabel('Nome da sala', { exact: true }).fill('Fronteiras v0.6');
-  await page.getByLabel('Timer após o primeiro pronto').fill('15');
+  await page.getByLabel('Timer após o primeiro pronto').fill('120');
   await page.getByRole('button', { name: 'Reunir o conselho' }).click();
   await states[0].until((g) => g.phase === 'lobby');
   const room = states[0].get().code;
@@ -402,17 +404,28 @@ try {
   assert.ok((await page.locator('.siege-miniature').count()) > 0);
   await page.screenshot({ path: '.local/screenshots/rc-multiplayer-cerco.png' });
   await page.getByRole('button', { name: 'Fechar Comando de Batalhão', exact: true }).click();
-  const xpBeforeResearch = states[0].get().players[0].militaryXP;
+  const authorityResearch = verticalRules(states[0].get());
+  const xpBeforeResearch = authorityResearch
+    ? getNationAuthority(states[0].get().players[0])
+    : states[0].get().players[0].militaryXP;
   await page.getByRole('button', { name: 'Árvore Militar', exact: true }).click();
   await page.locator('.skill-node').first().waitFor();
   assert.equal(await page.locator('.skill-node').count(), 16);
   await page
     .locator('.skill-node')
     .filter({ hasText: 'Formação de Escudos' })
-    .getByRole('button', { name: 'Desbloquear · 25 XP', exact: true })
+    .getByRole('button', {
+      name: `Desbloquear · 25 ${authorityResearch ? 'Autoridade' : 'XP'}`,
+      exact: true,
+    })
     .click();
   await states[0].until((g) => g.players[0].unlockedSkills.includes('INF_T1'));
-  assert.equal(states[0].get().players[0].militaryXP, xpBeforeResearch - 25);
+  assert.equal(
+    authorityResearch
+      ? getNationAuthority(states[0].get().players[0])
+      : states[0].get().players[0].militaryXP,
+    xpBeforeResearch - 25,
+  );
   await page.screenshot({ path: '.local/screenshots/rc-multiplayer-doutrinas.png' });
   await closeWindows(page);
 
@@ -607,7 +620,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Smoke v0.98 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
+    'Smoke v0.99 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
 } finally {
   await browser.close();

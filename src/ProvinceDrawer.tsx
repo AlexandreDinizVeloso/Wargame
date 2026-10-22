@@ -1,3 +1,5 @@
+import { getNationAuthority } from '../shared/economy';
+import { computeVisibleProvinces, verticalRules } from '../shared/fogOfWar';
 import { goldRules } from '../shared/factions';
 import { buildingSlots, usedSlots } from '../shared/development';
 import { levyReason } from '../shared/emergency';
@@ -56,7 +58,8 @@ export function budgetFor(game: GameView, id: string, order: PlayerOrder) {
     affordable:
       actor.gold - reserved.gold >= cost.gold &&
       actor.manpower - reserved.manpower >= cost.manpower &&
-      actor.influence - reserved.influence >= cost.influence,
+      (verticalRules(game) ? getNationAuthority(actor) : actor.influence) - reserved.influence >=
+        cost.influence,
   };
 }
 export default function ProvinceDrawer({
@@ -179,6 +182,12 @@ export default function ProvinceDrawer({
     (!ruler || ruler.id === me.id || !getRelation(game, me.id, ruler.id)?.allied);
   return (
     <div className="province-ledger">
+      {verticalRules(game) && !computeVisibleProvinces(game, playerId).has(province.id) && (
+        <p className="warning-box">
+          Território sem reconhecimento. Tropas inimigas e cercos não revelados permanecem
+          desconhecidos.
+        </p>
+      )}
       <div className="region-heading">
         <div>
           <span className="eyebrow" style={{ color: ruler?.color }}>
@@ -524,7 +533,7 @@ export default function ProvinceDrawer({
                 </small>
               </span>
               <b>
-                8<Coins size={11} /> +2 influência
+                8<Coins size={11} /> +2 Autoridade
               </b>
             </button>
           </section>
@@ -534,7 +543,10 @@ export default function ProvinceDrawer({
                 <button
                   className="emergency-levy"
                   disabled={!!levyReason(game, playerId)}
-                  title={levyReason(game, playerId) ?? '50 ouro e 15 estabilidade'}
+                  title={
+                    levyReason(game, playerId) ??
+                    (verticalRules(game) ? '50 ouro e 15 Autoridade' : '50 ouro e 15 estabilidade')
+                  }
                   onClick={() => command({ type: 'EMERGENCY_LEVY' })}
                 >
                   🛡️ Convocar Defesa da Pátria

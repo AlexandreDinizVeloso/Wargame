@@ -111,3 +111,30 @@ export function goldReparationPayments(
       return { ...r, amount };
     });
 }
+
+export type AuthorityNation = Pick<
+  import('./types').Player,
+  'influence' | 'prestige' | 'militaryXP'
+>;
+export const integerValue = (value: number) =>
+  Number.isFinite(value) ? Math.round(value) || 0 : 0;
+export function getNationAuthority(nation: AuthorityNation): number {
+  return Math.max(0, integerValue(nation.influence + nation.prestige + nation.militaryXP));
+}
+export function spendNationAuthority(nation: AuthorityNation, cost: number): boolean {
+  if (!Number.isFinite(cost) || cost < 0 || getNationAuthority(nation) < Math.ceil(cost))
+    return false;
+  let remaining = Math.ceil(cost);
+  for (const key of ['influence', 'militaryXP', 'prestige'] as const) {
+    const amount = Math.min(Math.max(0, nation[key]), remaining);
+    nation[key] -= amount;
+    remaining -= amount;
+  }
+  return true;
+}
+
+export function integerEventText(text: string): string {
+  return text.replace(/(?<![\w.])(-?\d+)[.,](\d+)(?![\d.])/g, (value) =>
+    String(integerValue(Number(value.replace(',', '.')))),
+  );
+}

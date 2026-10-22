@@ -59,12 +59,17 @@ try {
     });
   });
   const base = `http://127.0.0.1:${port}`;
-  const open = async (session?: FixtureSession) => {
+  const open = async (session?: FixtureSession, renderer?: string) => {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 960 },
       reducedMotion: 'reduce',
     });
     await context.addInitScript(() => localStorage.setItem('concordia-music-volume', '0'));
+    if (renderer)
+      await context.addInitScript(
+        (value) => localStorage.setItem('concordia-renderer', value),
+        renderer,
+      );
     await context.addInitScript(() => {
       const stats = { buffers: 0, oscillatorTypes: [] as string[] };
       (window as unknown as { foleyStats: typeof stats }).foleyStats = stats;
@@ -606,9 +611,68 @@ try {
     await friend.page.getByLabel('Código da sala', { exact: true }).inputValue(),
     roomUI.get().code,
   );
+  const cinema = await open(fixtures.cinematic[0]);
+  await cinema.page.locator('[data-interface="cartographic"]').waitFor();
+  assert.equal(await cinema.page.locator('.top-resources .hud-stat').count(), 3);
+  await cinema.page.locator('.webgl-map-backdrop[data-renderer="canvas2d"]').waitFor();
+  assert.ok((await cinema.page.locator('[data-fog-province]').count()) > 0);
+  assert.ok(!cinema.get().battalions.some((a) => a.name === 'Exército secreto no Japão'));
+  assert.equal(await cinema.page.locator('#chart-mountains,#chart-forest,#map-texture').count(), 0);
+  assert.equal(await cinema.page.locator('[data-shoreline="double"]').count(), 1);
+  await cinema.page.getByRole('button', { name: '👁️ Névoa Ativa', exact: true }).click();
+  assert.equal(await cinema.page.locator('[data-fog-province]').count(), 0);
+  assert.ok(!cinema.get().battalions.some((a) => a.name === 'Exército secreto no Japão'));
+  await cinema.page.getByRole('button', { name: '👁️ Névoa Oculta', exact: true }).click();
+  await cinema.page.screenshot({ path: '.local/screenshots/v099-imperial-map.png' });
+  await cinema.page.getByRole('button', { name: 'Rever batalha em Portugal', exact: true }).click();
+  const stage = cinema.page.getByRole('dialog', { name: 'Palco Tático de Batalha', exact: true });
+  await stage.waitFor();
+  assert.equal(await stage.locator('.combat-line').count(), 6);
+  await stage.locator('.battle-verdict').waitFor();
+  const battle = cinema.get().lastReport!.battles[0];
+  assert.equal(
+    await stage.locator('[data-battle-troops="attacker"]').textContent(),
+    String(battle.attackerTroops - battle.attackerCasualties),
+  );
+  await cinema.page.screenshot({ path: '.local/screenshots/v099-tactical-battle.png' });
+  await stage.getByRole('button', { name: 'Fechar Palco Tático de Batalha', exact: true }).click();
+  // Relógio controlado verifica cada fase independentemente da taxa de quadros do CI.
+  const replayTime = new Date();
+  await cinema.page.clock.install({ time: replayTime });
+  await cinema.page.clock.pauseAt(replayTime);
+  await cinema.page.getByRole('button', { name: 'Rever Animação do Turno', exact: true }).click();
+  await cinema.page.locator('[data-cinematic-phase="decrees"]').waitFor();
+  await cinema.page.clock.fastForward(1600);
+  await cinema.page.locator('[data-cinematic-phase="march"]').waitFor();
+  await cinema.page.clock.fastForward(2000);
+  await cinema.page.locator('[data-cinematic-phase="battle"]').waitFor();
+  await stage.waitFor();
+  await cinema.page.getByRole('button', { name: 'Encerrar animação', exact: true }).click();
+  assert.equal(await stage.count(), 0);
+  assert.equal(await cinema.page.locator('.turn-sequencer').count(), 0);
+  await cinema.page.clock.resume();
+  await cinema.page.setViewportSize({ width: 390, height: 844 });
+  await viewport(cinema.page);
+  await cinema.page.screenshot({ path: '.local/screenshots/v099-mobile-map.png' });
+  const shader = await open(fixtures.cinematic[0], 'webgl');
+  await shader.page.locator('.webgl-map-backdrop[data-renderer="webgl"]').waitFor();
+  await shader.page.screenshot({ path: '.local/screenshots/v099-webgl-ocean.png' });
+  assert.equal(
+    await shader.page
+      .locator('canvas.webgl-map-backdrop')
+      .evaluate((element) => (element as HTMLCanvasElement).getContext('webgl')!.getError()),
+    0,
+  );
+  await shader.page
+    .locator('canvas.webgl-map-backdrop')
+    .evaluate((canvas) =>
+      canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true })),
+    );
+  await shader.page.locator('.webgl-map-backdrop[data-renderer="canvas2d"]').waitFor();
+  await shader.context.close();
   assert.deepEqual(errors, []);
   console.log(
-    'v0.98 cartográfico passou: SVG sem caixas, seis construções, neve/cerco, inspeção 480×540, seleção/movimento/pan, janelas persistentes, sinais efêmeros, replay limitado a 4s, áudio Foley, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas; cinco lentes F1–F5, outliner O/Tab, tratados Gold, time-lapse, perfil persistente, save portátil e Friend-Pass.',
+    'v0.99 cartográfico passou: SVG sem caixas, seis construções, neve/cerco, inspeção 480×540, seleção/movimento/pan, janelas persistentes, sinais efêmeros, replay limitado a 4s, áudio Foley, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas; cinco lentes F1–F5, outliner O/Tab, tratados Gold, time-lapse, perfil persistente, save portátil e Friend-Pass.',
   );
 } catch (error) {
   await debugPage?.screenshot({ path: '.local/screenshots/rc-failure.png' }).catch(() => {});

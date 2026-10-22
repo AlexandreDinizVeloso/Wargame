@@ -1,3 +1,4 @@
+import { integerEventText } from '../shared/economy';
 import type { Battalion, Composition, GameState, Player, Province } from '../shared/types';
 import {
   atWar,
@@ -30,6 +31,7 @@ export function battalionOf(g: Pick<GameState, 'battalions'>, id: string) {
 }
 export const nextId = (g: GameState, prefix: string) => `${prefix}-${g.nextId++}`;
 export function log(g: GameState, text: string, kind: GameState['log'][number]['kind'] = 'system') {
+  text = integerEventText(text);
   g.log.push({ id: (g.log.at(-1)?.id ?? 0) + 1, turn: g.turn, text, kind });
   g.notifications ??= [];
   g.notifications.push({

@@ -1,6 +1,16 @@
-# Concórdia — Atlas de Impérios · v0.98
+# Concórdia — Atlas de Impérios · v0.99
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
+
+## v0.99 · Vertical Slice Reborn
+
+- Mapa híbrido WebGL/SVG, oceano animado, relevo localizado e interface imperial.
+- Três recursos na HUD: Ouro, Recrutas e Autoridade; valores econômicos e de poder em inteiros.
+- Névoa de guerra validada pelo servidor nas novas campanhas.
+- Replay em três fases e palco tático animado, móvel e redimensionável.
+- Fontes locais e áudio híbrido, com síntese automática quando não houver gravações.
+
+Veja [regras, compatibilidade e validação v0.99](docs/V0_99.md). Salas anteriores preservam suas regras e saves.
 
 ## v0.98 · Gold Candidate
 

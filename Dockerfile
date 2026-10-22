@@ -15,6 +15,7 @@ COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
 COPY server ./server
 COPY shared ./shared
+COPY public ./public
 RUN npm run build
 
 FROM node:20-alpine AS runtime

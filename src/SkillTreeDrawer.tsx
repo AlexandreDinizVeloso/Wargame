@@ -1,3 +1,5 @@
+import { getNationAuthority } from '../shared/economy';
+import { verticalRules } from '../shared/fogOfWar';
 import { technologyCost } from '../shared/world';
 import type { GameView } from '../shared/types';
 import { BRANCHES, SKILLS, skillBlock } from '../shared/military';
@@ -16,7 +18,9 @@ export default function SkillTreeDrawer({
     <div className="skill-tree-ledger">
       <h2>🎖️ Doutrinas & Árvore de Tropas</h2>
       <p className="xp-balance">
-        {me.militaryXP} XP militar · +10 por rodada, +15 por batalha e +8 ao treinar
+        {verticalRules(game)
+          ? `${getNationAuthority(me)} Autoridade · doutrinas, diplomacia e decretos`
+          : `${me.militaryXP} XP militar · +10 por rodada, +15 por batalha e +8 ao treinar`}
       </p>
       {Object.entries(BRANCHES).map(([branch, title]) => (
         <section className="skill-branch" key={branch}>
@@ -31,7 +35,8 @@ export default function SkillTreeDrawer({
                   key={s.id}
                 >
                   <small>
-                    NÍVEL {s.tier} · {technologyCost(game, s.tier, s.cost)} XP
+                    NÍVEL {s.tier} · {technologyCost(game, s.tier, s.cost)}{' '}
+                    {verticalRules(game) ? 'Autoridade' : 'XP'}
                     {s.tier === 2 ? ' · ESCOLHA EXCLUSIVA A/B' : ''}
                   </small>
                   <strong>{s.name}</strong>
@@ -45,7 +50,8 @@ export default function SkillTreeDrawer({
                       ? '✓ Desbloqueada'
                       : me.ready
                         ? 'Reabra suas ordens'
-                        : (reason ?? `Desbloquear · ${technologyCost(game, s.tier, s.cost)} XP`)}
+                        : (reason ??
+                          `Desbloquear · ${technologyCost(game, s.tier, s.cost)} ${verticalRules(game) ? 'Autoridade' : 'XP'}`)}
                   </button>
                 </article>
               );

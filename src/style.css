@@ -6105,3 +6105,500 @@ legend {
     animation: none;
   }
 }
+
+/* v0.99 — Imperial War-Table */
+:root {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  --gold: #c6a86a;
+  --gold-light: #ecd9a4;
+  --line: rgba(212, 175, 55, 0.45);
+  --panel: rgba(18, 23, 26, 0.97);
+  --muted: #aba995;
+  color: #e7dfc7;
+  background: #10191e;
+}
+h1,
+h2,
+h3,
+.brand strong,
+.nation-heading strong,
+.era-pill,
+.primary,
+.entry-header strong {
+  font-family: 'Cinzel', Georgia, serif;
+  letter-spacing: 0.035em;
+}
+.framed-panel,
+.top-bar,
+.bottom-toolbar,
+.atlas-panel,
+.topbar-modal,
+.panel-window {
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 2px;
+  background: linear-gradient(120deg, #242928f5, #121a20fa 58%, #1e2526f5);
+  box-shadow:
+    inset 0 0 0 2px #0a1118,
+    inset 0 0 0 3px #9f824c35,
+    0 9px 30px #0005;
+}
+.panel-window-header,
+.topbar-modal-header {
+  border-bottom: 1px solid #bb985e70;
+  background: linear-gradient(90deg, #171e23, #30332c, #171e23);
+  font-family: 'Cinzel', Georgia, serif;
+}
+button {
+  border-radius: 2px;
+  background: linear-gradient(155deg, #303832e8, #1b2429fa);
+  box-shadow: inset 0 1px #ead9a314;
+}
+button.primary,
+.confirm-orders:not(:disabled) {
+  color: #211c13;
+  border-color: #e4cf8c;
+  background: linear-gradient(145deg, #ead89e, #b9944f 50%, #d5b971);
+  box-shadow:
+    inset 0 0 0 2px #6f542c50,
+    0 3px 8px #0005;
+  text-shadow: 0 1px #fff5;
+}
+button:hover:not(:disabled) {
+  border-color: #ecd598;
+  background-color: #3a4037;
+}
+.webgl-map-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+.world-map {
+  position: relative;
+  z-index: 1;
+  background: transparent !important;
+}
+.map-stage {
+  background: #0d242c;
+  isolation: isolate;
+}
+.map-lens-selector {
+  max-width: min(620px, calc(100vw - 20px));
+}
+.fog-toggle {
+  font-size: 10px;
+  min-height: 23px;
+  padding: 3px 8px;
+  float: right;
+}
+.fog-province {
+  transition: opacity 0.5s;
+}
+.historical-battle-marker {
+  cursor: pointer;
+}
+.historical-battle-marker:hover circle {
+  stroke: #ffe9a4;
+  stroke-width: 2;
+}
+.top-resources {
+  gap: 20px;
+}
+.top-resources .hud-stat strong {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 25px;
+  font-variant-numeric: tabular-nums;
+}
+.top-resources .authority-stat {
+  display: flex;
+}
+.top-resources .hud-stat small {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+.turn-sequencer {
+  position: fixed;
+  z-index: 85;
+  top: 135px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(620px, calc(100vw - 24px));
+  text-align: center;
+  padding: 16px 22px;
+  pointer-events: auto;
+  animation: imperial-banner 0.45s ease-out;
+}
+.turn-sequencer small {
+  letter-spacing: 0.18em;
+  color: #c8ae76;
+  font-size: 9px;
+}
+.turn-sequencer h2 {
+  font-size: 18px;
+  margin: 9px 0;
+}
+.turn-sequencer p {
+  font-family: 'EB Garamond', serif;
+  font-size: 17px;
+  margin: 8px 0;
+}
+.turn-sequencer progress {
+  height: 3px;
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  accent-color: #d4b46b;
+}
+.turn-sequencer > div {
+  display: flex;
+  gap: 9px;
+  justify-content: center;
+}
+.tactical-battle-stage {
+  position: fixed;
+  z-index: 100;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -43%);
+  width: min(940px, calc(100vw - 24px));
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+  padding: 18px 24px;
+  background: radial-gradient(ellipse at 50% 75%, #5c513242, #151f25 72%), #131d24;
+}
+.battle-stage-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px double #ac905a80;
+  padding-bottom: 10px;
+}
+.battle-stage-heading h2 {
+  margin: 6px 0;
+  font-size: 24px;
+}
+.battle-stage-heading small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.battle-field {
+  display: grid;
+  grid-template-columns: 1fr 56px 1fr;
+  gap: 12px;
+  padding: 18px 0;
+  position: relative;
+}
+.battle-side header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 60px;
+  border-left: 3px solid var(--realm-color);
+  padding-left: 12px;
+}
+.battle-side h3 {
+  margin: 4px 0;
+  font-size: 14px;
+}
+.battle-side small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.battle-strength {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+.battle-strength strong {
+  font:
+    36px 'EB Garamond',
+    serif;
+}
+.battle-strength span {
+  color: #e8a28a;
+}
+.battle-side label {
+  display: block;
+  font-size: 11px;
+}
+.battle-side label b {
+  float: right;
+}
+.battle-side progress {
+  width: 100%;
+  height: 6px;
+  accent-color: #9cb789;
+  display: block;
+  margin: 8px 0 16px;
+}
+.combat-lines {
+  display: grid;
+  gap: 10px;
+}
+.combat-line {
+  min-height: 74px;
+  padding: 7px 10px;
+  border: 1px solid #9a865c38;
+  background: linear-gradient(110deg, #b2ad7b08, #08192188);
+}
+.combat-miniatures {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  margin: 4px 0;
+}
+.combat-miniatures span {
+  font-size: 20px;
+  filter: drop-shadow(2px 3px 1px #0008);
+}
+.combat-miniatures b {
+  margin-left: auto;
+  font-family: 'EB Garamond', serif;
+  font-size: 20px;
+}
+.battle-crossfire {
+  position: relative;
+  display: grid;
+  place-items: center;
+  color: #b89d62;
+}
+.battle-crossfire i {
+  position: absolute;
+  width: 45px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #ffe7a6, #df8f36);
+  opacity: 0;
+  animation: combat-volley 0.83s ease-out 3;
+}
+.battle-crossfire i:nth-child(2) {
+  top: 65%;
+  animation-delay: 0.2s;
+  transform: rotate(180deg);
+}
+.battle-crossfire i:nth-child(3) {
+  top: 83%;
+  animation-delay: 0.4s;
+}
+.tactical-battle-stage:not(.battle-complete) .combat-miniatures span {
+  animation: combat-recoil 0.83s ease-out 3;
+}
+.tactical-battle-stage:not(.battle-complete) .battle-strength span {
+  animation: casualty-flash 0.83s ease-out 3;
+}
+.tactical-battle-stage footer {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #ac905a80;
+  padding-top: 13px;
+  font-size: 11px;
+}
+.battle-verdict {
+  font:
+    15px 'Cinzel',
+    serif;
+  color: #ecd291;
+  animation: verdict-stamp 0.25s ease-out;
+}
+@keyframes imperial-banner {
+  from {
+    opacity: 0;
+    margin-top: -15px;
+  }
+  to {
+    opacity: 1;
+    margin-top: 0;
+  }
+}
+@keyframes combat-volley {
+  0% {
+    opacity: 0;
+    translate: -45px 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    translate: 45px 0;
+  }
+}
+@keyframes combat-recoil {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  20% {
+    translate: -3px 1px;
+    filter: brightness(1.7) drop-shadow(0 0 4px #dfb56b);
+  }
+  40% {
+    translate: 1px 0;
+  }
+}
+@keyframes casualty-flash {
+  0%,
+  60%,
+  100% {
+    color: #e8a28a;
+  }
+  20% {
+    color: #ff4f3c;
+    text-shadow: 0 0 12px #f44;
+  }
+}
+@keyframes verdict-stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.15) rotate(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (max-width: 800px) {
+  .top-resources {
+    gap: 10px;
+  }
+  .top-resources .hud-stat strong {
+    font-size: 20px;
+  }
+  .turn-sequencer {
+    top: 145px;
+    padding: 10px;
+  }
+  .turn-sequencer h2 {
+    font-size: 14px;
+  }
+  .tactical-battle-stage {
+    padding: 12px;
+    max-height: calc(100dvh - 30px);
+    transform: translate(-50%, -50%);
+  }
+  .battle-field {
+    grid-template-columns: 1fr 20px 1fr;
+    gap: 6px;
+  }
+  .battle-side h3 {
+    font-size: 11px;
+  }
+  .battle-side header {
+    padding-left: 5px;
+    gap: 4px;
+  }
+  .combat-miniatures {
+    flex-wrap: wrap;
+  }
+  .combat-miniatures span {
+    font-size: 15px;
+  }
+  .tactical-battle-stage footer {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .battle-stage-heading h2 {
+    font-size: 18px;
+  }
+  .top-resources .reserves-stat {
+    display: flex;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .combat-miniatures span,
+  .battle-crossfire i,
+  .battle-verdict,
+  .turn-sequencer,
+  .battle-strength span {
+    animation: none !important;
+  }
+}
+
+.tactical-battle-window {
+  z-index: 100 !important;
+}
+.tactical-battle-window .tactical-battle-stage {
+  position: static;
+  transform: none;
+  width: 100%;
+  max-height: none;
+  border: 0;
+  box-shadow: none;
+  padding: 14px;
+}
+.tactical-battle-window .window-body {
+  padding: 0;
+  overflow: auto;
+}
+
+.turn-sequencer {
+  z-index: 110;
+}
+.turn-sequencer[data-cinematic-phase='battle'] {
+  top: 105px;
+  padding: 6px 12px;
+  width: min(540px, calc(100vw - 24px));
+}
+.turn-sequencer[data-cinematic-phase='battle'] > small,
+.turn-sequencer[data-cinematic-phase='battle'] h2,
+.turn-sequencer[data-cinematic-phase='battle'] p {
+  display: none;
+}
+.turn-sequencer[data-cinematic-phase='battle'] progress {
+  margin: 0 0 4px;
+}
+.turn-sequencer[data-cinematic-phase='battle'] button {
+  min-height: 28px;
+  padding: 4px 9px;
+  font-size: 10px;
+}
+
+.release-candidate-interface .top-resources .reserves-stat {
+  display: flex;
+}
+.map-lens-selector button.fog-toggle {
+  font-size: 10px;
+  min-height: 25px;
+}
+@media (max-width: 700px) {
+  .game-viewport.release-candidate-interface .top-resources {
+    gap: 6px;
+    min-width: 0;
+  }
+  .game-viewport.release-candidate-interface .top-resources .hud-stat {
+    min-width: 0;
+    gap: 3px;
+    flex: 1;
+  }
+  .game-viewport.release-candidate-interface .top-resources .hud-stat strong {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .game-viewport.release-candidate-interface .top-resources .hud-stat > svg {
+    width: 11px;
+    min-width: 11px;
+  }
+  .game-viewport.release-candidate-interface .top-resources .hud-stat small {
+    font-size: 6px;
+    letter-spacing: 0;
+  }
+  .map-lens-selector button.fog-toggle {
+    float: none;
+    width: 100%;
+    display: block;
+    padding: 4px;
+    font-size: 10px;
+  }
+  .outliner-dock {
+    top: 300px;
+  }
+}

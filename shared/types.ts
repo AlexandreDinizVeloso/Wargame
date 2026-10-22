@@ -275,6 +275,8 @@ export interface Reparation {
   rate: number;
 }
 export interface BattleReport {
+  attackerCompositionBefore?: Composition;
+  defenderCompositionBefore?: Composition;
   id: string;
   turn: number;
   provinceId: string;
@@ -456,6 +458,7 @@ export interface ChatEntry {
   text: string;
 }
 export interface MatchConfig {
+  verticalSlice?: boolean;
   ruleset?: 'GOLD_098';
   campaignId?: string;
   sourceReport?: { code: string; turn: number };
@@ -465,7 +468,7 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0';
+  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0' | '0.99.0';
   tutorial?: boolean;
   enableSecretObjectives: boolean;
   allowBotSecretVictory: boolean;

@@ -1,3 +1,4 @@
+import { verticalRules } from './fogOfWar';
 import { FACTION_TRAITS, goldRules } from './factions';
 export { FACTION_TRAITS, FRIEND_PASS } from './factions';
 import { offensiveBlock } from './morale';
@@ -727,6 +728,19 @@ export function orderCost(
   } else if (o.type === 'TRAIN_BATTALION') gold = 6;
   else if (o.type === 'DIPLOMACY' && ['SEND_SUBSIDY', 'FUND_REBELS'].includes(o.action))
     gold = o.amount ?? 0;
+  if (
+    verticalRules(g) &&
+    o.type === 'DIPLOMACY' &&
+    [
+      'PROPOSE_ALLIANCE',
+      'MILITARY_ACCESS',
+      'OFFER_VASSALAGE',
+      'BUY_VISION_OR_BRIHC',
+      'EMBARGO',
+      'FUND_REBELS',
+    ].includes(o.action)
+  )
+    influence = 3;
   return { gold: roundMoney(gold), manpower, influence };
 }
 export function reservedResources(

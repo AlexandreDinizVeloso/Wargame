@@ -129,25 +129,71 @@ export function seedBrowserFixtures(filename: string) {
   for (const p of captured) p.occupierId = gold.players[0].id;
   goldWar.battleWins = 5;
   resolveTurn(gold);
-  const rooms = [alerts, sandbox, transport, lobby, visual, gold].map((game: GameState) => {
-    const auth = game.players.map((p) => ({
-      code: game.code,
-      playerId: p.id,
-      token: randomBytes(24).toString('hex'),
-    }));
-    sessions.set(game.code, auth);
-    return {
-      game,
-      touched: Date.now(),
-      remainingMs: 60000,
-      sessions: auth.map((s) => ({
-        playerId: s.playerId,
-        tokenHash: createHash('sha256').update(s.token).digest('hex'),
-      })),
-    };
+  const cinematic = make('VERT99');
+  cinematic.matchConfig.ruleset = 'GOLD_098';
+  cinematic.matchConfig.verticalSlice = true;
+  cinematic.matchConfig.createdVersion = '0.99.0';
+  cinematic.matchConfig.campaignId = 'browser-vertical-099';
+  cinematic.graceUntilTurn = 0;
+  cinematic.enableSecretObjectives = false;
+  cinematic.matchConfig.enableSecretObjectives = false;
+  const [cinHost, cinEnemy] = cinematic.players;
+  cinHost.gold = 500;
+  cinHost.influence = 40;
+  cinHost.militaryXP = 30;
+  declareWar(cinematic, cinEnemy.id, cinHost.id, 'CONQUEST');
+  const clash = createBattalion(
+    cinematic,
+    cinEnemy.id,
+    'portugal',
+    compositionOf({ infantry: 14, cavalry: 2, artillery: 1 }),
+    { morale: 90, training: 1.2, name: 'Coluna de Invasão' },
+  );
+  const cinematicReport = emptyTurnReport(cinematic.turn, cinematic.diet);
+  resolveBattle(
+    cinematic,
+    clash,
+    cinematic.provinces.find((p) => p.id === 'portugal')!,
+    cinematicReport,
+  );
+  cinematic.lastReport = cinematicReport;
+  cinematic.reports.push(cinematicReport);
+  cinematic.history.push({
+    ...structuredClone(cinematicReport),
+    nations: structuredClone(cinematic.players),
+    wars: structuredClone(cinematic.wars),
+    control: cinematic.provinces.map((p) => ({
+      provinceId: p.id,
+      ownerId: p.ownerId,
+      occupierId: p.occupierId,
+    })),
   });
+  createBattalion(cinematic, cinEnemy.id, 'japan', compositionOf({ infantry: 20 }), {
+    morale: 80,
+    name: 'Exército secreto no Japão',
+  });
+  const rooms = [alerts, sandbox, transport, lobby, visual, gold, cinematic].map(
+    (game: GameState) => {
+      const auth = game.players.map((p) => ({
+        code: game.code,
+        playerId: p.id,
+        token: randomBytes(24).toString('hex'),
+      }));
+      sessions.set(game.code, auth);
+      return {
+        game,
+        touched: Date.now(),
+        remainingMs: 60000,
+        sessions: auth.map((s) => ({
+          playerId: s.playerId,
+          tokenHash: createHash('sha256').update(s.token).digest('hex'),
+        })),
+      };
+    },
+  );
   writeSnapshot(filename, rooms, Date.now());
   return {
+    cinematic: sessions.get('VERT99')!,
     gold: sessions.get('GOLD98')!,
     visual: sessions.get('VISRC9')!,
     lobby: sessions.get('LOBBY6')!,

@@ -89,13 +89,13 @@ export default function BattlePreviewTooltip({
     >
       <strong>{province.name} · Prévia tática</strong>
       <div>
-        ⚔️ Seu Poder Estimado <b>{preview.attackPower.toFixed(1)}</b> vs. 🛡️ Defesa Local{' '}
-        <b>{preview.defensePower.toFixed(1)}</b>
+        ⚔️ Seu Poder Estimado <b>{Math.round(preview.attackPower)}</b> vs. 🛡️ Defesa Local{' '}
+        <b>{Math.round(preview.defensePower)}</b>
       </div>
       <ul>
         <li>
-          Terreno: {TERRAIN_LABELS[province.terrain]} · defesa{' '}
-          {province.terrainDefenseBonus.toFixed(2)}×
+          Terreno: {TERRAIN_LABELS[province.terrain]} · defesa +
+          {Math.round((province.terrainDefenseBonus - 1) * 100)}%
         </li>
         <li>
           Forte: {province.fortLevel} · {preview.neutralizedFortLevels} neutralizado(s)
@@ -107,7 +107,7 @@ export default function BattlePreviewTooltip({
             : 'sem líder'}
         </li>
         <li>
-          Moral: {Math.round(army.morale)}% · treino {army.training.toFixed(2)}×
+          Moral: {Math.round(army.morale)}% · treino {Math.round(army.training * 100)}%
         </li>
       </ul>
       <b
