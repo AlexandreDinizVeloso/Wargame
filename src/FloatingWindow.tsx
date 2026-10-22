@@ -8,7 +8,7 @@ interface Geometry {
   docked: boolean;
   minimized: boolean;
 }
-interface Props {
+export interface WindowProps {
   id: string;
   title: string;
   icon?: ReactNode;
@@ -34,7 +34,7 @@ export function FloatingWindow({
   active = false,
   onActivate,
   className = '',
-}: Props) {
+}: WindowProps) {
   const key = `concordia-v4-window-${id}`,
     root = useRef<HTMLElement>(null);
   const defaults = (): Geometry => ({

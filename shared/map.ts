@@ -11,6 +11,8 @@ export interface ProvinceStaticData {
   baseTax: number;
   baseSupplyLimit: number;
   neighbors: string[];
+  straitNeighbors: string[];
+  straitSeaIds: Record<string, string>;
   rings: number[][][];
   path: string;
   x: number;
@@ -41,6 +43,11 @@ export const CONTINENTS: Record<Continent, string> = {
   ASIA: 'Ásia e Pacífico',
 };
 export const THEATERS: Theater[] = ['EUROPE', 'AMERICAS', 'ASIA'];
+export const isLegacySeaShortcut = (a: string, b: string) =>
+  (a === 'china-east' && b === 'japan') ||
+  (b === 'china-east' && a === 'japan') ||
+  (a === 'lowlands' && b === 'britain') ||
+  (b === 'lowlands' && a === 'britain');
 const SEAS: [string, string, number[], string[], string[]][] = [
   [
     'north-atlantic',
@@ -81,7 +88,7 @@ const SEAS: [string, string, number[], string[], string[]][] = [
     'western-med',
     'Mediterrâneo Ocidental',
     [-2, 33, 14, 41],
-    ['castile', 'france', 'italy', 'maghreb'],
+    ['portugal', 'castile', 'france', 'italy', 'maghreb'],
     ['north-atlantic', 'eastern-med'],
   ],
   [
@@ -134,6 +141,36 @@ const SEAS: [string, string, number[], string[], string[]][] = [
     ['south-china-sea', 'north-pacific'],
   ],
 ];
+export const STRAITS: readonly [string, string, string][] = [
+  ['portugal', 'maghreb', 'western-med'],
+  ['castile', 'maghreb', 'western-med'],
+  ['france', 'britain', 'north-atlantic'],
+  ['scandinavia', 'germany', 'baltic'],
+  ['scandinavia', 'lowlands', 'baltic'],
+  ['italy', 'maghreb', 'western-med'],
+  ['italy', 'balkans', 'eastern-med'],
+  ['italy', 'greece', 'eastern-med'],
+  ['greece', 'anatolia', 'eastern-med'],
+  ['balkans', 'anatolia', 'eastern-med'],
+  ['nile', 'arabia', 'eastern-med'],
+  ['arabia', 'horn', 'indian-west'],
+  ['malaya', 'archipelago', 'indian-east'],
+  ['korea', 'japan', 'east-asian-sea'],
+  ['alaska', 'siberia', 'arctic'],
+  ['caribbean', 'central-america', 'caribbean-sea'],
+  ['caribbean', 'usa-east', 'caribbean-sea'],
+  ['caribbean', 'colombia', 'caribbean-sea'],
+];
+export const WORLD_STARTS = {
+  vespera: ['portugal', 'castile'],
+  ferro_norte: ['scandinavia', 'muscovy'],
+  aurelia: ['nile', 'maghreb'],
+  sol_invicto: ['arabia', 'persia'],
+  kaldor: ['south-africa', 'east-africa'],
+  turan: ['mongolia', 'siberia'],
+  sapiencia: ['china-east', 'indochina'],
+  veridia: ['amazon', 'colombia'],
+} as const;
 const pathOf = (rings: number[][][]) =>
   rings.map((r) => `M${r.map((p) => p.join(',')).join('L')}Z`).join('');
 export function makeStaticMap(
@@ -164,6 +201,8 @@ export function makeStaticMap(
     return {
       ...g,
       kind: 'LAND',
+      straitNeighbors: [],
+      straitSeaIds: {},
       continent: g.continent as Continent,
       rings: g.rings,
       path: pathOf(g.rings),
@@ -197,6 +236,8 @@ export function makeStaticMap(
         id,
         name,
         kind: 'SEA_ZONE',
+        straitNeighbors: [],
+        straitSeaIds: {},
         continent: 'SEA_ZONE',
         terrain: 'coastal',
         terrainDefenseBonus: 1,
@@ -217,7 +258,7 @@ export function makeStaticMap(
   const all = [...land.filter((p) => ids.has(p.id)), ...seas];
   const active = new Set(all.map((p) => p.id));
   for (const p of all) {
-    p.neighbors = p.neighbors.filter((id) => active.has(id));
+    p.neighbors = p.neighbors.filter((id) => active.has(id) && !isLegacySeaShortcut(p.id, id));
     if (p.kind === 'LAND')
       for (const s of seas) if (s.neighbors.includes(p.id)) p.neighbors.push(s.id);
     p.neighbors = [...new Set(p.neighbors)];
@@ -227,6 +268,19 @@ export function makeStaticMap(
       const other = all.find((q) => q.id === id)!;
       if (!other.neighbors.includes(p.id)) other.neighbors.push(p.id);
     }
+  for (const [a, b, sea] of STRAITS) {
+    const from = all.find((p) => p.id === a),
+      to = all.find((p) => p.id === b);
+    if (!from || !to || !active.has(sea)) continue;
+    for (const [p, q] of [
+      [from, to],
+      [to, from],
+    ]) {
+      if (!p.neighbors.includes(q.id)) p.neighbors.push(q.id);
+      p.straitNeighbors.push(q.id);
+      p.straitSeaIds[q.id] = sea;
+    }
+  }
   return all;
 }
 export function makeMap(mode: GameMode = 'campaign', theater: Theater = 'EUROPE'): Province[] {
@@ -246,6 +300,8 @@ export function makeMap(mode: GameMode = 'campaign', theater: Theater = 'EUROPE'
     maxBuildingSlots:
       p.strategicResource === 'GOLD_MINE' || p.strategicResource === 'RELIC' ? 3 : 2,
     siege: null,
+    recruitedThisTurn: 0,
+    recruitmentTurn: 0,
     conversion: 0,
     conversionReligion: null,
     conversionInstigatorId: null,

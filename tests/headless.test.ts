@@ -112,7 +112,7 @@ test('servidor headless responde sem frontend e recupera a campanha após SIGKIL
     commanderTraits: Record<string, unknown>;
     buildings: Record<string, unknown>;
   };
-  assert.equal(schema.protocolVersion, 5);
+  assert.equal(schema.protocolVersion, 6);
   for (const type of ['BUILD_BUILDING', 'DEMOLISH_BUILDING', 'ASSAULT_SIEGE', 'NAVAL_BRIDGE'])
     assert.ok(schema.orderTypes.includes(type));
   assert.equal(schema.skills.length, 16);

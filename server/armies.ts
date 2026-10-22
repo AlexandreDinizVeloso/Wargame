@@ -148,7 +148,7 @@ export function instantArmyAction(g: GameState, id: string, action: InstantArmyA
     combine(g, target, a);
   } else for (const b of [...g.battalions.filter(compatible)]) combine(g, a, b);
 }
-export function autoMerge(g: GameState) {
+export function autoMerge(g: GameState, moved?: Set<string>) {
   const units = [...g.battalions].sort((a, b) => a.id.localeCompare(b.id));
   for (const a of units) {
     if (
@@ -171,8 +171,10 @@ export function autoMerge(g: GameState) {
         !b.stranded &&
         !b.embarkedArmyId &&
         !b.embarkedOnId
-      )
+      ) {
+        if (moved && (moved.has(a.id) || moved.has(b.id))) moved.add(a.id);
         combine(g, a, b);
+      }
   }
 }
 export function unlockSkill(g: GameState, id: string, skillId: import('../shared/types').SkillId) {

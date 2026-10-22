@@ -127,7 +127,7 @@ export function objectiveCards(g: GameState, p: Player): SecretObjective[] {
       capitalId: rival.originalCapitalId ?? undefined,
       requirements: [
         req('rival', 'Capital original rival ocupada ou anexada', 1),
-        req('share', 'Percentual de terras', 45),
+        req('share', 'Percentual de terras', 55),
       ],
     },
     {
@@ -136,7 +136,7 @@ export function objectiveCards(g: GameState, p: Player): SecretObjective[] {
       name: 'Pax Hegemônica',
       requirements: [
         req('partners', 'Vassalos ou aliados com confiança ≥30', Math.min(2, g.players.length - 1)),
-        req('share', 'Percentual de terras', 45),
+        req('share', 'Percentual de terras', 55),
         req('streak', 'Rodadas com maior exército e estabilidade ≥85', 3),
         req('stability', 'Estabilidade', 85),
       ],

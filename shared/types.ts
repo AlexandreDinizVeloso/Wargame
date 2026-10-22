@@ -42,6 +42,7 @@ export interface Battalion extends Composition {
   autoMerge: boolean;
   infantryPower: number;
   artilleryPower: number;
+  encircled: boolean;
 }
 export type ArmyUnit = Battalion;
 export interface ProvinceRuntimeState {
@@ -58,6 +59,8 @@ export interface ProvinceRuntimeState {
   templeLevel: number;
   maxBuildingSlots: number;
   siege: Siege | null;
+  recruitedThisTurn: number;
+  recruitmentTurn: number;
   conversion: number;
   conversionReligion: ReligionId | null;
   conversionInstigatorId: string | null;
@@ -85,6 +88,13 @@ export type BattalionOrder =
     }
   | { type: 'MERGE_ALL'; battalionId: string }
   | { type: 'NAVAL_BRIDGE'; battalionId: string; fleetId: string; targetProvinceId: string }
+  | {
+      type: 'AUTO_TRANSPORT';
+      battalionId: string;
+      targetProvinceId: string;
+      fleetId?: string;
+      seaPath?: string[];
+    }
   | { type: 'MERGE_BATTALIONS'; battalionId: string; targetBattalionId: string }
   | { type: 'SPLIT_BATTALION'; battalionId: string; composition: Composition; name?: string }
   | {
@@ -196,6 +206,10 @@ export interface Player {
   moraleBonusUntil: number;
   disarmUntil: number;
   armyCap: number;
+  manpowerCap: number;
+  emergencyLevyTurn: number | null;
+  homelandDefenseUntil: number;
+  lostProvinceIds: string[];
   aggressiveExpansion: number;
   fervor: number;
   secretObjectives: SecretObjective[];
@@ -370,6 +384,9 @@ export interface TurnResolutionReport {
   diet: DietEvent;
   world: { season: Season; event: GlobalEvent | null; coalitions: Coalition[] };
   events: string[];
+  notifications: GameNotification[];
+  desertions: { battalionId: string; ownerId: string; provinceId: string; losses: number }[];
+  encirclements: { battalionId: string; ownerId: string; provinceId: string; losses: number }[];
 }
 export interface TurnHistory extends TurnResolutionReport {
   nations: Player[];
@@ -393,16 +410,23 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.5.0';
+  createdVersion: '0.6.0';
   enableSecretObjectives: boolean;
+  allowBotSecretVictory: boolean;
   legacyResult?: {
     winnerId: string | null;
     objective: string | null;
-    version: '0.2.0' | '0.3.0' | '0.4.0';
+    version: '0.2.0' | '0.3.0' | '0.4.0' | '0.5.0';
   };
 }
 export interface GameState {
-  version: 5;
+  version: 6;
+  allowBotSecretVictory: boolean;
+  graceUntilTurn: number;
+  sandboxContinued: boolean;
+  victoryRecord: { winnerId: string | null; objective: Objective | null; turn: number } | null;
+  notifications: GameNotification[];
+  notificationReads: Record<string, string[]>;
   code: string;
   roomName: string;
   isPublic: boolean;
@@ -448,10 +472,17 @@ export interface GameState {
   history: TurnHistory[];
   pendingDiplomacy: DiplomaticChangeReport[];
 }
-export type GameView = Omit<GameState, 'orders' | 'seed' | 'nextId' | 'pendingDiplomacy'> & {
+export type GameView = Omit<
+  GameState,
+  'orders' | 'seed' | 'nextId' | 'pendingDiplomacy' | 'notificationReads'
+> & {
   plannedOrders: PlayerOrder[];
+  readNotificationIds: string[];
 };
 export type GameCommand =
+  | { type: 'EMERGENCY_LEVY' }
+  | { type: 'CONTINUE_SANDBOX' }
+  | { type: 'READ_NOTIFICATIONS'; notificationIds: string[] }
   | { type: 'SUBMIT_ORDER'; order: PlayerOrder }
   | { type: 'INSTANT_ARMY_ACTION'; action: InstantArmyAction }
   | { type: 'ASSIGN_LEADER'; battalionId: string; commanderId: string | null }
@@ -464,6 +495,8 @@ export type GameCommand =
   | { type: 'START_GAME' }
   | { type: 'SET_MODE'; mode: GameMode; theater?: Theater }
   | { type: 'SET_IDENTITY'; nationId: NationId; religiousPolicy?: ReligiousPolicy }
+  | { type: 'SET_PLAYER_NAME'; name: string }
+  | { type: 'SET_BOT_NATION'; playerId: string; nationId: NationId }
   | { type: 'SET_RELIGIOUS_POLICY'; policy: ReligiousPolicy }
   | { type: 'ADD_BOT' }
   | { type: 'REPLACE_WITH_BOT'; playerId: string }
@@ -482,6 +515,7 @@ export type GameCommand =
       roomName: string;
       isPublic: boolean;
       enableSecretObjectives: boolean;
+      allowBotSecretVictory?: boolean;
       turnTimerSeconds: number;
     }
   | {
@@ -492,6 +526,7 @@ export type GameCommand =
       battalionId: string;
       targetProvinceId: string;
       bridgeFleetId?: string;
+      autoTransport?: boolean;
     }
   | { type: 'CALL_TO_ARMS'; warId: string; allyId: string };
 export type ClientMessage =
@@ -505,6 +540,7 @@ export type ClientMessage =
       roomName?: string;
       isPublic?: boolean;
       enableSecretObjectives?: boolean;
+      allowBotSecretVictory?: boolean;
       turnTimerSeconds?: number;
     }
   | { type: 'join'; code: string; name: string; nationId?: NationId }
@@ -517,7 +553,7 @@ export type ServerMessage =
   | { type: 'error'; message: string }
   | { type: 'left' };
 export interface MatchTelemetry {
-  schemaVersion: 5;
+  schemaVersion: 6;
   matchConfig: MatchConfig;
   nations: Player[];
   turnByTurnHistory: TurnHistory[];
@@ -640,5 +676,31 @@ export function emptyTurnReport(turn: number, diet: ImperialDiet): TurnResolutio
     diet: { turn, ...structuredClone(diet) },
     world: { season: 'SPRING', event: null, coalitions: [] },
     events: [],
+    notifications: [],
+    encirclements: [],
+    desertions: [],
   };
+}
+
+export interface GameNotification {
+  id: string;
+  turn: number;
+  type:
+    | 'DECLARE_WAR'
+    | 'CALL_TO_ARMS'
+    | 'SIEGE_STARTED'
+    | 'PEACE_OFFER'
+    | 'BATTALION_WIPED'
+    | 'VICTORY_WARNING'
+    | 'BATTLE'
+    | 'ENCIRCLEMENT'
+    | 'EMERGENCY_LEVY'
+    | 'ECONOMY'
+    | 'DIPLOMACY'
+    | 'WORLD';
+  text: string;
+  involvesPlayerIds: string[];
+  severity: 'CRITICAL' | 'WARNING' | 'INFO';
+  focusProvinceId?: string;
+  offerId?: string;
 }

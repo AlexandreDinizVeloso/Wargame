@@ -44,7 +44,7 @@ const send = (ws: WebSocket, message: ServerMessage) => {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
 };
 function readCommand(msg: Record<string, unknown>): GameCommand {
-  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 5.');
+  assert(msg.type === 'command', 'Cliente antigo: atualize a página para o protocolo 6.');
   return parseCommand(msg.command);
 }
 const nationOfMessage = (value: unknown): NationId | undefined => {
@@ -216,6 +216,13 @@ export function attachRooms(server: Server, options: Options = {}) {
               : `Campanha ${code}`;
           g.isPublic = msg.isPublic !== false;
           g.enableSecretObjectives = msg.enableSecretObjectives !== false;
+          assert(
+            msg.allowBotSecretVictory === undefined ||
+              typeof msg.allowBotSecretVictory === 'boolean',
+            'Opção de vitória de bots inválida.',
+          );
+          g.allowBotSecretVictory = msg.allowBotSecretVictory === true;
+          g.matchConfig.allowBotSecretVictory = g.allowBotSecretVictory;
           if (msg.turnTimerSeconds !== undefined)
             assert(
               Number.isInteger(msg.turnTimerSeconds) &&

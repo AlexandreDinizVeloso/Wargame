@@ -38,7 +38,7 @@ test('imposto mantém pacificação/revolta e aplica tolerância e bloqueio', ()
     } = setup(),
     p = g.provinces[0];
   Object.assign(p, { baseTax: 6, pacification: 40, unrest: 30, marketLevel: 2, religion: 'SOLAR' });
-  close(effectiveTax(p, a.faith, true, 'TOLERANCE'), 6 * 0.4 * 0.85 * 0.85 * 0.5 * 0.9);
+  close(effectiveTax(p, a.faith, true, 'TOLERANCE'), 0.55 * 6 * 0.4 * 0.85 * 0.85 * 0.5 * 0.9);
   p.pacification = 0;
   assert.equal(effectiveTax(p, a.faith), 0);
 });
@@ -93,7 +93,7 @@ test('limite, atrito, custo progressivo e manutenção mercenária seguem as fó
   Object.assign(p, { baseSupplyLimit: 10, fortLevel: 2, pacification: 80, portLevel: 0 });
   assert.equal(supplyLimit(p), 18);
   assert.equal(attritionLoss(31, 18), 2);
-  close(armyUpkeep(31, 0, 18), 0.35 * (18 + 13 ** 1.25));
+  close(armyUpkeep(31, 0, 18), 0.75 * (18 + 13 * 3));
   close(armyUpkeep(31, 31, 18), armyUpkeep(31, 0, 18) * 2.2);
   army(g, a.id, p.id, { infantry: 31 });
   const r = resolveTurn(g);
@@ -109,7 +109,7 @@ test('separar formações não cria suprimento nem reduz manutenção progressiv
   p.portLevel = 0;
   army(g, a.id, p.id, { infantry: 20 });
   army(g, a.id, p.id, { infantry: 20 });
-  close(realmEconomy(g, a.id).upkeep, Math.round(armyUpkeep(40, 0, 10) * 100) / 100);
+  close(realmEconomy(g, a.id).upkeep, 0.75 * (13 + (40 - 13) * 3));
 });
 test('infantaria tem ataque 1 e defesa 1,2; moral e treinamento entram no poder', () => {
   const {
@@ -393,7 +393,8 @@ test('reparações, humilhação, religião forçada e submissão têm efeitos r
   ]);
   assert.equal(a.gold, gold + 10);
   assert.equal(b.faith, a.faith);
-  assert.equal(b.armyCap, 8);
+  assert.equal(b.armyCap, 13);
+  assert.equal(b.disarmUntil, g.turn + 3);
   assert.equal(a.moraleBonusUntil, g.turn + 3);
   assert.equal(g.reparations[0].rate, 0.25);
   const second = setup(),
@@ -410,8 +411,9 @@ test('doutrinas, cidades sagradas e inquisição alteram a economia e conversão
   } = setup();
   const city = g.provinces.find((p) => p.id === holyCityId('SOLAR', g.provinces))!;
   city.ownerId = a.id;
+  a.faith = 'SOLAR';
   for (const p of g.provinces.filter((p) => p.kind === 'LAND')) p.religion = 'SOLAR';
-  assert.ok(realmEconomy(g, a.id).tithes >= 1.5 * 56);
+  close(realmEconomy(g, a.id).tithes, 1.5);
   const p = g.provinces[0];
   a.faith = 'MERCHANT';
   a.religiousPolicy = 'INQUISITION';

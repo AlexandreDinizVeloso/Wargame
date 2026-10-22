@@ -1,4 +1,10 @@
-import { bridgeOptions } from '../shared/naval';
+import {
+  CartographicDefs,
+  ProvinceRelief,
+  ProvinceShading,
+  InfrastructureSymbols,
+} from './CartographicLayers';
+import { crossingOptions } from '../shared/naval';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type {
   Battalion,
@@ -66,6 +72,7 @@ export interface CameraHandle {
   focus: (p: Province) => void;
 }
 interface Props {
+  cartographic?: boolean;
   provinces: Province[];
   players: Player[];
   mode: MapMode;
@@ -87,6 +94,7 @@ const heat = (n: number) => `hsl(${145 - clamp(n, 0, 1) * 140} 36% ${38 + clamp(
 const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   {
     provinces,
+    cartographic = false,
     players,
     mode,
     referenceId,
@@ -106,7 +114,8 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   ref,
 ) {
   const root = useRef<HTMLDivElement>(null),
-    [bounds, setBounds] = useState({ width: 1440, height: 900 });
+    [bounds, setBounds] = useState({ width: 1440, height: 900 }),
+    [hoveredId, setHoveredId] = useState('');
   const extent = useMemo(() => {
     const points = provinces.filter((p) => p.kind === 'LAND').flatMap((p) => p.rings.flat());
     const xs = points.map((p) => p[0]),
@@ -263,7 +272,11 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     .filter((a) => a.ownerId === (viewerId ?? referenceId) || a.pathQueue.length > 0)
     .map((a) => {
       const order = orders.find(
-        (o) => (o.type === 'MOVE_BATTALION' || o.type === 'NAVAL_BRIDGE') && o.battalionId === a.id,
+        (o) =>
+          (o.type === 'MOVE_BATTALION' ||
+            o.type === 'NAVAL_BRIDGE' ||
+            o.type === 'AUTO_TRANSPORT') &&
+          o.battalionId === a.id,
       );
       const path =
         order?.type === 'MOVE_BATTALION'
@@ -271,12 +284,14 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             (order.targetProvinceId && game
               ? (unitPath(game, a, order.targetProvinceId) ?? [])
               : []))
-          : order?.type === 'NAVAL_BRIDGE'
-            ? [
-                game!.battalions.find((f) => f.id === order.fleetId)!.provinceId,
-                order.targetProvinceId,
-              ]
-            : a.pathQueue;
+          : order?.type === 'AUTO_TRANSPORT'
+            ? [...(order.seaPath ?? []), order.targetProvinceId]
+            : order?.type === 'NAVAL_BRIDGE'
+              ? [
+                  game!.battalions.find((f) => f.id === order.fleetId)?.provinceId ?? a.provinceId,
+                  order.targetProvinceId,
+                ]
+              : a.pathQueue;
       return { army: a, path };
     })
     .filter((r) => r.path.length);
@@ -287,7 +302,19 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   const highlight = (p: Province) => {
     if (!selectedArmy || !current || !game) return null;
     if (!current.neighbors.includes(p.id))
-      return bridgeOptions(game, selectedArmy, p).length ? 'naval' : null;
+      return crossingOptions(game, selectedArmy, p, orders, true).length ? 'naval' : null;
+    const strait = current.straitSeaIds?.[p.id];
+    if (
+      strait &&
+      game.battalions.some(
+        (f) =>
+          f.isFleet &&
+          f.warships > 0 &&
+          f.provinceId === strait &&
+          atWar(game, selectedArmy.ownerId, f.ownerId),
+      )
+    )
+      return null;
     if (selectedArmy.embarkedOnId)
       return p.kind === 'LAND' && p.isCoastal && canUnitVisit(game, selectedArmy, p)
         ? 'naval'
@@ -424,6 +451,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         aria-label="Mapa-múndi estratégico com províncias orgânicas"
       >
         <defs>
+          {cartographic && <CartographicDefs />}
           <pattern id="ocean-grid" width="80" height="80" patternUnits="userSpaceOnUse">
             <path d="M80 0H0V80" fill="none" stroke="#a8c9cb" strokeWidth=".35" opacity=".13" />
           </pattern>
@@ -451,7 +479,34 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             <path d="M0 0L10 5L0 10Z" fill="#e0c47c" />
           </marker>
         </defs>
-        <rect x="-5000" y="-5000" width="10000" height="10000" fill="url(#ocean-grid)" />
+        {cartographic && (
+          <>
+            <rect
+              x="-5000"
+              y="-5000"
+              width="10000"
+              height="10000"
+              fill="url(#chart-water)"
+              pointerEvents="none"
+            />
+            <rect
+              x="-5000"
+              y="-5000"
+              width="10000"
+              height="10000"
+              fill="url(#chart-waves)"
+              pointerEvents="none"
+            />
+          </>
+        )}
+        <rect
+          x="-5000"
+          y="-5000"
+          width="10000"
+          height="10000"
+          fill="url(#ocean-grid)"
+          pointerEvents="none"
+        />
         {[
           ...provinces.filter((p) => p.kind === 'SEA_ZONE'),
           ...provinces.filter((p) => p.kind === 'LAND'),
@@ -461,6 +516,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           const destination = highlight(p);
           return (
             <g key={p.id}>
+              {cartographic && <ProvinceRelief province={p} scale={scale} />}
               <path
                 className={`province-shape ${destination ? `destination-${destination}` : ''}`}
                 data-destination={destination ?? undefined}
@@ -471,7 +527,9 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                 role="button"
                 aria-label={`${p.name}, ${p.kind === 'SEA_ZONE' ? 'zona marítima' : (owner?.nation ?? 'terra independente')}`}
                 fill={color(p)}
-                fillOpacity={p.kind === 'SEA_ZONE' ? 0.3 : 0.78}
+                fillOpacity={
+                  p.kind === 'SEA_ZONE' ? (cartographic ? 0.12 : 0.3) : cartographic ? 0.94 : 0.78
+                }
                 stroke={
                   destination === 'attack'
                     ? '#ef4444'
@@ -487,6 +545,18 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                 }
                 strokeOpacity={destination ? 1 : selected ? 1 : p.kind === 'SEA_ZONE' ? 0.35 : 0.55}
                 strokeWidth={destination ? 3 / scale : selected ? 2 / scale : 0.6 / scale}
+                onPointerEnter={() => {
+                  if (cartographic) setHoveredId(p.id);
+                }}
+                onPointerLeave={() => {
+                  if (cartographic) setHoveredId('');
+                }}
+                onFocus={() => {
+                  if (cartographic) setHoveredId(p.id);
+                }}
+                onBlur={() => {
+                  if (cartographic) setHoveredId('');
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!dragged.current && !preview) pick(p);
@@ -495,32 +565,86 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   if (e.key === 'Enter') pick(p);
                 }}
               />
-              {!preview && p.strategicResource && (
-                <g
-                  className={`resource-badge ${mode === 'ECONOMIC_SUPPLY' ? 'emphasized' : ''}`}
-                  pointerEvents="none"
-                >
-                  <title>
-                    {RESOURCES[p.strategicResource].name}: {RESOURCES[p.strategicResource].effect}
-                  </title>
-                  <circle
-                    cx={p.x + 17 / scale}
-                    cy={p.y - 22 / scale}
-                    r={(mode === 'ECONOMIC_SUPPLY' ? 11 : 8) / scale}
-                    fill="#172933"
-                    stroke="#e0c47c"
-                    strokeWidth={0.7 / scale}
-                  />
-                  <text
-                    x={p.x + 17 / scale}
-                    y={p.y - 18 / scale}
-                    textAnchor="middle"
-                    fontSize={(mode === 'ECONOMIC_SUPPLY' ? 13 : 10) / scale}
-                  >
-                    {RESOURCES[p.strategicResource].icon}
-                  </text>
-                </g>
+              {cartographic && <ProvinceShading province={p} />}
+              {cartographic && !preview && (
+                <InfrastructureSymbols
+                  province={p}
+                  scale={scale}
+                  expanded={camera.zoom > 1.5 || selected || mode === 'ECONOMIC_SUPPLY'}
+                />
               )}
+              {!preview &&
+                p.straitNeighbors
+                  .filter((id) => p.id < id)
+                  .map((id) => {
+                    const to = provinces.find((q) => q.id === id);
+                    if (!to) return null;
+                    const dx = to.x - p.x;
+                    const wrap = Math.abs(dx) > 720 ? (dx > 0 ? -1440 : 1440) : 0;
+                    return (
+                      <g key={id} className="strait-link" pointerEvents="none">
+                        <title>
+                          Estreito: {p.name} ↔ {to.name}
+                        </title>
+                        <path
+                          d={`M${p.x},${p.y}L${to.x + wrap},${to.y}${wrap ? `M${p.x - wrap},${p.y}L${to.x},${to.y}` : ''}`}
+                          fill="none"
+                          stroke="#ebca83"
+                          strokeWidth={1.2 / scale}
+                          strokeDasharray={`${5 / scale} ${4 / scale}`}
+                        />
+                      </g>
+                    );
+                  })}
+              {destination === 'naval' &&
+                (!cartographic || hoveredId === p.id || selected) &&
+                p.kind === 'LAND' &&
+                selectedArmy &&
+                game &&
+                !current?.neighbors.includes(p.id) && (
+                  <text
+                    className="charter-price"
+                    x={p.x}
+                    y={p.y + 29 / scale}
+                    fontSize={10 / scale}
+                    textAnchor="middle"
+                    pointerEvents="none"
+                  >
+                    ⛵ {crossingOptions(game, selectedArmy, p, orders, true)[0]?.cost ?? 0} ouro
+                  </text>
+                )}
+              {!preview &&
+                p.strategicResource &&
+                (!cartographic ||
+                  camera.zoom > 2.2 ||
+                  hoveredId === p.id ||
+                  selected ||
+                  mode === 'ECONOMIC_SUPPLY') && (
+                  <g
+                    className={`resource-badge ${mode === 'ECONOMIC_SUPPLY' ? 'emphasized' : ''}`}
+                    pointerEvents="none"
+                  >
+                    <title>
+                      {RESOURCES[p.strategicResource].name}: {RESOURCES[p.strategicResource].effect}
+                    </title>
+                    <circle
+                      cx={p.x + 17 / scale}
+                      cy={p.y - 22 / scale}
+                      r={(mode === 'ECONOMIC_SUPPLY' ? 11 : 8) / scale}
+                      fill="#172933"
+                      stroke="#e0c47c"
+                      strokeWidth={0.7 / scale}
+                    />
+                    <text
+                      x={p.x + 17 / scale}
+                      y={p.y - 18 / scale}
+                      textAnchor="middle"
+                      fontSize={(mode === 'ECONOMIC_SUPPLY' ? 13 : 10) / scale}
+                    >
+                      {RESOURCES[p.strategicResource].icon}
+                    </text>
+                  </g>
+                )}
               {destination && (
                 <text
                   className="destination-icon"
@@ -563,7 +687,8 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
               )}
               {p.kind === 'LAND' &&
                 (preview ||
-                  camera.zoom > 1.2 ||
+                  camera.zoom > (cartographic ? 2.2 : 1.2) ||
+                  (cartographic && (selected || hoveredId === p.id || !!p.capitalOf)) ||
                   provinces.filter((p) => p.kind === 'LAND').length <= 16) && (
                   <text
                     className="province-label"
@@ -655,67 +780,76 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           );
         })}
         {!preview &&
-          armies.map((a) => {
-            const p = provinces.find((p) => p.id === a.provinceId);
-            if (!p) return null;
-            const local = armies.filter((b) => b.provinceId === p.id),
-              index = local.findIndex((b) => b.id === a.id),
-              offset = ((index - (local.length - 1) / 2) * 27) / scale;
-            const owner = players.find((p) => p.id === a.ownerId),
-              selected = a.id === selectedArmyId;
-            return (
-              <g
-                key={a.id}
-                className={`army-token ${selected ? 'selected' : ''} ${a.stranded ? 'stranded' : ''}`}
-                data-battalion={a.id}
-                data-province={p.id}
-                transform={`translate(${p.x + offset} ${p.y + 3 / scale}) scale(${1 / scale})`}
-                tabIndex={0}
-                role="button"
-                aria-label={`${a.name}, ${unitCount(a)} ${a.isFleet ? 'navios' : 'tropas'}, ${owner?.nation ?? 'milícia local'}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!dragged.current) onSelectArmy?.(a);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onSelectArmy?.(a);
-                }}
-              >
-                <rect
-                  x="-12"
-                  y="-10"
-                  width="24"
-                  height="26"
-                  rx={a.isFleet ? 9 : 3}
-                  fill="#111e2d"
-                  fillOpacity=".97"
-                  stroke={selected ? '#ffde92' : (owner?.color ?? '#9da8a4')}
-                  strokeWidth={selected ? 2 : 1}
-                />
-                <path
-                  d={
-                    a.isFleet
-                      ? 'M-6 0H6L3 5H-3ZM0-6V0M0-5L5-1H0'
-                      : 'M-6-5H-1V5H-6ZM-5-8L-2-5M2-4L7 3M7-4L2 3'
-                  }
-                  stroke={owner?.color ?? '#abb9ad'}
-                  fill={a.isFleet ? 'none' : (owner?.color ?? '#abb9ad')}
-                  strokeWidth="1"
-                />
-                <text y="12" textAnchor="middle" fill="#f4e5c7" fontSize="9" fontWeight="700">
-                  {unitCount(a)}
-                </text>
-                <rect
-                  x="-9"
-                  y="14"
-                  width={(18 * a.morale) / 100}
-                  height="2"
-                  fill={a.morale > 50 ? '#82bd98' : a.morale > 25 ? '#d7b35b' : '#de7770'}
-                />
-                {a.entrenched && <path d="M-14 17V21H14V17" fill="none" stroke="#e6c984" />}
-              </g>
-            );
-          })}
+          armies
+            .filter(
+              (a) =>
+                !cartographic ||
+                a.ownerId !== 'NEUTRAL' ||
+                camera.zoom > 2.2 ||
+                a.provinceId === selectedId ||
+                a.provinceId === hoveredId,
+            )
+            .map((a) => {
+              const p = provinces.find((p) => p.id === a.provinceId);
+              if (!p) return null;
+              const local = armies.filter((b) => b.provinceId === p.id),
+                index = local.findIndex((b) => b.id === a.id),
+                offset = ((index - (local.length - 1) / 2) * 27) / scale;
+              const owner = players.find((p) => p.id === a.ownerId),
+                selected = a.id === selectedArmyId;
+              return (
+                <g
+                  key={a.id}
+                  className={`army-token ${selected ? 'selected' : ''} ${a.stranded ? 'stranded' : ''}`}
+                  data-battalion={a.id}
+                  data-province={p.id}
+                  transform={`translate(${p.x + offset} ${p.y + 3 / scale}) scale(${1 / scale})`}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${a.name}, ${unitCount(a)} ${a.isFleet ? 'navios' : 'tropas'}, ${owner?.nation ?? 'milícia local'}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!dragged.current) onSelectArmy?.(a);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') onSelectArmy?.(a);
+                  }}
+                >
+                  <rect
+                    x="-12"
+                    y="-10"
+                    width="24"
+                    height="26"
+                    rx={a.isFleet ? 9 : 3}
+                    fill="#111e2d"
+                    fillOpacity=".97"
+                    stroke={selected ? '#ffde92' : (owner?.color ?? '#9da8a4')}
+                    strokeWidth={selected ? 2 : 1}
+                  />
+                  <path
+                    d={
+                      a.isFleet
+                        ? 'M-6 0H6L3 5H-3ZM0-6V0M0-5L5-1H0'
+                        : 'M-6-5H-1V5H-6ZM-5-8L-2-5M2-4L7 3M7-4L2 3'
+                    }
+                    stroke={owner?.color ?? '#abb9ad'}
+                    fill={a.isFleet ? 'none' : (owner?.color ?? '#abb9ad')}
+                    strokeWidth="1"
+                  />
+                  <text y="12" textAnchor="middle" fill="#f4e5c7" fontSize="9" fontWeight="700">
+                    {unitCount(a)}
+                  </text>
+                  <rect
+                    x="-9"
+                    y="14"
+                    width={(18 * a.morale) / 100}
+                    height="2"
+                    fill={a.morale > 50 ? '#82bd98' : a.morale > 25 ? '#d7b35b' : '#de7770'}
+                  />
+                  {a.entrenched && <path d="M-14 17V21H14V17" fill="none" stroke="#e6c984" />}
+                </g>
+              );
+            })}
         {replay && (
           <g className="turn-replay" pointerEvents="none">
             {replay.report.movements.map((m, i) => {

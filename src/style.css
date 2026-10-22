@@ -3659,3 +3659,473 @@ legend {
     grid-column: 1 !important;
   }
 }
+/* v0.6: personal alerts, transport and recruitment */
+.personal-alerts {
+  position: absolute;
+  top: 145px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 24px));
+  max-height: 42vh;
+  overflow: auto;
+  z-index: 45;
+  pointer-events: auto;
+  padding: 4px;
+  scrollbar-width: thin;
+}
+.alert-count {
+  color: #f4d78d;
+  text-align: center;
+  font-size: 11px;
+  padding: 3px;
+  background: #101b29e8;
+  border-radius: 4px;
+}
+.notification-card {
+  border: 1px solid #9c8050;
+  background: #152334f5;
+  padding: 12px;
+  margin: 7px 0;
+  border-radius: 7px;
+  box-shadow: 0 5px 20px #0005;
+}
+.notification-card.severity-critical {
+  border-color: #de8272;
+  background: #301c24f7;
+}
+.notification-card.severity-warning {
+  border-color: #d8ad5e;
+}
+.notification-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #e6c78a;
+}
+.notification-card header button {
+  padding: 2px 8px;
+}
+.notification-card p {
+  font-size: 12px;
+  margin: 7px 0;
+  line-height: 1.5;
+}
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.notification-actions button {
+  font-size: 11px;
+  padding: 6px 8px;
+}
+.personal-inbox,
+.world-newspaper {
+  padding: 8px 0;
+}
+.turn-panel .panel-tabs {
+  flex-wrap: wrap;
+}
+.charter-price {
+  fill: #a8dbef;
+  paint-order: stroke;
+  stroke: #12212e;
+  stroke-width: 3px;
+  font-weight: 700;
+}
+.strait-link {
+  opacity: 0.85;
+}
+.grace-banner,
+.sandbox-banner {
+  position: absolute;
+  top: 174px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border: 1px solid #806e48;
+  border-radius: 5px;
+  background: #14293aee;
+  color: #e0c88d;
+  font-size: 11px;
+  max-width: 90vw;
+  z-index: 14;
+  pointer-events: none;
+}
+.recruit-capacity {
+  padding: 9px;
+  border: 1px solid #6a7e81;
+  background: #18303d;
+  color: #d8d9bc;
+  font-size: 12px;
+}
+.transport-hint {
+  font-size: 11px;
+  color: #9fd4e6;
+  margin: 5px 0;
+}
+@media (max-width: 700px) {
+  .personal-alerts {
+    top: 157px;
+    max-height: 33vh;
+    width: min(350px, calc(100vw - 20px));
+  }
+  .notification-card {
+    padding: 8px;
+  }
+  .notification-card p {
+    font-size: 11px;
+  }
+  .grace-banner,
+  .sandbox-banner {
+    top: 206px;
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  .tactical-hud .transport-hint {
+    max-width: 100%;
+    font-size: 10px;
+  }
+}
+.replay-indicator {
+  z-index: 46;
+}
+.game-viewport:has(.replay-indicator) .personal-alerts {
+  top: 275px;
+}
+
+.player-name-form {
+  margin: 16px 0;
+  text-align: left;
+}
+.player-name-form > label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--gold);
+  font-size: 11px;
+}
+.player-name-form > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.player-name-form input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.player-name-form button {
+  flex-shrink: 0;
+}
+.player-name-form small {
+  display: block;
+  margin-top: 7px;
+  color: #91a6ac;
+  font-size: 9px;
+}
+.council-seat > div {
+  min-width: 0;
+}
+.bot-nation-label {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+}
+.bot-nation-label select {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 5px;
+  font-size: 10px;
+}
+
+/* Cartographic preview: one context card, with separate on-demand consultations. */
+.cartographic-interface [hidden] {
+  display: none !important;
+}
+.cartographic-interface .hud-navigation {
+  top: 96px;
+  flex-wrap: nowrap;
+  width: calc(100vw - 32px);
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.cartographic-interface .hud-navigation button {
+  flex-shrink: 0;
+  font-size: 10px;
+}
+.cartographic-interface .victory-tracker,
+.cartographic-interface .telemetry-tools,
+.cartographic-interface .map-hint {
+  display: none;
+}
+.cartographic-interface .first-ready-banner {
+  pointer-events: none;
+}
+.campaign-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: linear-gradient(145deg, #182c35f7, #10222ff7);
+  border: 1px solid #aa976787;
+  border-radius: 12px;
+  box-shadow:
+    0 16px 45px #06101980,
+    inset 0 1px #e9d69d18;
+}
+.context-panel {
+  position: absolute;
+  z-index: 40;
+  left: 16px;
+  bottom: 70px;
+  width: clamp(300px, 25vw, 360px);
+  max-width: calc(100vw - 32px);
+  max-height: min(60vh, calc(100vh - 230px));
+}
+.campaign-panel .window-title {
+  background: #182e38;
+  cursor: default;
+  touch-action: auto;
+}
+.campaign-panel .window-body {
+  padding: 14px;
+  overscroll-behavior: contain;
+}
+.campaign-panel .window-title strong {
+  font-size: 11px;
+}
+.campaign-panel .region-heading h2 {
+  font-size: 22px;
+  margin: 4px 0;
+}
+.campaign-panel .region-heading {
+  margin-bottom: 12px;
+}
+.campaign-panel .eyebrow {
+  font-size: 8px;
+  letter-spacing: 0.11em;
+}
+.context-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 12px 0;
+}
+.context-tabs button {
+  padding: 10px 3px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+.context-tabs button[aria-selected='true'] {
+  color: #f4d28d;
+  background: #b7954c24;
+  border-color: #c5aa6c;
+}
+.province-facts {
+  border: 1px solid #bba36d24;
+  border-radius: 6px;
+  padding: 9px;
+  margin: 10px 0;
+}
+.province-facts > summary,
+.advanced-command > summary {
+  cursor: pointer;
+  color: #bfceb8;
+  font-size: 10px;
+}
+.context-panel .province-facts .ledger-grid {
+  margin-top: 12px;
+}
+.context-panel .field-heading {
+  margin: 15px 0 8px;
+}
+.context-panel .building-grid {
+  grid-template-columns: 1fr;
+}
+.context-panel .building-card {
+  padding: 10px;
+}
+.context-panel .building-card p {
+  font-size: 9px;
+}
+.context-panel .tactical-hud {
+  position: static;
+  transform: none;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+  border-radius: 0;
+}
+.context-panel .tactical-hud > header {
+  display: block;
+}
+.context-panel .tactical-hud > header > strong {
+  display: block;
+  font-family: Georgia, serif;
+  font-size: 20px;
+}
+.context-panel .tactical-hud > header > span {
+  display: block;
+  margin: 8px 0;
+}
+.context-panel .tactical-hud > header > button {
+  display: none;
+}
+.context-panel .tactical-composition {
+  gap: 10px;
+  font-size: 10px;
+}
+.context-panel .tactical-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.context-panel .tactical-actions button {
+  font-size: 9px;
+  padding: 8px 6px;
+  text-align: left;
+}
+.context-panel .tactical-actions button:first-child {
+  grid-column: 1/-1;
+}
+.context-panel .transport-hint {
+  font-size: 9px;
+}
+.advanced-command {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #a49c7038;
+}
+.advanced-command > summary {
+  padding-bottom: 10px;
+}
+.advanced-command .region-heading {
+  display: none;
+}
+.consultation-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 65;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: #051622a6;
+  backdrop-filter: blur(4px);
+}
+.consultation-panel {
+  width: min(780px, calc(100vw - 32px));
+  max-height: calc(100dvh - 64px);
+  min-height: 240px;
+}
+.consultation-panel .window-body {
+  padding: 20px;
+}
+.cartographic-interface .army-token > rect:first-child {
+  filter: drop-shadow(0 2px 1px #00101b99);
+}
+.cartographic-interface .sea-label {
+  opacity: 0.55;
+  letter-spacing: 2px;
+}
+.cartographic-interface .province-label {
+  fill: #f4e3b9;
+  paint-order: stroke;
+  stroke: #112e31;
+  stroke-width: 1.8px;
+  stroke-linejoin: round;
+}
+.cartographic-interface .personal-alerts {
+  width: min(370px, calc(100vw - 32px));
+}
+@media (max-width: 700px) {
+  .cartographic-interface .hud-navigation {
+    top: 126px;
+    left: 8px;
+    width: calc(100vw - 16px);
+  }
+  .cartographic-interface .hud-navigation button {
+    font-size: 9px;
+  }
+  .context-panel {
+    left: 8px;
+    right: 8px;
+    bottom: 58px;
+    width: auto;
+    max-width: none;
+    max-height: 44dvh;
+    border-radius: 14px 14px 9px 9px;
+  }
+  .context-panel .window-body {
+    padding: 12px;
+  }
+  .consultation-backdrop {
+    padding: 10px;
+  }
+  .consultation-panel {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
+  }
+  .cartographic-interface .personal-alerts {
+    top: 184px;
+    max-height: 25dvh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cartographic-interface *,
+  .cartographic-interface *::before,
+  .cartographic-interface *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.cartographic-interface .hud-navigation {
+  max-width: none;
+}
+.cartographic-interface .nation-ribbon {
+  display: none;
+}
+.game-viewport.cartographic-interface > .first-ready-banner {
+  top: 140px;
+}
+.cartographic-interface .grace-banner,
+.cartographic-interface .sandbox-banner {
+  top: 174px;
+}
+.cartographic-interface .personal-alerts {
+  top: 208px;
+}
+.cartographic-interface .province-shape.destination-naval {
+  filter: none;
+  stroke: #8ed2d8;
+}
+.chart-route-summary {
+  margin: 0 0 12px;
+  padding: 10px;
+  background: #d4b86816;
+  border: 1px solid #c1ab6d4d;
+  border-radius: 7px;
+  color: #e5d29c;
+  font-size: 11px;
+}
+.alert-count > button {
+  padding: 3px 8px;
+  margin-left: 10px;
+  font-size: 10px;
+}
+@media (max-width: 700px) {
+  .game-viewport.cartographic-interface > .first-ready-banner {
+    top: 170px;
+  }
+  .cartographic-interface .grace-banner,
+  .cartographic-interface .sandbox-banner {
+    top: 205px;
+  }
+  .cartographic-interface .personal-alerts {
+    top: 237px;
+  }
+  .game-viewport.cartographic-interface:has(.replay-indicator) .personal-alerts {
+    top: 275px;
+  }
+}

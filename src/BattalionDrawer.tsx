@@ -472,6 +472,16 @@ export function TacticalBar({
         </span>
       </div>
       <Meter label="Moral" value={army.morale} />
+      {!army.isFleet && p.isCoastal && (
+        <p className="transport-hint">
+          ⛵ Travessia Marítima (15 Ouro) · grátis com frota disponível; estreitos sem custo.
+        </p>
+      )}
+      {army.encircled && (
+        <p className="warning-box">
+          ⚠️ Cercado: −20 moral e 15% atrito até restabelecer suprimento.
+        </p>
+      )}
       <div className="tactical-actions">
         <button className="selected" onClick={onDetails}>
           👣 Mover / Escolher Destino no Mapa

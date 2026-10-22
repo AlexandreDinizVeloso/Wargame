@@ -12,13 +12,14 @@ export const BUILDINGS: Record<
 > = {
   MARKET: {
     name: 'Mercado / Bolsa',
-    description: '+3 comércio e −1 reserva local por nível.',
+    description: '+3 comércio por nível.',
     baseCost: 20,
     field: 'marketLevel',
   },
   BARRACKS: {
     name: 'Quartel / Academia',
-    description: '+3 reservas e capacidade; −15% recrutamento local; +0,10 treinamento.',
+    description:
+      '+5 limite militar, +8 capacidade e +1,5 regeneração de reservas por nível; recruta 4/7 e libera armas avançadas.',
     baseCost: 24,
     field: 'barracksLevel',
   },

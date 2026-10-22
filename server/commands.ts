@@ -66,6 +66,12 @@ export function parseOrder(value: unknown): PlayerOrder {
     assert(Object.hasOwn(BUILDINGS, String(o.building)), 'Edifício desconhecido.');
     return { type, provinceId: string(o.provinceId), building: o.building as BuildingType };
   }
+  if (type === 'AUTO_TRANSPORT')
+    return {
+      type,
+      battalionId: string(o.battalionId),
+      targetProvinceId: string(o.targetProvinceId),
+    };
   if (type === 'NAVAL_BRIDGE')
     return {
       type,
@@ -141,7 +147,7 @@ export function parseOrder(value: unknown): PlayerOrder {
       ...(o.targetProvinceId !== undefined ? { targetProvinceId: string(o.targetProvinceId) } : {}),
     };
   }
-  throw new Error('Ordem desconhecida para o protocolo 5.');
+  throw new Error('Ordem desconhecida para o protocolo 6.');
 }
 export function parseTerms(value: unknown): PeaceTerm[] {
   assert(Array.isArray(value) && value.length <= 5, 'Termos de paz inválidos.');
@@ -231,10 +237,28 @@ export function parseCommand(value: unknown): GameCommand {
       ...(c.religiousPolicy ? { religiousPolicy: c.religiousPolicy as ReligiousPolicy } : {}),
     };
   }
+  if (type === 'SET_PLAYER_NAME') {
+    const name = string(c.name, 30).trim().replace(/\s+/g, ' ');
+    assert(
+      name.length > 0 && !/[\u0000-\u001f\u007f]/.test(name),
+      'Escolha um nome válido de até 30 caracteres.',
+    );
+    return { type, name };
+  }
+  if (type === 'SET_BOT_NATION') {
+    assert(
+      NATIONS.some((n) => n.id === c.nationId),
+      'Nação inválida.',
+    );
+    return { type, playerId: string(c.playerId), nationId: c.nationId as NationId };
+  }
   if (type === 'SET_RELIGIOUS_POLICY') {
     assert(c.policy === 'INQUISITION' || c.policy === 'TOLERANCE', 'Política inválida.');
     return { type, policy: c.policy };
   }
+  if (type === 'EMERGENCY_LEVY' || type === 'CONTINUE_SANDBOX') return { type };
+  if (type === 'READ_NOTIFICATIONS')
+    return { type, notificationIds: strings(c.notificationIds, 250) };
   if (type === 'REPLACE_WITH_BOT') return { type, playerId: string(c.playerId) };
   if (type === 'CHAT') return { type, text: string(c.text, 280) };
   if (type === 'JOIN_COALITION' || type === 'DECLARE_COALITION_WAR')
@@ -246,6 +270,9 @@ export function parseCommand(value: unknown): GameCommand {
       roomName: string(c.roomName, 60).trim(),
       isPublic: boolean(c.isPublic),
       enableSecretObjectives: boolean(c.enableSecretObjectives),
+      ...(c.allowBotSecretVictory !== undefined
+        ? { allowBotSecretVictory: boolean(c.allowBotSecretVictory) }
+        : {}),
       turnTimerSeconds: integer(c.turnTimerSeconds, 15, 600),
     };
   if (type === 'DECLARE_WAR_AND_MOVE') {
@@ -257,6 +284,7 @@ export function parseCommand(value: unknown): GameCommand {
       battalionId: string(c.battalionId),
       targetProvinceId: string(c.targetProvinceId),
       ...(c.bridgeFleetId !== undefined ? { bridgeFleetId: string(c.bridgeFleetId) } : {}),
+      ...(c.autoTransport !== undefined ? { autoTransport: boolean(c.autoTransport) } : {}),
     };
   }
   if (type === 'CALL_TO_ARMS') return { type, warId: string(c.warId), allyId: string(c.allyId) };
@@ -275,5 +303,5 @@ export function parseCommand(value: unknown): GameCommand {
     };
   }
   if (type === 'OFFER_PEACE') return { type, warId: string(c.warId), terms: parseTerms(c.terms) };
-  throw new Error('Comando desconhecido para o protocolo 5.');
+  throw new Error('Comando desconhecido para o protocolo 6.');
 }

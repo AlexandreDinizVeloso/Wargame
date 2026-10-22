@@ -1,3 +1,4 @@
+import { realmLimits } from '../shared/economy';
 import { addPlayer, createGame, startGame } from '../server/game';
 import { createBattalion } from '../server/state';
 import { compositionOf } from '../shared/rules';
@@ -10,6 +11,7 @@ export function setup(seed = 42) {
     addPlayer(g, 'C', false, 'kaldor'),
   ];
   startGame(g);
+  g.graceUntilTurn = 0;
   g.battalions = [];
   g.commanders = [];
   for (const p of g.provinces) {
@@ -20,15 +22,23 @@ export function setup(seed = 42) {
     p.pacification = 70;
     p.unrest = 10;
     p.portLevel = 0;
+    p.baseTax = 4;
   }
   for (const [i, id] of ['portugal', 'castile', 'france'].entries()) {
     const p = g.provinces.find((p) => p.id === id)!;
     p.ownerId = players[i].id;
+    players[i].originalCapitalId = id;
     p.religion = players[i].faith;
     p.capitalOf = players[i].id;
     p.pacification = 100;
     p.unrest = 5;
     p.portLevel = p.isCoastal ? 1 : 0;
+  }
+  for (const a of players) {
+    const l = realmLimits(g, a.id);
+    a.armyCap = l.armyCap;
+    a.manpowerCap = l.manpowerCap;
+    a.manpower = Math.min(a.manpower, l.manpowerCap);
   }
   return { g, players };
 }

@@ -115,11 +115,11 @@ test('recrutamento de cidade reforça a entidade e dilui treinamento', () => {
     type: 'RECRUIT_BATTALION',
     provinceId: 'portugal',
     battalionId: unit.id,
-    infantry: 3,
+    infantry: 2,
   });
   resolveTurn(g);
-  assert.equal(unit.infantry, 6);
-  assert.equal(unit.training, 1.25);
+  assert.equal(unit.infantry, 5);
+  assert.equal(unit.training, 1.3);
   assert.equal(g.battalions.filter((b) => b.ownerId === a.id).length, 1);
 });
 test('treinamento, divisão e fusão preservam composição, dono e quantidade', () => {

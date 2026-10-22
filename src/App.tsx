@@ -1,5 +1,9 @@
+import CampaignPanel from './CampaignPanel';
+import PlayerNameForm from './PlayerNameForm';
 import SkillTreeDrawer from './SkillTreeDrawer';
-import { bridgeOptions } from '../shared/naval';
+import { crossingOptions } from '../shared/naval';
+import { levyReason } from '../shared/emergency';
+import PersonalAlerts from './Notifications';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
@@ -38,7 +42,6 @@ import {
   livingPlayers,
   realmEconomy,
   RELIGIONS,
-  supplyLimit,
   telemetry,
   unitCount,
   unitPath,
@@ -53,7 +56,7 @@ import WorldDrawer from './WorldDrawer';
 import SecretDrawer from './SecretDrawer';
 import WarModal from './WarModal';
 import FirstReadyBanner from './FirstReadyBanner';
-import { SEASONS, hegemonicThreat, globalSupplyBonus } from '../shared/strategy';
+import { SEASONS, hegemonicThreat } from '../shared/strategy';
 import TurnPanel, { type ReportTab } from './TurnPanel';
 import { FloatingWindow } from './FloatingWindow';
 import { audio } from './audio';
@@ -175,6 +178,15 @@ type Panel = 'province' | 'battalion' | 'diplomacy' | 'world' | 'secret' | 'skil
 export default function App() {
   const { game, playerId, status, error, setError, send, command, leave } = useGame();
   const camera = useRef<CameraHandle>(null);
+  const [cartographic, setCartographic] = useState(() => {
+    try {
+      return localStorage.getItem('concordia-interface') !== 'classic';
+    } catch {
+      return true;
+    }
+  });
+  const PanelWindow = cartographic ? CampaignPanel : FloatingWindow;
+  const [provinceTab, setProvinceTab] = useState<'build' | 'recruit' | 'diplomacy'>('build');
   const [panels, setPanels] = useState<Panel[]>([]),
     [provinceId, setProvince] = useState(''),
     [diplomacyTarget, setDiplomacyTarget] = useState(''),
@@ -183,11 +195,12 @@ export default function App() {
       armyId?: string;
       provinceId?: string;
       bridgeFleetId?: string;
+      autoTransport?: boolean;
     } | null>(null),
     [armyId, setArmy] = useState(''),
     [mode, setMode] = useState<MapMode>('POLITICAL'),
     [referenceId, setReference] = useState(''),
-    [reportTab, setReportTab] = useState<ReportTab>('orders'),
+    [reportTab, setReportTab] = useState<ReportTab>('personal'),
     [manual, setManual] = useState(false),
     [menu, setMenu] = useState(false),
     [endOpen, setEndOpen] = useState(false),
@@ -209,9 +222,16 @@ export default function App() {
   const seenReport = useRef(''),
     seenWars = useRef(new Set<string>()),
     seenWinner = useRef('');
-  const open = (panel: Panel) =>
-    setPanels((v) => (v.at(-1) === panel ? v : [...v.filter((p) => p !== panel), panel]));
-  const close = (panel: Panel) => setPanels((v) => v.filter((p) => p !== panel));
+  const open = (panel: Panel) => {
+    if (cartographic && panel !== 'province' && panel !== 'battalion') setArmy('');
+    setPanels((v) =>
+      cartographic ? [panel] : v.at(-1) === panel ? v : [...v.filter((p) => p !== panel), panel],
+    );
+  };
+  const close = (panel: Panel) => {
+    if (cartographic && panel === 'battalion') setArmy('');
+    setPanels((v) => v.filter((p) => p !== panel));
+  };
   const playReplay = useCallback(
     (report: TurnResolutionReport) => setReplay({ report, progress: 0, nonce: performance.now() }),
     [],
@@ -329,15 +349,8 @@ export default function App() {
         game.players.find((q) => q.id === controller(p))?.subjectOfId === playerId,
     );
   const troopTotal = game.battalions
-      .filter((a) => a.ownerId === playerId)
-      .reduce((n, a) => n + unitCount(a), 0),
-    maxSupply = game.provinces
-      .filter(
-        (p) =>
-          controller(p) === playerId ||
-          game.battalions.some((a) => a.ownerId === playerId && a.provinceId === p.id),
-      )
-      .reduce((n, p) => n + supplyLimit(p), globalSupplyBonus(game, playerId));
+    .filter((a) => a.ownerId === playerId)
+    .reduce((n, a) => n + unitCount(a), 0);
   const remaining = game.deadline ? Math.max(0, Math.ceil((game.deadline - now) / 1000)) : null;
   const ready = alive.filter((p) => p.ready || p.bot).length;
   const focus = (id: string) => {
@@ -350,6 +363,7 @@ export default function App() {
     open('battalion');
   };
   const selectProvince = (p: Province) => {
+    setProvinceTab('build');
     setProvince(p.id);
     open('province');
   };
@@ -397,20 +411,20 @@ export default function App() {
         targetId: host,
         armyId: selectedArmy.id,
         provinceId: p.id,
-        bridgeFleetId: bridgeOptions(game, selectedArmy, p)[0]?.id,
+        autoTransport:
+          !game.provinces.find((q) => q.id === selectedArmy.provinceId)?.neighbors.includes(p.id) &&
+          crossingOptions(game, selectedArmy, p, game.plannedOrders, true).length > 0,
       });
       return;
     }
-    const bridge = bridgeOptions(game, selectedArmy, p)[0];
-    if (bridge) {
+    const from = game.provinces.find((q) => q.id === selectedArmy.provinceId)!;
+    if (
+      !from.neighbors.includes(p.id) &&
+      crossingOptions(game, selectedArmy, p, game.plannedOrders).length
+    ) {
       command({
         type: 'SUBMIT_ORDER',
-        order: {
-          type: 'NAVAL_BRIDGE',
-          battalionId: selectedArmy.id,
-          fleetId: bridge.id,
-          targetProvinceId: p.id,
-        },
+        order: { type: 'AUTO_TRANSPORT', battalionId: selectedArmy.id, targetProvinceId: p.id },
       });
       return;
     }
@@ -429,9 +443,15 @@ export default function App() {
     open('report');
   };
   return (
-    <div className="game-viewport" onClickCapture={rootClick} data-audio-muted={muted}>
+    <div
+      className={`game-viewport ${cartographic ? 'cartographic-interface' : 'classic-interface'}`}
+      onClickCapture={rootClick}
+      data-interface={cartographic ? 'cartographic' : 'classic'}
+      data-audio-muted={muted}
+    >
       <Atlas
         ref={camera}
+        cartographic={cartographic}
         provinces={game.provinces}
         players={game.players}
         game={game}
@@ -481,19 +501,19 @@ export default function App() {
             <span>
               <strong>
                 {troopTotal}
-                <em> / {maxSupply}</em>
+                <em> / {eco.armyCap}</em>
               </strong>
-              <small>FORÇAS / SUPRIMENTO</small>
+              <small>FORÇAS / LIMITE DO EXÉRCITO</small>
             </span>
           </div>
           <div className="hud-stat reserves-stat">
             <Flag size={15} />
             <span>
               <strong>
-                {number(me.manpower)}
+                {number(me.manpower)} / {number(eco.manpowerCap, 1)}
                 <em> / {number(me.influence)}</em>
               </strong>
-              <small>RESERVAS / INFLUÊNCIA</small>
+              <small>RESERVAS / TETO · INFLUÊNCIA</small>
             </span>
           </div>
           <div className="hud-stat faith-stat" title={RELIGIONS[me.faith].tenet}>
@@ -599,7 +619,25 @@ export default function App() {
           );
         })}
       </div>
+      {game.sandboxContinued && (
+        <div className="sandbox-banner">
+          ⚔️ Dominação Livre · vitória original preservada na rodada {game.victoryRecord?.turn}
+        </div>
+      )}
+      {game.turn <= game.graceUntilTurn && (
+        <div className="grace-banner">
+          🕊️ Pacto de não agressão · guerras liberadas na rodada {game.graceUntilTurn + 1}
+        </div>
+      )}
       <FirstReadyBanner game={game} />
+      <PersonalAlerts
+        game={game}
+        playerId={playerId}
+        command={command}
+        onFocus={focus}
+        compact={cartographic}
+        onShowAll={() => showReport('personal')}
+      />
       <nav className="hud-navigation">
         <button
           onClick={() => {
@@ -637,6 +675,16 @@ export default function App() {
         </button>
         <button onClick={() => open('skills')}>
           🎖️ Doutrinas & Árvore de Tropas · {me.militaryXP} XP
+        </button>
+        <button
+          title={
+            levyReason(game, playerId) ??
+            '50 ouro, 15 estabilidade; cinco infantarias e defesa territorial.'
+          }
+          disabled={!!levyReason(game, playerId)}
+          onClick={() => command({ type: 'EMERGENCY_LEVY' })}
+        >
+          🛡️ Convocar Defesa da Pátria
         </button>
         {game.enableSecretObjectives && (
           <button onClick={() => open('secret')}>🎯 Meu Objetivo Secreto</button>
@@ -698,7 +746,7 @@ export default function App() {
         />
       )}
       {panels.includes('skills') && (
-        <FloatingWindow
+        <PanelWindow
           id="skills"
           active={panels.at(-1) === 'skills'}
           onActivate={() => open('skills')}
@@ -709,10 +757,10 @@ export default function App() {
           onClose={() => close('skills')}
         >
           <SkillTreeDrawer game={game} playerId={playerId} command={command} />
-        </FloatingWindow>
+        </PanelWindow>
       )}
       {panels.includes('secret') && (
-        <FloatingWindow
+        <PanelWindow
           id="secret"
           active={panels.at(-1) === 'secret'}
           onActivate={() => open('secret')}
@@ -724,9 +772,9 @@ export default function App() {
           onClose={() => close('secret')}
         >
           <SecretDrawer game={game} playerId={playerId} command={command} />
-        </FloatingWindow>
+        </PanelWindow>
       )}
-      {selectedArmy?.ownerId === playerId && (
+      {!cartographic && selectedArmy?.ownerId === playerId && (
         <TacticalBar
           game={game}
           army={selectedArmy}
@@ -756,7 +804,7 @@ export default function App() {
         </button>
       )}
       {panels.includes('province') && selected && (
-        <FloatingWindow
+        <PanelWindow
           id="province"
           active={panels.at(-1) === 'province'}
           onActivate={() => open('province')}
@@ -771,6 +819,8 @@ export default function App() {
             game={game}
             playerId={playerId}
             province={selected}
+            compact={cartographic}
+            initialTab={provinceTab}
             command={command}
             onSelectArmy={selectArmy}
             onFocus={() => focus(selected.id)}
@@ -780,10 +830,10 @@ export default function App() {
             }}
             onDeclareWar={(id) => setWarRequest({ targetId: id })}
           />
-        </FloatingWindow>
+        </PanelWindow>
       )}
       {panels.includes('battalion') && selectedArmy && (
-        <FloatingWindow
+        <PanelWindow
           id="battalion"
           active={panels.at(-1) === 'battalion'}
           onActivate={() => open('battalion')}
@@ -794,22 +844,79 @@ export default function App() {
           height={610}
           onClose={() => close('battalion')}
         >
-          <BattalionDrawer
-            key={selectedArmy.id}
-            game={game}
-            army={selectedArmy}
-            playerId={playerId}
-            command={command}
-            onFocus={() => focus(selectedArmy.provinceId)}
-            onSelect={(id) => {
-              const a = game.battalions.find((a) => a.id === id);
-              if (a) selectArmy(a);
-            }}
-          />
-        </FloatingWindow>
+          {cartographic &&
+            selectedArmy.ownerId === playerId &&
+            game.plannedOrders.some(
+              (o) =>
+                'battalionId' in o &&
+                o.battalionId === selectedArmy.id &&
+                (o.type === 'AUTO_TRANSPORT' || o.type === 'MOVE_BATTALION'),
+            ) && (
+              <p className="chart-route-summary">
+                {game.plannedOrders
+                  .filter((o) => 'battalionId' in o && o.battalionId === selectedArmy.id)
+                  .map((o) =>
+                    o.type === 'AUTO_TRANSPORT'
+                      ? `Destino: ${game.provinces.find((p) => p.id === o.targetProvinceId)?.name} · ${o.fleetId ? 'ponte naval grátis' : 'fretamento 15 ouro'}`
+                      : o.type === 'MOVE_BATTALION'
+                        ? `Marcha: ${game.provinces.find((p) => p.id === (o.path?.at(-1) ?? o.targetProvinceId))?.name}`
+                        : null,
+                  )}
+              </p>
+            )}
+          {cartographic && selectedArmy.ownerId === playerId && (
+            <TacticalBar
+              game={game}
+              army={selectedArmy}
+              playerId={playerId}
+              command={command}
+              onRecruit={() => {
+                setArmy('');
+                setProvince(selectedArmy.provinceId);
+                setProvinceTab('recruit');
+                open('province');
+              }}
+              onDetails={() => focus(selectedArmy.provinceId)}
+              onDeselect={() => {
+                setArmy('');
+                close('battalion');
+              }}
+            />
+          )}
+          {cartographic && selectedArmy.ownerId === playerId ? (
+            <details className="advanced-command">
+              <summary>General e ordens avançadas</summary>
+              <BattalionDrawer
+                key={selectedArmy.id}
+                game={game}
+                army={selectedArmy}
+                playerId={playerId}
+                command={command}
+                onFocus={() => focus(selectedArmy.provinceId)}
+                onSelect={(id) => {
+                  const a = game.battalions.find((a) => a.id === id);
+                  if (a) selectArmy(a);
+                }}
+              />
+            </details>
+          ) : (
+            <BattalionDrawer
+              key={selectedArmy.id}
+              game={game}
+              army={selectedArmy}
+              playerId={playerId}
+              command={command}
+              onFocus={() => focus(selectedArmy.provinceId)}
+              onSelect={(id) => {
+                const a = game.battalions.find((a) => a.id === id);
+                if (a) selectArmy(a);
+              }}
+            />
+          )}
+        </PanelWindow>
       )}
       {panels.includes('diplomacy') && (
-        <FloatingWindow
+        <PanelWindow
           id="diplomacy"
           active={panels.at(-1) === 'diplomacy'}
           onActivate={() => open('diplomacy')}
@@ -827,10 +934,10 @@ export default function App() {
             focusedRealmId={diplomacyTarget}
             onDeclareWar={(id) => setWarRequest({ targetId: id })}
           />
-        </FloatingWindow>
+        </PanelWindow>
       )}
       {panels.includes('world') && (
-        <FloatingWindow
+        <PanelWindow
           id="world"
           active={panels.at(-1) === 'world'}
           onActivate={() => open('world')}
@@ -842,10 +949,10 @@ export default function App() {
           onClose={() => close('world')}
         >
           <WorldDrawer game={game} playerId={playerId} command={command} />
-        </FloatingWindow>
+        </PanelWindow>
       )}
       {panels.includes('report') && (
-        <FloatingWindow
+        <PanelWindow
           id="report"
           active={panels.at(-1) === 'report'}
           onActivate={() => open('report')}
@@ -865,10 +972,22 @@ export default function App() {
             onReplay={playReplay}
             onFocus={focus}
           />
-        </FloatingWindow>
+        </PanelWindow>
       )}
       <footer className="hud-footer">
         <div className="footer-tabs">
+          <button onClick={() => showReport('personal')}>
+            🔔 Minha Nação (
+            {
+              game.notifications.filter(
+                (n) =>
+                  n.type !== 'WORLD' &&
+                  n.involvesPlayerIds.includes(playerId) &&
+                  !game.readNotificationIds.includes(n.id),
+              ).length
+            }
+            )
+          </button>
           <button onClick={() => showReport('orders')}>
             <ScrollText size={14} />
             Ordens <b>{game.plannedOrders.length}</b>
@@ -977,6 +1096,25 @@ export default function App() {
               {RELIGIONS[me.faith].name} · estabilidade {number(me.stability)}% · prestígio{' '}
               {number(me.prestige)}
             </p>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={cartographic}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setCartographic(enabled);
+                  setPanels((v) => v.slice(-1));
+                  try {
+                    localStorage.setItem(
+                      'concordia-interface',
+                      enabled ? 'cartographic' : 'classic',
+                    );
+                  } catch {}
+                }}
+              />
+              Mapa cartográfico · painel único
+            </label>
+            <PlayerNameForm name={me.name} command={command} />
             <label>
               Política religiosa
               <select
@@ -1119,6 +1257,27 @@ export default function App() {
               <ScrollText size={16} />
               Baixar Crônica (.TXT)
             </button>
+            <button
+              className="primary"
+              onClick={() => {
+                download(game, 'json');
+                setEndOpen(false);
+              }}
+            >
+              🏆 Encerrar Campanha e Baixar Relatório
+            </button>
+            {game.finishReason === 'victory' && (
+              <button
+                disabled={game.hostId !== playerId}
+                title={game.hostId !== playerId ? 'O anfitrião decide pela sala.' : ''}
+                onClick={() => {
+                  command({ type: 'CONTINUE_SANDBOX' });
+                  setEndOpen(false);
+                }}
+              >
+                ⚔️ Continuar Jogando (Modo Dominação Livre)
+              </button>
+            )}
             <button className="text-button" onClick={() => setEndOpen(false)}>
               Explorar o mapa final
             </button>

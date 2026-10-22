@@ -1,3 +1,5 @@
+import { desertForMaintenance } from './economy';
+import { WORLD_STARTS } from '../shared/map';
 import {
   buildingLevel,
   buildingSlots,
@@ -7,18 +9,16 @@ import {
   subjugationEligible,
 } from '../shared/development';
 import { commanderFor, hasSkill, movementAllowance } from '../shared/military';
-import { bridgeOptions } from '../shared/naval';
+import { bridgeOptions, crossingOptions } from '../shared/naval';
 import { instantArmyAction, recruitCommander, unlockSkill, autoMerge } from './armies';
 import { assaultSiege, advanceSieges } from './siege';
-import { resolveBridges } from './transport';
+import { realmLimits, recruitmentBlock, recruitedCount, moraleRecovery } from '../shared/economy';
+import { notify, canSeeNotification } from './notifications';
+import { applyEncirclement } from './logistics';
+import { emergencyLevy } from './emergency';
+import { resolveBridges, prepareTransport } from './transport';
 import { advanceWorld, endWorld, dealObjectives, joinCoalition, coalitionWar } from './world';
-import {
-  effectiveSupply,
-  isCamouflaged,
-  resourceCount,
-  seasonAt,
-  winterActive,
-} from '../shared/strategy';
+import { effectiveSupply, isCamouflaged, seasonAt, winterActive } from '../shared/strategy';
 import type {
   BotArchetype,
   GameCommand,
@@ -93,9 +93,9 @@ import { parseCommand, parseOrder } from './commands';
 export { assert, canAttack } from './state';
 export { parseOrder, parseCommand };
 export const BALANCE = {
-  baseUpkeep: 0.35,
+  baseUpkeep: 0.75,
   initialGold: 75,
-  initialManpower: 20,
+  initialManpower: 18,
   transportCapacity: 4,
   exhaustionPerWarTurn: 4,
   exhaustionCasualtyFactor: 10,
@@ -114,7 +114,13 @@ export function createGame(
   const maxTurns = 0,
     turnSeconds = 60;
   return {
-    version: 5,
+    version: 6,
+    allowBotSecretVictory: false,
+    graceUntilTurn: 2,
+    sandboxContinued: false,
+    victoryRecord: null,
+    notifications: [],
+    notificationReads: {},
     roomName: `Campanha ${code}`,
     isPublic: true,
     enableSecretObjectives: true,
@@ -139,7 +145,8 @@ export function createGame(
       mapId: mode === 'quick' ? `natural-earth-${theater}` : 'natural-earth-world',
       maxTurns,
       turnSeconds,
-      createdVersion: '0.5.0',
+      createdVersion: '0.6.0',
+      allowBotSecretVictory: false,
       enableSecretObjectives: true,
     },
     players: [],
@@ -213,7 +220,11 @@ export function addPlayer(
     subjectOfId: null,
     moraleBonusUntil: 0,
     disarmUntil: 0,
-    armyCap: 999,
+    armyCap: 12,
+    manpowerCap: 18,
+    emergencyLevyTurn: null,
+    homelandDefenseUntil: 0,
+    lostProvinceIds: [],
     aggressiveExpansion: 0,
     fervor: 0,
     secretObjectives: [],
@@ -250,6 +261,7 @@ export function setMode(g: GameState, mode: GameMode, theater: Theater = g.theat
   g.matchConfig = {
     ...next.matchConfig,
     enableSecretObjectives: g.enableSecretObjectives,
+    allowBotSecretVictory: g.allowBotSecretVictory,
     turnSeconds: g.turnSeconds,
   };
   g.maxTurns = next.maxTurns;
@@ -265,7 +277,19 @@ export function startGame(g: GameState, _now = 0) {
     const preferred = g.provinces.find(
       (q) =>
         q.kind === 'LAND' &&
-        q.id === nationOf(p.nationId).homeProvinceId &&
+        q.id ===
+          (g.mode === 'campaign'
+            ? WORLD_STARTS[p.nationId][0]
+            : {
+                aurelia: 'germany',
+                sol_invicto: 'italy',
+                kaldor: 'france',
+                vespera: 'portugal',
+                ferro_norte: 'scandinavia',
+                turan: 'hungary',
+                sapiencia: 'lowlands',
+                veridia: 'balkans',
+              }[p.nationId]) &&
         !reservedHomes.has(q.id),
     );
     if (preferred) {
@@ -282,6 +306,36 @@ export function startGame(g: GameState, _now = 0) {
       homes.set(p.id, home);
       reservedHomes.add(home.id);
     }
+  if (g.mode === 'quick') {
+    const preferences = new Map(homes);
+    homes.clear();
+    reservedHomes.clear();
+    for (const p of g.players) {
+      const candidates = g.provinces.filter((q) => q.kind === 'LAND' && !reservedHomes.has(q.id));
+      const distance = (q: Province) =>
+        homes.size
+          ? Math.min(
+              ...[...homes.values()].map(
+                (h) =>
+                  shortestPath(g.provinces, h.id, q.id, (x) => x.kind === 'LAND')?.length ?? 100,
+              ),
+            )
+          : 100;
+      const pref = preferences.get(p.id);
+      const home =
+        pref && !reservedHomes.has(pref.id) && distance(pref) >= 2
+          ? pref
+          : candidates.sort(
+              (a, b) =>
+                distance(b) - distance(a) ||
+                Number(b.isCoastal) - Number(a.isCoastal) ||
+                a.id.localeCompare(b.id),
+            )[0];
+      assert(home, 'Mapa sem espaço para capitais.');
+      homes.set(p.id, home);
+      reservedHomes.add(home.id);
+    }
+  }
   for (const p of g.players) {
     const home = homes.get(p.id)!;
     home.ownerId = p.id;
@@ -295,7 +349,12 @@ export function startGame(g: GameState, _now = 0) {
   for (const p of g.players) {
     const nation = nationOf(p.nationId),
       home = homes.get(p.id)!;
+    const designated =
+      g.mode === 'campaign'
+        ? g.provinces.find((q) => q.id === WORLD_STARTS[p.nationId][1] && !q.ownerId)
+        : null;
     const support =
+      designated ??
       home.neighbors.map((id) => provinceOf(g, id)).find((q) => q.kind === 'LAND' && !q.ownerId) ??
       g.provinces
         .filter((q) => q.kind === 'LAND' && !q.ownerId)
@@ -358,6 +417,22 @@ export function startGame(g: GameState, _now = 0) {
               : 'IRON_WALL';
     recruitCommander(g, p.id, false, trait, undefined, true).assignedBattalionId = a.id;
   }
+  // Normalize the fiscal base of each starting capital for the specified opening budget.
+  for (const p of g.players) {
+    const home = homes.get(p.id)!;
+    const before = realmEconomy(g, p.id).net;
+    home.baseTax++;
+    const delta = realmEconomy(g, p.id).net - before;
+    home.baseTax = roundMoney(
+      Math.max(1, home.baseTax - 1 + (10 - before) / Math.max(0.01, delta)),
+    );
+  }
+  for (const p of g.players) {
+    const l = realmLimits(g, p.id);
+    p.armyCap = l.armyCap;
+    p.manpowerCap = l.manpowerCap;
+    p.manpower = Math.min(p.manpower, l.manpowerCap);
+  }
   g.phase = 'planning';
   g.deadline = null;
   g.turnDeadlineAt = null;
@@ -379,7 +454,11 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
     if (o.type === 'MOVE_BATTALION') {
       assert(
         !a.isFleet ||
-          !(g.orders[id] ?? []).some((old) => old.type === 'NAVAL_BRIDGE' && old.fleetId === a.id),
+          !(g.orders[id] ?? []).some(
+            (old) =>
+              (old.type === 'NAVAL_BRIDGE' || old.type === 'AUTO_TRANSPORT') &&
+              old.fleetId === a.id,
+          ),
         'Frota reservada para ponte naval.',
       );
       const path = o.path ?? unitPath(g, a, o.targetProvinceId ?? '');
@@ -406,6 +485,11 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
         !a.isFleet && p.siege?.attackerOwnerId === id && a.infantry > 0,
         'Cerco próprio com infantaria exigido.',
       );
+    } else if (o.type === 'AUTO_TRANSPORT') {
+      assert(
+        o.seaPath?.length && (!o.fleetId || g.battalions.some((f) => f.id === o.fleetId)),
+        'Travessia não preparada.',
+      );
     } else if (o.type === 'NAVAL_BRIDGE') {
       const target = provinceOf(g, o.targetProvinceId),
         fleet = battalionOf(g, o.fleetId);
@@ -424,7 +508,9 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
       const used = (g.orders[id] ?? [])
         .filter(
           (old) =>
-            old.type === 'NAVAL_BRIDGE' && old.fleetId === fleet.id && old.battalionId !== a.id,
+            (old.type === 'NAVAL_BRIDGE' || old.type === 'AUTO_TRANSPORT') &&
+            old.fleetId === fleet.id &&
+            old.battalionId !== a.id,
         )
         .reduce(
           (n, old) =>
@@ -548,6 +634,19 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
             : (o.warships ?? 0) + (o.transports ?? 0) === 0 && landCount(o) > 0,
           'Não misture tropas e navios.',
         );
+        const recruitReason = recruitmentBlock(p, o, g.turn);
+        assert(!recruitReason, recruitReason ?? 'Recrutamento inválido.');
+        if (o.isMercenary) {
+          const pending = (g.orders[id] ?? []).find(
+            (old) => old.type === 'RECRUIT_BATTALION' && old.provinceId === p.id,
+          );
+          if (pending?.type === 'RECRUIT_BATTALION')
+            assert(
+              recruitedCount(p, g.turn) + unitCount(o) + unitCount(pending) <=
+                (p.barracksLevel >= 2 || p.foundryLevel ? 7 : p.barracksLevel ? 4 : 2),
+              'Há capacidade reservada para recrutamento regular.',
+            );
+        }
         if (o.isFleet) assert(p.portLevel >= 1, 'Construa um porto antes de recrutar navios.');
         if (o.isMercenary)
           assert(
@@ -568,7 +667,7 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
               0,
             );
           assert(
-            liveArmySize(g, id) + queued + landCount(o) <= actor.armyCap,
+            liveArmySize(g, id) + queued + landCount(o) <= Math.min(8, realmLimits(g, id).armyCap),
             'O tratado limita seu exército.',
           );
         }
@@ -610,11 +709,18 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
   );
 }
 function recruit(g: GameState, id: string, o: Extract<PlayerOrder, { type: 'RECRUIT_BATTALION' }>) {
+  const local = provinceOf(g, o.provinceId);
+  const blocked = recruitmentBlock(local, o, g.turn);
+  assert(!blocked, blocked ?? 'Recrutamento indisponível.');
+  local.recruitedThisTurn = recruitedCount(local, g.turn) + unitCount(o);
+  local.recruitmentTurn = g.turn;
   const incoming = compositionOf(o),
     city = provinceOf(g, o.provinceId),
     training = Math.min(
       1.5,
-      (playerOf(g, id).nationId === 'sapiencia' ? 1.2 : 1) + (city.barracksLevel > 0 ? 0.1 : 0),
+      (playerOf(g, id).nationId === 'sapiencia' ? 1.2 : 1) +
+        (city.barracksLevel > 0 ? 0.1 : 0) +
+        (city.barracksLevel >= 2 || city.foundryLevel >= 1 ? 0.1 : 0),
     ),
     equipment = 1 + 0.1 * city.foundryLevel;
   if (o.battalionId) {
@@ -640,7 +746,7 @@ function recruit(g: GameState, id: string, o: Extract<PlayerOrder, { type: 'RECR
     });
 }
 export function submitOrder(g: GameState, id: string, raw: PlayerOrder) {
-  const o = parseOrder(raw);
+  const o = prepareTransport(g, id, parseOrder(raw));
   validateOrder(g, id, o);
   if (o.type === 'MERGE_BATTALIONS' || o.type === 'SPLIT_BATTALION' || o.type === 'MERGE_ALL') {
     instantArmyAction(g, id, o);
@@ -685,7 +791,7 @@ function resolveLocal(
   const cost = orderCost(o, p, actor, g);
   if (actor.gold < cost.gold || actor.manpower < cost.manpower || actor.influence < cost.influence)
     return;
-  if (o.type === 'DIPLOMACY') return;
+  if (o.type === 'DIPLOMACY' || o.type === 'NAVAL_BRIDGE' || o.type === 'AUTO_TRANSPORT') return;
   if (o.type === 'CONVERT') {
     if (
       !p ||
@@ -794,9 +900,10 @@ function resolveLocal(
       if (
         actor.disarmUntil >= g.turn &&
         !o.isFleet &&
-        liveArmySize(g, id) + landCount(o) > actor.armyCap
+        liveArmySize(g, id) + landCount(o) > Math.min(8, realmLimits(g, id).armyCap)
       )
         return;
+      if (recruitmentBlock(p, o, g.turn)) return;
       recruit(g, id, o);
     }
     const building = constructionType(o as import('../shared/types').CityOrder);
@@ -919,6 +1026,7 @@ function moveBattalions(g: GameState, report: TurnResolutionReport, moved: Set<s
       }
       const cost =
         target.terrain === 'forest' &&
+        !from.straitNeighbors.includes(target.id) &&
         !a.isFleet &&
         !immune &&
         commanderFor(g, a)?.trait !== 'BLITZ_VANGUARD'
@@ -986,8 +1094,9 @@ function stationaryClashes(g: GameState, report: TurnResolutionReport, moved: Se
         );
       if (!army) break;
       considered.add(army.id);
-      moved.add(army.id);
+      const before = report.battles.length;
       resolveBattle(g, army, province, report);
+      if (report.battles.length > before) moved.add(army.id);
     }
   }
 }
@@ -1050,14 +1159,13 @@ export function resolveTurn(g: GameState, _now = 0) {
     ]),
   );
   const startLog = g.log.length;
+  const startNoticeIds = new Set(g.notifications.map((n) => n.id));
   for (const bot of g.players.filter((p) => p.bot)) planBot(g, bot);
   const report = emptyTurnReport(g.turn, g.diet);
   report.diplomaticChanges = g.pendingDiplomacy.splice(0);
   advanceWorld(g, report);
   const moved = new Set<string>();
-  const bridgeOrigins = new Map(
-    g.battalions.filter((a) => a.isFleet).map((a) => [a.id, a.provinceId]),
-  );
+  const bridgeOrigins = new Map(g.battalions.map((a) => [a.id, a.provinceId]));
   recoverAndRepatriate(g, report, moved);
   const queued = g.players
     .flatMap((p) => (g.orders[p.id] ?? []).map((o) => ({ id: p.id, o })))
@@ -1066,8 +1174,11 @@ export function resolveTurn(g: GameState, _now = 0) {
   moveBattalions(g, report, moved);
   stationaryClashes(g, report, moved);
   resolveBridges(g, report, moved, bridgeOrigins);
-  autoMerge(g);
+  for (const b of report.battles)
+    for (const id of [...b.attackerBattalionIds, ...b.defenderBattalionIds]) moved.add(id);
+  autoMerge(g, moved);
   advanceSieges(g, report);
+  const justOccupied = new Set(report.sieges.filter((s) => s.completed).map((s) => s.provinceId));
   for (const retreat of report.retreats) moved.add(retreat.armyId);
   recoverAndRepatriate(g, report, moved, false);
   for (const p of g.provinces.filter((p) => p.kind === 'LAND' && controller(p))) {
@@ -1081,6 +1192,7 @@ export function resolveTurn(g: GameState, _now = 0) {
           !a.isFleet &&
           !a.embarkedOnId &&
           !moved.has(a.id) &&
+          !justOccupied.has(p.id) &&
           !a.stranded,
       )
       .reduce((n, a) => n + unitCount(a), 0);
@@ -1125,7 +1237,7 @@ export function resolveTurn(g: GameState, _now = 0) {
       for (const q of g.provinces.filter((q) => controller(q) === p.id && q.pacification < 80))
         q.unrest = clamp(q.unrest + 12);
     if (!active) p.stability = clamp(p.stability + 1);
-    if (p.disarmUntil < g.turn) p.armyCap = 999;
+    p.armyCap = realmLimits(g, p.id).armyCap;
     for (const q of g.provinces.filter((q) => q.kind === 'LAND' && controller(q) === p.id)) {
       q.unrest = clamp(
         q.unrest +
@@ -1182,6 +1294,10 @@ export function resolveTurn(g: GameState, _now = 0) {
     if (p.subjectOfId && !survivingRealms.has(p.subjectOfId)) p.subjectOfId = null;
     if (!survivingRealms.has(p.id)) {
       g.orders[p.id] = [];
+      for (const q of g.provinces) {
+        if (q.occupierId === p.id) q.occupierId = null;
+        if (q.siege?.attackerOwnerId === p.id) q.siege = null;
+      }
       for (const unit of [...g.battalions.filter((a) => a.ownerId === p.id)])
         destroyBattalion(g, unit);
     }
@@ -1220,7 +1336,10 @@ export function resolveTurn(g: GameState, _now = 0) {
   for (const p of g.players) {
     const eco = economies.get(p.id)!,
       bankrupt = p.gold + eco.net < 0;
+    if (bankrupt) desertForMaintenance(g, p.id, -(p.gold + eco.net), eco.upkeep, report);
     p.gold = roundMoney(Math.max(0, p.gold + eco.net));
+    p.armyCap = eco.armyCap;
+    p.manpowerCap = eco.manpowerCap;
     p.manpower = Math.min(eco.manpowerCap, p.manpower + eco.manpower);
     if (g.provinces.some((q) => q.ownerId === p.id)) p.militaryXP += 10;
     p.influence = Math.min(50, p.influence + 2);
@@ -1232,10 +1351,7 @@ export function resolveTurn(g: GameState, _now = 0) {
             ? -12
             : moved.has(a.id)
               ? 0
-              : Math.max(0, 4 - p.warExhaustion * 0.04) *
-                  (g.season === 'SPRING' ? 1.1 : 1) *
-                  (1 + 0.1 * resourceCount(g, p.id, 'RELIC')) +
-                (commanderFor(g, a)?.trait === 'IRON_WALL' ? 15 : 0)),
+              : moraleRecovery(g, a) + (commanderFor(g, a)?.trait === 'IRON_WALL' ? 15 : 0)),
       );
     }
     report.economy.push({
@@ -1258,6 +1374,7 @@ export function resolveTurn(g: GameState, _now = 0) {
       warExhaustion: p.warExhaustion,
     });
   }
+  applyEncirclement(g, report);
   for (const r of g.reparations.filter((r) => r.untilTurn >= g.turn)) {
     const payer = playerOf(g, r.payerId),
       recipient = playerOf(g, r.recipientId),
@@ -1328,6 +1445,7 @@ export function resolveTurn(g: GameState, _now = 0) {
   for (const metric of report.economy) metric.gold = playerOf(g, metric.playerId).gold;
   const win = victoryStatus(g);
   if (win) {
+    g.victoryRecord = { ...win, turn: g.turn };
     g.winnerId = win.winnerId;
     g.winnerObjective = win.objective;
     g.finishReason = 'victory';
@@ -1336,6 +1454,38 @@ export function resolveTurn(g: GameState, _now = 0) {
     g.phase = 'finished';
     g.finishReason = 'realm_collapse';
   }
+  for (const w of report.stackwipes)
+    notify(g, {
+      type: 'BATTALION_WIPED',
+      text: `Um batalhão de ${w.troops} tropas foi aniquilado.`,
+      involvesPlayerIds: [w.ownerId],
+      severity: 'CRITICAL',
+      focusProvinceId: w.provinceId,
+    });
+  for (const b of report.battles)
+    notify(g, {
+      type: 'BATTLE',
+      text: `Batalha em ${provinceOf(g, b.provinceId).name}: ${b.attackerCasualties + b.defenderCasualties} baixas.`,
+      involvesPlayerIds: [
+        b.attackerId,
+        ...b.defenderBattalionIds.map(
+          (id) => g.battalions.find((a) => a.id === id)?.ownerId ?? b.defenderId ?? '',
+        ),
+      ],
+      severity: 'INFO',
+      focusProvinceId: b.provinceId,
+    });
+  for (const text of report.events)
+    notify(g, { type: 'WORLD', text, involvesPlayerIds: [], severity: 'INFO' });
+  for (const r of report.rebellions)
+    notify(g, {
+      type: 'DIPLOMACY',
+      text: `Revolta em ${provinceOf(g, r.provinceId).name}.`,
+      involvesPlayerIds: [r.previousOwnerId],
+      severity: 'WARNING',
+      focusProvinceId: r.provinceId,
+    });
+  report.notifications = g.notifications.filter((n) => !startNoticeIds.has(n.id));
   g.lastReport = report;
   g.reports = [...g.reports, report].slice(-8);
   g.history.push({
@@ -1361,8 +1511,21 @@ export function resolveTurn(g: GameState, _now = 0) {
   g.battalions = g.battalions.filter((a) => unitCount(a) > 0);
   return report;
 }
-function tryOrder(g: GameState, p: Player, o: PlayerOrder) {
+function tryOrder(
+  g: GameState,
+  p: Player,
+  o: PlayerOrder,
+  estimatedNet = realmEconomy(g, p.id).net,
+) {
   try {
+    const cost = orderCost(
+        o,
+        g.provinces.find((q) => q.id === orderProvinceId(o, g)),
+        p,
+        g,
+      ),
+      reserved = reservedResources(g, p.id, orderKey(o));
+    if (cost.gold > 0 && p.gold - reserved.gold - cost.gold + estimatedNet < 2) return false;
     submitOrder(g, p.id, o);
     return true;
   } catch {
@@ -1465,6 +1628,8 @@ export function planBot(g: GameState, p: Player) {
     if (a) c.assignedBattalionId = a.id;
   }
   botPeace(g, p);
+  const estimatedNet = realmEconomy(g, p.id).net;
+  const tryPlan = (o: PlayerOrder) => tryOrder(g, p, o, estimatedNet);
   for (const a of [
     ...g.battalions.filter(
       (a) => a.ownerId === p.id && !a.isFleet && !a.embarkedOnId && !a.stranded,
@@ -1473,7 +1638,7 @@ export function planBot(g: GameState, p: Player) {
     if (a.pathQueue.length) continue;
     const from = provinceOf(g, a.provinceId);
     if (from.siege?.attackerOwnerId === p.id) {
-      if (a.training < 1.3) tryOrder(g, p, { type: 'TRAIN_BATTALION', battalionId: a.id });
+      if (a.training < 1.3) tryPlan({ type: 'TRAIN_BATTALION', battalionId: a.id });
       continue;
     }
     const neighbors = from.neighbors
@@ -1525,7 +1690,7 @@ export function planBot(g: GameState, p: Player) {
           continue;
         }
       }
-      if (tryOrder(g, p, { type: 'MOVE_BATTALION', battalionId: a.id, targetProvinceId: q.id })) {
+      if (tryPlan({ type: 'MOVE_BATTALION', battalionId: a.id, targetProvinceId: q.id })) {
         moved = true;
         break;
       }
@@ -1555,10 +1720,34 @@ export function planBot(g: GameState, p: Player) {
             q,
           ).ratio >= (p.botArchetype === 'Militarist' ? 1.04 : 1.2),
       );
-      if (next)
-        moved = tryOrder(g, p, { type: 'MOVE_BATTALION', battalionId: a.id, path: next.path! });
+      if (next) moved = tryPlan({ type: 'MOVE_BATTALION', battalionId: a.id, path: next.path! });
     }
-    if (!moved && a.training < 1.4) tryOrder(g, p, { type: 'TRAIN_BATTALION', battalionId: a.id });
+    if (!moved && from.isCoastal) {
+      const targets = g.provinces
+        .filter(
+          (q) =>
+            q.kind === 'LAND' &&
+            q.isCoastal &&
+            !controller(q) &&
+            crossingOptions(g, a, q, g.orders[p.id]).length,
+        )
+        .sort(
+          (q, r) =>
+            g.battalions
+              .filter((b) => b.provinceId === q.id && !b.isFleet)
+              .reduce((n, b) => n + unitCount(b), 0) -
+            g.battalions
+              .filter((b) => b.provinceId === r.id && !b.isFleet)
+              .reduce((n, b) => n + unitCount(b), 0),
+        );
+      if (targets[0] && estimatedNet > 0)
+        moved = tryPlan({
+          type: 'AUTO_TRANSPORT',
+          battalionId: a.id,
+          targetProvinceId: targets[0].id,
+        });
+    }
+    if (!moved && a.training < 1.4) tryPlan({ type: 'TRAIN_BATTALION', battalionId: a.id });
   }
   for (const f of g.battalions.filter((a) => a.ownerId === p.id && a.isFleet && !a.stranded)) {
     if (f.embarkedArmyId) {
@@ -1579,7 +1768,7 @@ export function planBot(g: GameState, p: Player) {
               unitCount(cargo),
         );
       if (targets[0]) {
-        tryOrder(g, p, {
+        tryPlan({
           type: 'EMBARK_BATTALION',
           battalionId: cargo.id,
           disembarkProvinceId: targets[0].id,
@@ -1600,8 +1789,7 @@ export function planBot(g: GameState, p: Player) {
           )
           .filter((r): r is string[] => !!r && r.length > 0)
           .sort((a, b) => a.length - b.length);
-        if (routes[0])
-          tryOrder(g, p, { type: 'MOVE_BATTALION', battalionId: f.id, path: routes[0] });
+        if (routes[0]) tryPlan({ type: 'MOVE_BATTALION', battalionId: f.id, path: routes[0] });
       }
     } else if (!f.pathQueue.length) {
       const pHere = provinceOf(g, f.provinceId);
@@ -1622,7 +1810,7 @@ export function planBot(g: GameState, p: Player) {
           (o) => 'battalionId' in o && o.battalionId === load.id && o.type === 'MOVE_BATTALION',
         )
       )
-        tryOrder(g, p, { type: 'EMBARK_BATTALION', battalionId: load.id, fleetId: f.id });
+        tryPlan({ type: 'EMBARK_BATTALION', battalionId: load.id, fleetId: f.id });
     }
   }
   for (const q of g.provinces.filter((q) => q.kind === 'LAND' && controller(q) === p.id)) {
@@ -1645,7 +1833,7 @@ export function planBot(g: GameState, p: Player) {
       choices.push({ type: 'BUILD_BUILDING', provinceId: q.id, building: 'FOUNDRY' });
     if (q.unrest > 55 || q.pacification < 65) choices.push({ type: 'PACIFY', provinceId: q.id });
     if (q.ownerId === p.id && !q.occupierId) {
-      if (p.botArchetype === 'Merchant' && q.marketLevel < 3)
+      if (p.botArchetype === 'Merchant' && q.marketLevel < 2)
         choices.push({ type: 'BUILD_MARKET', provinceId: q.id });
       if (p.botArchetype === 'Theocrat' && q.religion !== p.faith)
         choices.push({ type: 'CONVERT', targetProvinceId: q.id });
@@ -1653,15 +1841,24 @@ export function planBot(g: GameState, p: Player) {
         choices.push({
           type: 'RECRUIT_BATTALION',
           provinceId: q.id,
-          infantry: 3,
-          artillery: guard && guard.artillery < 1 ? 1 : 0,
+          infantry: p.nationId === 'turan' && (q.barracksLevel || q.foundryLevel) ? 0 : 2,
+          cavalry:
+            p.nationId === 'turan' && (q.barracksLevel || q.foundryLevel)
+              ? Math.min(3, q.barracksLevel >= 2 || q.foundryLevel ? 7 : 4)
+              : 0,
+          artillery:
+            (q.barracksLevel || q.foundryLevel) &&
+            p.nationId !== 'turan' &&
+            (p.nationId === 'kaldor' || (guard && guard.artillery < 1))
+              ? 1
+              : 0,
           ...(guard ? { battalionId: guard.id, isMercenary: guard.isMercenary } : {}),
         });
-      if (q.marketLevel < 3) choices.push({ type: 'BUILD_MARKET', provinceId: q.id });
+      if (q.marketLevel < 2) choices.push({ type: 'BUILD_MARKET', provinceId: q.id });
       if (q.fortLevel < 1 && p.botArchetype === 'Diplomat')
         choices.push({ type: 'BUILD_FORT', provinceId: q.id });
     }
-    for (const o of choices) if (tryOrder(g, p, o)) break;
+    for (const o of choices) if (tryPlan(o)) break;
   }
   p.ready = true;
 }
@@ -1678,14 +1875,46 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
       'START_GAME',
       'SET_MODE',
       'SET_IDENTITY',
+      'SET_PLAYER_NAME',
+      'SET_BOT_NATION',
       'SET_LOBBY_OPTIONS',
       'ADD_BOT',
       'REPLACE_WITH_BOT',
       'CHAT',
+      'CONTINUE_SANDBOX',
+      'READ_NOTIFICATIONS',
     ].includes(command.type)
   )
     assert(g.phase === 'planning', 'A campanha não está em andamento.');
   switch (command.type) {
+    case 'EMERGENCY_LEVY':
+      emergencyLevy(g, actorId);
+      break;
+    case 'READ_NOTIFICATIONS':
+      g.notificationReads[actorId] = [
+        ...new Set([
+          ...(g.notificationReads[actorId] ?? []),
+          ...command.notificationIds.filter((id) =>
+            g.notifications.some((n) => n.id === id && canSeeNotification(n, actorId)),
+          ),
+        ]),
+      ].slice(-500);
+      break;
+    case 'CONTINUE_SANDBOX':
+      host();
+      assert(
+        g.phase === 'finished' && g.finishReason === 'victory',
+        'Aguarde uma vitória para continuar.',
+      );
+      g.sandboxContinued = true;
+      g.phase = 'planning';
+      g.finishReason = null;
+      g.turn++;
+      g.turnDeadlineAt = null;
+      g.deadline = null;
+      g.firstReadyPlayerName = null;
+      for (const p of g.players) p.ready = p.bot;
+      break;
     case 'INSTANT_ARMY_ACTION':
       instantArmyAction(g, actorId, command.action);
       break;
@@ -1750,6 +1979,20 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
       setNation(actor, command.nationId);
       if (command.religiousPolicy) actor.religiousPolicy = command.religiousPolicy;
       break;
+    case 'SET_PLAYER_NAME':
+      actor.name = command.name;
+      break;
+    case 'SET_BOT_NATION': {
+      host();
+      assert(g.phase === 'lobby', 'Escolha a nação dos bots antes de iniciar.');
+      const target = playerOf(g, command.playerId);
+      assert(target.bot, 'Somente bots podem ser configurados pelo anfitrião.');
+      const taken = g.players.find((p) => p.id !== target.id && p.nationId === command.nationId);
+      assert(!taken || taken.bot, 'Essa nação já foi escolhida por um jogador.');
+      if (taken) setNation(taken, target.nationId);
+      setNation(target, command.nationId);
+      break;
+    }
     case 'SET_RELIGIOUS_POLICY':
       actor.religiousPolicy = command.policy;
       break;
@@ -1808,6 +2051,8 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
       g.roomName = command.roomName;
       g.isPublic = command.isPublic;
       g.enableSecretObjectives = command.enableSecretObjectives;
+      g.allowBotSecretVictory = command.allowBotSecretVictory ?? g.allowBotSecretVictory;
+      g.matchConfig.allowBotSecretVictory = g.allowBotSecretVictory;
       g.turnSeconds = command.turnTimerSeconds;
       g.matchConfig.enableSecretObjectives = g.enableSecretObjectives;
       g.matchConfig.turnSeconds = g.turnSeconds;
@@ -1823,28 +2068,48 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
       submitOrder(
         g,
         actorId,
-        command.bridgeFleetId
+        command.autoTransport
           ? {
-              type: 'NAVAL_BRIDGE',
+              type: 'AUTO_TRANSPORT',
               battalionId: command.battalionId,
-              fleetId: command.bridgeFleetId,
               targetProvinceId: command.targetProvinceId,
             }
-          : {
-              type: 'MOVE_BATTALION',
-              battalionId: command.battalionId,
-              targetProvinceId: command.targetProvinceId,
-            },
+          : command.bridgeFleetId
+            ? {
+                type: 'NAVAL_BRIDGE',
+                battalionId: command.battalionId,
+                fleetId: command.bridgeFleetId,
+                targetProvinceId: command.targetProvinceId,
+              }
+            : {
+                type: 'MOVE_BATTALION',
+                battalionId: command.battalionId,
+                targetProvinceId: command.targetProvinceId,
+              },
       );
       break;
   }
   refreshScores(g);
+  for (const p of g.players) {
+    const l = realmLimits(g, p.id);
+    p.armyCap = l.armyCap;
+    p.manpowerCap = l.manpowerCap;
+    p.manpower = Math.min(p.manpower, l.manpowerCap);
+  }
   return g;
 }
 export function viewFor(g: GameState, id: string): GameView {
-  const { orders, seed: _seed, nextId: _ids, pendingDiplomacy: _pending, ...publicState } = g;
+  const {
+    orders,
+    seed: _seed,
+    nextId: _ids,
+    pendingDiplomacy: _pending,
+    notificationReads: _reads,
+    ...publicState
+  } = g;
   const result = structuredClone(publicState);
   const redact = (report: TurnResolutionReport) => {
+    report.notifications = report.notifications.filter((n) => canSeeNotification(n, id));
     for (const c of report.diplomaticChanges) if (c.covert && c.actorId !== id) c.actorId = null;
   };
   if (result.lastReport) redact(result.lastReport);
@@ -1863,13 +2128,14 @@ export function viewFor(g: GameState, id: string): GameView {
     g.provinces.filter((p) => shared.has(controller(p) ?? '')).flatMap((p) => p.neighbors),
   );
   const cleanPlayer = (p: Player) => {
-    if (!finished && p.id !== id) {
+    if (!finished && p.id !== id && p.id !== g.victoryRecord?.winnerId) {
       p.secretObjectives = [];
       p.selectedObjectiveId = null;
       p.objectiveStreak = 0;
       p.paxStreak = 0;
     }
   };
+  result.notifications = result.notifications.filter((n) => canSeeNotification(n, id));
   result.players.forEach(cleanPlayer);
   result.history.forEach((h) => h.nations.forEach(cleanPlayer));
   if (!finished) result.visionContracts = result.visionContracts.filter((v) => v.buyerId === id);
@@ -1890,5 +2156,9 @@ export function viewFor(g: GameState, id: string): GameView {
               : a.pathQueue;
       } else a.pathQueue = [];
     }
-  return { ...result, plannedOrders: structuredClone(orders[id] ?? []) };
+  return {
+    ...result,
+    readNotificationIds: structuredClone(g.notificationReads[id] ?? []),
+    plannedOrders: structuredClone(orders[id] ?? []),
+  };
 }

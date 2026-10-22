@@ -1,3 +1,4 @@
+import { notify } from './notifications';
 import type { Battalion, GameState, Province, TurnResolutionReport } from '../shared/types';
 import { atWar, clamp, controller, getRelation, sameWarSide, unitCount } from '../shared/rules';
 import { commanderFor, hasSkill } from '../shared/military';
@@ -33,6 +34,13 @@ export function beginSiege(g: GameState, a: Battalion, p: Province) {
     lastProgressTurn: g.turn,
   };
   a.pathQueue = [];
+  notify(g, {
+    type: 'SIEGE_STARTED',
+    text: `Cerco iniciado em ${p.name} (1/${p.siege.required}).`,
+    involvesPlayerIds: [a.ownerId, ...(p.ownerId ? [p.ownerId] : [])],
+    severity: 'CRITICAL',
+    focusProvinceId: p.id,
+  });
   log(
     g,
     `${playerOf(g, a.ownerId).nation} iniciou cerco em ${p.name} (1/${p.siege.required}).`,
@@ -42,6 +50,10 @@ export function beginSiege(g: GameState, a: Battalion, p: Province) {
 export function completeSiege(g: GameState, id: string, p: Province, report: TurnResolutionReport) {
   const previous = controller(p),
     actor = playerOf(g, id);
+  if (p.ownerId && p.ownerId !== id) {
+    const defender = playerOf(g, p.ownerId);
+    defender.lostProvinceIds = [...new Set([...defender.lostProvinceIds, p.id])];
+  }
   if (!p.ownerId) {
     p.ownerId = id;
     p.occupierId = null;
