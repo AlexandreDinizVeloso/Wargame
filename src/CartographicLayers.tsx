@@ -1,8 +1,13 @@
-import { Anchor, Castle, Church, Factory, Landmark, Swords } from 'lucide-react';
+export { ProvinceStructuresVisual as InfrastructureSymbols } from './MapMiniatures';
 import type { Province } from '../shared/types';
 export function CartographicDefs() {
   return (
     <>
+      <radialGradient id="chart-frost">
+        <stop stopColor="#d4f1ff" stopOpacity=".04" />
+        <stop offset=".7" stopColor="#c5e9ff" stopOpacity=".16" />
+        <stop offset="1" stopColor="#9cd4f1" stopOpacity=".4" />
+      </radialGradient>
       <radialGradient id="chart-water">
         <stop stopColor="#234d59" />
         <stop offset="1" stopColor="#0c2837" />
@@ -59,64 +64,23 @@ export function ProvinceRelief({ province: p, scale }: { province: Province; sca
     </g>
   );
 }
-export function ProvinceShading({ province: p }: { province: Province }) {
+export function ProvinceShading({
+  province: p,
+  winter = false,
+}: {
+  province: Province;
+  winter?: boolean;
+}) {
   if (p.kind !== 'LAND') return null;
   return (
     <g className="province-shading" pointerEvents="none" aria-hidden="true">
       <path d={p.path} fill="url(#chart-light)" />
+      {winter && (p.y < 270 || p.terrain === 'mountains') && (
+        <path data-winter-frost={p.id} d={p.path} fill="url(#chart-frost)" />
+      )}
       {['forest', 'hills', 'mountains'].includes(p.terrain) && (
         <path d={p.path} fill={`url(#chart-${p.terrain})`} />
       )}
-    </g>
-  );
-}
-export function InfrastructureSymbols({
-  province: p,
-  scale,
-  expanded,
-}: {
-  province: Province;
-  scale: number;
-  expanded: boolean;
-}) {
-  const buildings = [
-    { name: 'Forte', level: p.fortLevel, Icon: Castle },
-    { name: 'Quartel', level: p.barracksLevel, Icon: Swords },
-    { name: 'Porto', level: p.portLevel, Icon: Anchor },
-    { name: 'Mercado', level: p.marketLevel, Icon: Landmark },
-    { name: 'Fundição', level: p.foundryLevel, Icon: Factory },
-    { name: 'Templo', level: p.templeLevel, Icon: Church },
-  ].filter((b) => b.level > 0);
-  if (!buildings.length || p.kind !== 'LAND') return null;
-  const visible = expanded ? buildings : buildings.slice(0, 1);
-  return (
-    <g
-      className="infrastructure-symbols"
-      data-infrastructure={p.id}
-      pointerEvents="none"
-      transform={`translate(${p.x} ${p.y + 29 / scale}) scale(${1 / scale})`}
-    >
-      <title>
-        {p.name}: {buildings.map((b) => `${b.name} ${b.level}`).join(', ')}
-      </title>
-      {visible.map(({ name, level, Icon }, i) => (
-        <g key={name} transform={`translate(${(i - (visible.length - 1) / 2) * 23} 0)`}>
-          <rect
-            x="-10"
-            y="-8"
-            width="21"
-            height="17"
-            rx="4"
-            fill="#152c31"
-            stroke="#bba76c"
-            strokeWidth=".65"
-          />
-          <Icon x="-7" y="-5" width="11" height="11" color="#e2c98f" strokeWidth="1.8" />
-          <text x="6" y="5" textAnchor="middle" fontSize="7" fill="#f5e1b6">
-            {level}
-          </text>
-        </g>
-      ))}
     </g>
   );
 }

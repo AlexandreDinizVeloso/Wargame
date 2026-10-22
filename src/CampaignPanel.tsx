@@ -1,11 +1,10 @@
-import { FloatingWindow, type WindowProps } from './FloatingWindow';
-export default function CampaignPanel(props: WindowProps) {
-  const context = props.id === 'province' || props.id === 'battalion';
+import { Suspense } from 'react';
+import type { WindowProps } from './FloatingWindow';
+import { ContextualInspectorDock } from './ContextualInspectorDock';
+export default function CampaignPanel({ id, title, children, onClose }: WindowProps) {
   return (
-    <FloatingWindow
-      {...props}
-      height={context ? Math.min(props.height ?? 500, innerWidth < 700 ? 360 : 500) : props.height}
-      className={`campaign-panel campaign-popup ${context ? 'popup-context' : ''} ${props.className ?? ''}`}
-    />
+    <ContextualInspectorDock id={id} title={title} onClose={onClose}>
+      <Suspense fallback={<p role="status">Abrindo relatório…</p>}>{children}</Suspense>
+    </ContextualInspectorDock>
   );
 }

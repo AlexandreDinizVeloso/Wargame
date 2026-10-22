@@ -1,3 +1,4 @@
+import { realmTurnAnalytics } from '../shared/campaignAnalytics';
 import { friendlyRest, offensiveBlock, isDisorganized, markDisorganized } from '../shared/morale';
 import { neutralTarget } from '../shared/neutral';
 import { bombardmentBlock, seaTradeNodes } from '../shared/maritime';
@@ -149,7 +150,7 @@ export function createGame(
       mapId: mode === 'quick' ? `natural-earth-${theater}` : 'natural-earth-world',
       maxTurns,
       turnSeconds,
-      createdVersion: '0.7.0',
+      createdVersion: '0.9.0-rc.1',
       allowBotSecretVictory: false,
       enableSecretObjectives: true,
     },
@@ -1577,6 +1578,7 @@ export function resolveTurn(g: GameState, _now = 0) {
   g.reports = [...g.reports, report].slice(-8);
   g.history.push({
     ...structuredClone(report),
+    analytics: realmTurnAnalytics(g),
     nations: structuredClone(g.players),
     wars: structuredClone(g.wars),
     control: g.provinces
@@ -2289,7 +2291,15 @@ export function viewFor(g: GameState, id: string): GameView {
   };
   result.notifications = result.notifications.filter((n) => canSeeNotification(n, id));
   result.players.forEach(cleanPlayer);
-  result.history.forEach((h) => h.nations.forEach(cleanPlayer));
+  result.history.forEach((h) => {
+    h.nations.forEach(cleanPlayer);
+    if (!finished)
+      for (const metric of h.analytics ?? [])
+        if (!shared.has(metric.playerId)) {
+          delete metric.landTroops;
+          delete metric.ships;
+        }
+  });
   if (!finished) result.visionContracts = result.visionContracts.filter((v) => v.buyerId === id);
   result.battalions = result.battalions.filter(
     (a) => finished || shared.has(a.ownerId) || !isCamouflaged(g, a),

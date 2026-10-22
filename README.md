@@ -1,16 +1,21 @@
-# Concórdia — Atlas de Impérios · v0.7
+# Concórdia — Atlas de Impérios · v0.9 RC
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
 
-## Interface e regras da v0.7
+## Pacote v0.8/v0.9 · Release Candidate
 
-Mapa cartográfico **2,5D** com HUD compacta. Mundo, Diplomacia, Doutrinas, objetivos, relatórios, manual, Conselho, confirmação de guerra e resultado abrem **popups móveis, redimensionáveis e minimizáveis**, sem escurecer o mapa. Arraste pelo título e redimensione pelo canto inferior direito; posição e tamanho ficam salvos neste navegador. Esc fecha a janela ativa. Consultas podem coexistir; província e formação alternam um único contexto.
+- **Miniaturas SVG:** estandartes heráldicos por composição, líderes/estrelas/moral, galeões com carga, rosas dos ventos comerciais e seis construções ilustradas. Cercos têm fogo/fumaça e progresso; inverno aplica geada ao norte e montanhas.
+- **HUD única:** um dock compacto alterna cidade/formação; Diplomacia, Árvore Militar, Comércio & Mares, Crises & Coalizões, Objetivos e Estatísticas ficam em uma central com abas. Esc ou clique fora fecha a consulta.
+- **Áudio procedural:** ambiente de paz/guerra com volume e mute de música separados dos efeitos; transição de rodada com resumo pessoal por 2,5 segundos.
+- **Tutorial de cinco passos:** a tela inicial cria uma mesa privada de treino. Ações reais avançam o guia; o botão no topo também permite orientar uma campanha existente.
+- **Crônica interativa:** gráficos por nação, inspeção de rodadas, receitas/tesouro/território/forças/vitórias e quatro títulos com empates. Dados militares antigos ausentes aparecem como lacunas; informações privadas continuam protegidas.
+- **Docker Node 20 Alpine**, volume de salas, healthcheck e Compose/Caddy para HTTPS. Veja [deploy cloud](docs/DEPLOY_CLOUD.md).
 
-O motor agora impede ofensivas de formações desorganizadas, aumenta o atrito sobre o excedente de suprimento, desenvolve cidades neutras ricas e oferece comércio marítimo e bombardeio costeiro. Consulte [regras v0.7](docs/REGRAS_V7.md), [interface](docs/PREVIA_V7.md) e [validação](docs/BALANCE.md). A opção **Conselho da nação → Mapa cartográfico · HUD compacta** permite comparar com a interface clássica.
+O motor mantém as [regras v0.7](docs/REGRAS_V7.md), com protocolo 7 compatível e campos opcionais de estatísticas. A interface deste RC substitui os popups simultâneos da prévia v0.7. Consulte [escopo e validação do RC](docs/RELEASE_CANDIDATE.md) e o [histórico de balanceamento](docs/BALANCE.md).
 
 ## Executar
 
-Node.js **22.12+** (validado com Node 24).
+Node.js **20.19+ na linha 20, ou 22.12+**. O Docker usa `node:20-alpine`; o ambiente de desenvolvimento usa Node 24.
 
 ```sh
 npm ci
@@ -78,8 +83,8 @@ Trigo, ferro, cavalos, minas de ouro e relíquias aparecem no mapa e alteram rec
 
 - Clique em uma província para administrar, recrutar, converter e negociar com o proprietário.
 - Selecione uma ficha militar: os destinos vizinhos ficam verdes (mover), vermelhos (invadir) ou azuis (transporte). Os estreitos aparecem tracejados; destinos costeiros também podem oferecer travessia gratuita ou fretamento por 15 ouro. Clique esquerdo ou direito prepara o movimento. Clique fora ou pressione **Esc** para desmarcar.
-- Clique no **✕ da seta** para cancelar a marcha. A HUD inferior divide 50/50, reúne formações, abre recrutamento, entrincheira e permite arrasar quando aplicável.
-- Declare guerra pelo brasão no topo, pelo painel de uma província estrangeira ou pelo modal ao tentar invadir em paz. **Declarar Guerra e Marchar** é uma operação atômica no servidor.
+- Clique no **✕ da seta** para cancelar a marcha. O dock da formação divide 50/50, reúne forças e oferece manobras; Líder permite atribuição imediata e Detalhes contém as ordens avançadas.
+- Declare guerra pela central Diplomacia, pela aba Diplomacia do Reino de uma província estrangeira ou pela confirmação ao tentar invadir em paz. **Declarar Guerra e Marchar** é uma operação atômica no servidor.
 - **Scroll** ajusta zoom; botão direito/meio ou Espaço + arraste move a câmera; **1–5** troca o modo de mapa.
 
 As janelas podem ser arrastadas, redimensionadas, desanexadas e minimizadas. A resolução tem replay de quatro segundos e áudio sintetizado com opção de silenciar.
@@ -98,7 +103,7 @@ O servidor grava snapshots atômicos, backups e hashes de tokens. Preserve `.loc
 
 Snapshots v0.6 migram para v0.7 com cópia `.v6-backup`. Sessões, tesouros, tropas, posições e sequências de objetivos são preservados. Ordens ofensivas e rotas são canceladas para replanejamento; confirmações e relógios são reabertos. Cidades independentes iniciam o desenvolvimento no momento da migração, sem crescimento retroativo. Resultados encerrados conservam a versão de origem. Snapshots v0.2/v0.3/v0.4/v0.5 também são aceitos, passando pelas migrações históricas com seus respectivos ajustes e backups.
 
-JSON e TXT podem ser baixados na HUD e na tela final. O relatório inclui todas as rodadas, batalhas, economia, guerras, estações e coalizões, respeitando a visão de quem exportou. Tokens, semente privada e ordens ocultas não são exportados.
+JSON e TXT podem ser baixados no Conselho da nação e na tela final. O relatório inclui todas as rodadas, batalhas, economia, guerras, estações e coalizões, respeitando a visão de quem exportou. Tokens, semente privada e ordens ocultas não são exportados.
 
 ## Validar
 
@@ -110,7 +115,7 @@ npm run test:cartographic
 npx tsx scripts/simulate-balance.ts --games=100 --seed=20261022 --mode=mixed --max-turns=159
 ```
 
-O smoke inicia um servidor isolado em porta livre e abre três navegadores Chromium. É preciso Chromium instalado (`CHROMIUM_PATH` opcional; padrão `/usr/bin/chromium`). `BASE_URL` permite apontar para um servidor v0.7 já iniciado. Artefatos ficam em `.local/`. O simulador informa vitórias e partidas ainda sem vencedor no corte, sem inventar resultado por pontos.
+O smoke inicia um servidor isolado em porta livre e abre três navegadores Chromium. É preciso Chromium instalado (`CHROMIUM_PATH` opcional; padrão `/usr/bin/chromium`). `BASE_URL` permite apontar para um servidor RC com protocolo 7 já iniciado. Artefatos ficam em `.local/`. O simulador informa vitórias e partidas ainda sem vencedor no corte, sem inventar resultado por pontos.
 
 ## Arquitetura
 
@@ -124,4 +129,4 @@ O smoke inicia um servidor isolado em porta livre e abre três navegadores Chrom
 
 `shared/` e `server/` não importam React, `src/` ou DOM. Um cliente Godot pode consumir o [protocolo 7](docs/PROTOCOL.md). Consulte [regras v0.7](docs/REGRAS_V7.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3/v0.4/v0.5/v0.6 em `docs/` são arquivos históricos.
 
-Direção e análise das partidas anteriores: [plano da v0.7](docs/PLANO_V7.md).
+Análise das partidas anteriores: [plano da v0.7](docs/PLANO_V7.md). A direção atual está no [RC v0.8/v0.9](docs/RELEASE_CANDIDATE.md).

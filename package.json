@@ -1,10 +1,10 @@
 {
   "name": "concordia-wargame",
-  "version": "0.7.0",
+  "version": "0.9.0-rc.1",
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.12.0"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
     "dev": "tsx watch server/index.ts",
@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "server:headless": "tsx server/index.ts --headless",
     "simulate:balance": "tsx scripts/simulate-balance.ts",
-    "test:cartographic": "tsx scripts/smoke-cartographic.ts"
+    "test:cartographic": "tsx scripts/smoke-cartographic.ts",
+    "test:docker": "tsx scripts/smoke-docker.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

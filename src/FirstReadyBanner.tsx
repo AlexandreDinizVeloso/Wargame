@@ -8,7 +8,11 @@ export default function FirstReadyBanner({ game }: { game: GameView }) {
   }, []);
   if (game.phase !== 'planning') return null;
   return (
-    <div className={`first-ready-banner ${game.turnDeadlineAt ? 'counting' : ''}`} role="status">
+    <div
+      className={`first-ready-banner ${game.turnDeadlineAt ? 'counting' : ''}`}
+      role="status"
+      data-hud-surface
+    >
       {game.paused
         ? '⏸️ Campanha pausada'
         : game.turnDeadlineAt

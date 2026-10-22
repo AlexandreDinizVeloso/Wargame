@@ -1,3 +1,4 @@
+import { effectiveSupply } from '../shared/strategy';
 import { isDisorganized } from '../shared/morale';
 import { FleetOperations } from './MaritimePanel';
 import CommanderPanel from './CommanderPanel';
@@ -470,10 +471,18 @@ export function TacticalBar({
         </button>
       </header>
       <div className="tactical-composition">
-        <b>🛡️ {army.infantry}</b>
-        <b>🐎 {army.cavalry}</b>
-        <b>💣 {army.artillery}</b>
-        <b>⛵ {army.warships + army.transports}</b>
+        {army.isFleet ? (
+          <>
+            <b>⚓ {army.warships}</b>
+            <b>⛵ {army.transports}</b>
+          </>
+        ) : (
+          <>
+            <b>🛡️ {army.infantry}</b>
+            <b>🐎 {army.cavalry}</b>
+            <b>💣 {army.artillery}</b>
+          </>
+        )}
         <span>Moral {Math.round(army.morale)}%</span>
         <span>Treinamento {army.training.toFixed(2)}×</span>
         <span>
@@ -482,6 +491,82 @@ export function TacticalBar({
             : 'Sem líder'}
         </span>
       </div>
+      <div className="tactical-actions">
+        <button
+          className="selected"
+          aria-label="👣 Mover / Escolher Destino no Mapa"
+          title="Escolher destino no mapa"
+          onClick={onDetails}
+        >
+          👣 Mover
+        </button>
+        <button
+          aria-label="➗ Dividir agora (50/50)"
+          title="Dividir 50/50 instantaneamente"
+          disabled={!active || actor.ready || !!army.embarkedArmyId || !unitCount(half)}
+          onClick={() => send({ type: 'SPLIT_BATTALION', battalionId: army.id, composition: half })}
+        >
+          ➗ 50/50
+        </button>
+        <button
+          aria-label="🔗 Fundir agora na província"
+          title="Juntar formações na província"
+          disabled={!active || actor.ready || !!army.embarkedArmyId || !compatible}
+          onClick={() => send({ type: 'MERGE_ALL', battalionId: army.id })}
+        >
+          🔗 Juntar
+        </button>
+        <button
+          aria-label="➕ Reforçar / Recrutar Aqui"
+          disabled={game.phase !== 'planning' || p.ownerId !== playerId}
+          onClick={onRecruit}
+        >
+          ➕ Recrutar
+        </button>
+        <button
+          aria-label="🏰 Entrincheirar (+Defesa)"
+          title="Entrincheirar"
+          disabled={!active || army.isFleet}
+          onClick={() => send({ type: 'ENTRENCH_BATTALION', battalionId: army.id })}
+        >
+          🏰 Defesa
+        </button>
+        {['turan', 'ferro_norte'].includes(actor.nationId) && (
+          <button
+            disabled={
+              !active ||
+              army.isFleet ||
+              controller(p) !== playerId ||
+              p.pacification > 35 ||
+              p.razedTurn !== null
+            }
+            onClick={() => send({ type: 'RAZE_PROVINCE', battalionId: army.id })}
+          >
+            🔥 Arrasar Província
+          </button>
+        )}
+        {p.siege?.attackerOwnerId === playerId && !army.isFleet && (
+          <button
+            aria-label="🔥 Assaltar Muralha (+3 cerco)"
+            title="Assaltar cerco"
+            disabled={!active || army.infantry < 1 || isDisorganized(army)}
+            onClick={() => send({ type: 'ASSAULT_SIEGE', battalionId: army.id })}
+          >
+            🔥 Assaltar
+          </button>
+        )}
+        <button
+          aria-label="❌ Cancelar Ordem Atual"
+          disabled={game.phase !== 'planning'}
+          onClick={() => command({ type: 'CANCEL_ORDER', key: `army:${army.id}` })}
+        >
+          ❌ Cancelar
+        </button>
+      </div>
+      <span className="tactical-supply">
+        📦 {unitCount(army)}/{effectiveSupply(game, playerId, p)} suprimento ·{' '}
+        {army.encircled ? 'linha cortada' : 'verifique as rotas de apoio'}
+      </span>
       <Meter label="Moral" value={army.morale} />
       {!army.isFleet && p.isCoastal && (
         <p className="transport-hint">
@@ -501,60 +586,6 @@ export function TacticalBar({
           ⚠️ Cercado: −20 moral e 15% atrito até restabelecer suprimento.
         </p>
       )}
-      <div className="tactical-actions">
-        <button className="selected" onClick={onDetails}>
-          👣 Mover / Escolher Destino no Mapa
-        </button>
-        <button
-          disabled={!active || actor.ready || !!army.embarkedArmyId || !unitCount(half)}
-          onClick={() => send({ type: 'SPLIT_BATTALION', battalionId: army.id, composition: half })}
-        >
-          ➗ Dividir agora (50/50)
-        </button>
-        <button
-          disabled={!active || actor.ready || !!army.embarkedArmyId || !compatible}
-          onClick={() => send({ type: 'MERGE_ALL', battalionId: army.id })}
-        >
-          🔗 Fundir agora na província
-        </button>
-        <button disabled={game.phase !== 'planning' || p.ownerId !== playerId} onClick={onRecruit}>
-          ➕ Reforçar / Recrutar Aqui
-        </button>
-        <button
-          disabled={!active || army.isFleet}
-          onClick={() => send({ type: 'ENTRENCH_BATTALION', battalionId: army.id })}
-        >
-          🏰 Entrincheirar (+Defesa)
-        </button>
-        {['turan', 'ferro_norte'].includes(actor.nationId) && (
-          <button
-            disabled={
-              !active ||
-              army.isFleet ||
-              controller(p) !== playerId ||
-              p.pacification > 35 ||
-              p.razedTurn !== null
-            }
-            onClick={() => send({ type: 'RAZE_PROVINCE', battalionId: army.id })}
-          >
-            🔥 Arrasar Província
-          </button>
-        )}
-        {p.siege?.attackerOwnerId === playerId && !army.isFleet && (
-          <button
-            disabled={!active || army.infantry < 1}
-            onClick={() => send({ type: 'ASSAULT_SIEGE', battalionId: army.id })}
-          >
-            🔥 Assaltar Muralha (+3 cerco)
-          </button>
-        )}
-        <button
-          disabled={game.phase !== 'planning'}
-          onClick={() => command({ type: 'CANCEL_ORDER', key: `army:${army.id}` })}
-        >
-          ❌ Cancelar Ordem Atual
-        </button>
-      </div>
     </section>
   );
 }

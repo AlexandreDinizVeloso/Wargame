@@ -4098,3 +4098,1222 @@ legend {
   cursor: pointer;
   color: var(--gold);
 }
+
+/* Release candidate: a single contextual dock and one strategy center. */
+.miniature-count {
+  font-family: Inter, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
+}
+.army-token:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 3px #ffdf9b);
+}
+.army-token {
+  cursor: pointer;
+}
+.low-morale .miniature-morale,
+.miniature-alert {
+  animation: miniature-pulse 1.7s ease-in-out infinite;
+}
+.sea-current-route {
+  opacity: 0.25;
+}
+.map-stage[data-mode='ECONOMIC_SUPPLY'] .sea-current-route {
+  opacity: 0.7;
+  animation: current-drift 22s linear infinite;
+}
+.compass-node.contested > circle:first-child {
+  stroke: #d38663;
+}
+.siege-flame {
+  transform-origin: bottom;
+  animation: flame-flicker 1.3s ease-in-out infinite alternate;
+}
+.siege-smoke {
+  animation: smoke-rise 3.5s ease-out infinite;
+}
+@keyframes miniature-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes current-drift {
+  to {
+    stroke-dashoffset: -80;
+  }
+}
+@keyframes flame-flicker {
+  to {
+    transform: scale(0.85, 1.2) rotate(6deg);
+    opacity: 0.7;
+  }
+}
+@keyframes smoke-rise {
+  to {
+    transform: translate(4px, -13px) scale(1.3);
+    opacity: 0;
+  }
+}
+.game-viewport.release-candidate-interface .top-bar {
+  top: 8px;
+  left: 10px;
+  right: 10px;
+  min-height: 64px;
+  height: 64px;
+  padding: 7px 10px;
+  gap: 12px;
+  border-radius: 9px;
+  border-color: #9f91644d;
+  background: #112533f2;
+}
+.release-candidate-interface .nation-heading {
+  min-width: 0;
+  width: 175px;
+  padding: 0 10px 0 0;
+}
+.release-candidate-interface .nation-heading strong {
+  font-size: 15px;
+}
+.release-candidate-interface .top-resources {
+  gap: 20px;
+  flex: 1;
+  justify-content: flex-start;
+}
+.release-candidate-interface .hud-stat {
+  gap: 7px;
+}
+.release-candidate-interface .hud-stat strong {
+  font-size: 17px;
+}
+.release-candidate-interface .hud-stat small {
+  font-size: 7px;
+  letter-spacing: 0.3px;
+}
+.release-candidate-interface .faith-stat,
+.release-candidate-interface .exhaustion-stat,
+.release-candidate-interface .nation-ribbon,
+.release-candidate-interface .telemetry-tools,
+.release-candidate-interface .victory-tracker,
+.release-candidate-interface .map-hint {
+  display: none;
+}
+.release-candidate-interface .turn-status {
+  width: 105px;
+  flex-shrink: 0;
+}
+.release-candidate-interface .turn-status strong {
+  font-size: 16px;
+}
+.release-candidate-interface .turn-status > span {
+  font-size: 8px;
+}
+.release-candidate-interface .ready-button {
+  min-height: 46px;
+  padding: 8px 15px;
+  width: 168px;
+  flex-shrink: 0;
+}
+.release-candidate-interface .top-tools {
+  flex-direction: row;
+  gap: 2px;
+}
+.release-candidate-interface .top-tools button {
+  padding: 6px;
+  min-width: 29px;
+}
+.game-viewport.release-candidate-interface .unified-navigation {
+  top: 78px;
+  left: 10px;
+  width: auto;
+  max-width: calc(100vw - 20px);
+  padding: 0;
+  gap: 4px;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  z-index: 82;
+}
+.release-candidate-interface .unified-navigation button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  min-height: 32px;
+  font-size: 10px;
+  white-space: nowrap;
+  background: #112c37e8;
+  border-radius: 6px;
+  border-color: #c3b47945;
+}
+.release-candidate-interface .unified-navigation button:nth-child(n) {
+  display: inline-flex;
+}
+.release-candidate-interface .hud-footer {
+  left: auto;
+  right: 10px;
+  bottom: 10px;
+  width: auto;
+  border-radius: 8px;
+  padding: 3px 6px;
+  background: #102531ee;
+}
+.release-candidate-interface .footer-tabs button {
+  font-size: 9px;
+  padding: 5px 7px;
+  min-height: 28px;
+}
+.release-candidate-interface .map-controls {
+  top: auto;
+  transform: none;
+  height: auto;
+  right: 10px;
+  bottom: 53px;
+  padding: 3px;
+  border-radius: 8px;
+}
+.release-candidate-interface .map-mode-buttons button,
+.release-candidate-interface .camera-controls button {
+  min-height: 29px;
+  min-width: 30px;
+  padding: 6px;
+}
+.release-candidate-interface .map-mode-buttons small {
+  display: none;
+}
+.release-candidate-interface .reference-realm {
+  right: 10px;
+  bottom: 92px;
+  top: auto;
+}
+.game-viewport.release-candidate-interface > .first-ready-banner {
+  top: 116px;
+  left: auto;
+  right: 10px;
+  width: auto;
+  max-width: 300px;
+  transform: none;
+  font-size: 8px;
+  padding: 5px 8px;
+  background: #183743d9;
+}
+.release-candidate-interface .grace-banner,
+.release-candidate-interface .sandbox-banner {
+  top: 116px;
+  left: 10px;
+  transform: none;
+  padding: 5px 8px;
+  font-size: 8px;
+}
+.inspector-dock {
+  position: absolute;
+  z-index: 43;
+  bottom: 12px;
+  left: 12px;
+  width: clamp(285px, 23vw, 334px);
+  height: clamp(190px, 29vh, 290px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(145deg, #19353ff7, #102832f7);
+  border: 1px solid #b9a57287;
+  border-radius: 12px;
+  box-shadow: 0 12px 36px #04141c99;
+  overflow: hidden;
+}
+.inspector-dock > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 3px 8px 3px 12px;
+  border-bottom: 1px solid #d1bd8733;
+  background: #1b333c;
+}
+.inspector-dock > header strong {
+  font-size: 10px;
+  font-weight: 500;
+  color: #e3d1a6;
+}
+.inspector-dock > header > div {
+  display: flex;
+}
+.inspector-dock > header button {
+  border: 0;
+  padding: 4px;
+  min-height: 22px;
+  background: none;
+}
+.inspector-body {
+  padding: 10px 12px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #9c957055 transparent;
+}
+.inspector-dock.collapsed {
+  height: 34px;
+}
+.inspector-dock.report-dock {
+  right: 12px;
+  left: auto;
+  bottom: 94px;
+  width: min(620px, calc(100vw - 24px));
+  height: min(400px, 50vh);
+}
+.inspector-dock .region-heading {
+  margin-bottom: 9px;
+}
+.inspector-dock .region-heading h2 {
+  font-size: 20px;
+  margin: 4px 0;
+}
+.inspector-dock .region-heading span {
+  font-size: 9px;
+}
+.inspector-dock .eyebrow {
+  font-size: 7px;
+}
+.inspector-dock .context-tabs {
+  display: flex;
+  position: sticky;
+  top: -10px;
+  z-index: 3;
+  background: #15313bf5;
+  margin: -2px -3px 9px;
+  padding: 4px 0;
+  gap: 3px;
+}
+.inspector-dock .context-tabs button {
+  flex: 1;
+  font-size: 8px;
+  line-height: 1.3;
+  padding: 6px 4px;
+  min-height: 29px;
+  border-radius: 5px;
+  white-space: normal;
+}
+.inspector-dock .context-tabs button[aria-selected='true'] {
+  color: #ffe0a4;
+  border-color: #b9a165;
+  background: #b5a05d1f;
+}
+.inspector-dock .tactical-hud {
+  position: static;
+  transform: none;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+.inspector-dock .tactical-hud > header {
+  display: block;
+}
+.inspector-dock .tactical-hud > header > strong {
+  font:
+    19px Georgia,
+    serif;
+  display: block;
+}
+.inspector-dock .tactical-hud > header > span {
+  font-size: 9px;
+  display: block;
+  margin: 4px 0 7px;
+}
+.inspector-dock .tactical-hud > header > button {
+  display: none;
+}
+.inspector-dock .tactical-composition {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  margin: 6px 0;
+}
+.inspector-dock .tactical-composition span {
+  font-size: 9px;
+}
+.inspector-dock .tactical-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.inspector-dock .tactical-actions button {
+  flex: 1 1 40%;
+  font-size: 8px;
+  min-height: 28px;
+  padding: 6px;
+  text-align: left;
+  white-space: normal;
+}
+.inspector-dock .transport-hint {
+  font-size: 8px;
+  margin: 5px 0;
+}
+.inspector-dock .meter {
+  margin: 6px 0;
+}
+.inspector-dock .commander-panel h3 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+.inspector-dock .commander-card p {
+  font-size: 9px;
+}
+.inspector-dock label,
+.inspector-dock p {
+  font-size: 10px;
+}
+.inspector-dock select,
+.inspector-dock input {
+  min-height: 29px;
+  padding: 5px 7px;
+}
+.inspector-dock .building-grid {
+  grid-template-columns: 1fr;
+}
+.inspector-dock .building-card {
+  padding: 9px;
+}
+.inspector-dock .building-card p {
+  font-size: 9px;
+}
+.inspector-dock .ledger-grid strong {
+  font-size: 17px;
+}
+.inspector-dock .ledger-grid small {
+  font-size: 7px;
+}
+.inspector-dock .field-heading {
+  margin: 12px 0 8px;
+  font-size: 9px;
+}
+.inspector-dock .province-facts > summary {
+  font-size: 9px;
+  cursor: pointer;
+}
+.inspector-dock .neutral-city-card {
+  font-size: 9px;
+}
+.inspector-dock .action-row {
+  padding: 8px;
+}
+.inspector-dock .action-row small {
+  font-size: 8px;
+}
+.inspector-dock [hidden] {
+  display: none !important;
+}
+.strategy-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 126px 24px 24px;
+  background: #04162118;
+}
+.strategy-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(940px, calc(100vw - 48px));
+  max-height: calc(100dvh - 156px);
+  min-height: 180px;
+  background: linear-gradient(130deg, #1c3741fa, #102835fc);
+  border: 1px solid #b7a06c;
+  border-radius: 14px;
+  box-shadow: 0 20px 80px #03121b99;
+  overflow: hidden;
+  outline: none;
+}
+.strategy-modal > header {
+  min-height: 60px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid #b9a67340;
+  gap: 12px;
+}
+.strategy-modal > header h2 {
+  font:
+    22px Georgia,
+    serif;
+  color: #ead9ac;
+  margin: 4px 0 0;
+}
+.strategy-modal > header .eyebrow {
+  font-size: 7px;
+}
+.strategy-modal > header > button {
+  padding: 6px;
+  min-height: 28px;
+  border: 0;
+  background: none;
+}
+.strategy-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid #b9a67340;
+  flex-shrink: 0;
+}
+.strategy-tabs button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 9px 11px;
+  font-size: 10px;
+  border-radius: 7px;
+}
+.strategy-tabs button[aria-selected='true'] {
+  color: #ffe1a0;
+  border-color: #ceb46e;
+  background: #d5bc7020;
+}
+.strategy-content {
+  padding: 22px;
+  overflow: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #b5a27155 transparent;
+}
+.strategy-content > div > h2,
+.strategy-content > section > h2 {
+  margin-top: 0;
+  font:
+    25px Georgia,
+    serif;
+}
+.strategy-content .skill-nodes {
+  grid-template-columns: 1fr 1fr;
+}
+.strategy-content .council-menu {
+  margin: auto;
+  max-width: 620px;
+}
+.strategy-content .manual-grid {
+  gap: 22px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.sea-nodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+.sea-nodes-grid .sea-trade-card {
+  margin: 0;
+}
+.audio-settings {
+  margin: 18px 0;
+  padding: 12px;
+  border: 1px solid #bba56b40;
+  border-radius: 8px;
+}
+.audio-settings label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.audio-settings input {
+  flex: 1;
+  min-width: 110px;
+  width: auto;
+  accent-color: #d0b978;
+}
+.audio-settings output {
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+.audio-settings button {
+  font-size: 10px;
+  padding: 5px 8px;
+}
+.release-candidate-interface .personal-alerts {
+  top: 152px;
+  right: 10px;
+  max-width: 330px;
+  max-height: 40vh;
+  overflow: auto;
+}
+.critical-alert-badge {
+  background: #392c28ed;
+  border: 1px solid #dd9b66;
+  border-radius: 8px;
+  font-size: 10px;
+  padding: 8px 12px;
+  color: #f3d09f;
+}
+.turn-announcement {
+  position: absolute;
+  z-index: 65;
+  pointer-events: none;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: center;
+  padding: 18px 35px;
+  min-width: 350px;
+  border: 1px solid #dac18760;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #10273511, #132e3cec, #10273511);
+  color: #f8e1ad;
+  animation: turn-arrive 2.5s ease both;
+}
+.turn-announcement > span {
+  font:
+    25px Georgia,
+    serif;
+}
+.turn-announcement > small {
+  font-size: 10px;
+  color: #d8d2bd;
+}
+@keyframes turn-arrive {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  12%,
+  85% {
+    opacity: 1;
+  }
+}
+.postgame-analytics {
+  text-align: left;
+  width: 100%;
+}
+.analytics-heading {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.analytics-heading h2 {
+  margin: 4px 0;
+  font:
+    28px Georgia,
+    serif;
+  color: #ead6a0;
+}
+.analytics-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.analytics-tabs button {
+  font-size: 11px;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+.analytics-tabs button[aria-selected='true'] {
+  background: #c2a76822;
+  border-color: #d3b773;
+  color: #f8dfa4;
+}
+.analytics-metric {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: fit-content;
+  font-size: 10px;
+}
+.analytics-metric select {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 11px;
+}
+.analytics-chart {
+  border: 1px solid #b9a97433;
+  border-radius: 8px;
+  background: #0a223050;
+}
+.analytics-chart svg {
+  width: 100%;
+  display: block;
+  touch-action: pan-y;
+}
+.analytics-chart text {
+  fill: #bcc8c3;
+  font-size: 11px;
+  font-family: system-ui, sans-serif;
+}
+.chart-legends {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 10px 0;
+}
+.chart-legends button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  padding: 5px 8px;
+  border-color: #a5b2a855;
+}
+.chart-legends button[aria-pressed='false'] {
+  opacity: 0.4;
+}
+.chart-legends i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.chart-scrubber {
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.chart-scrubber input {
+  width: auto;
+  min-height: 22px;
+  flex: 1;
+  accent-color: #dac183;
+}
+.chart-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.chart-values > div {
+  flex: 1 0 130px;
+  padding: 9px;
+  background: #153441;
+  border-radius: 5px;
+}
+.chart-values dt {
+  font-size: 9px;
+}
+.chart-values dd {
+  font-size: 17px;
+  margin: 4px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.campaign-medals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+}
+.campaign-medals article {
+  padding: 16px 12px;
+  border: 1px solid #ba9b5355;
+  background: linear-gradient(145deg, #9e7d341c, #102b35);
+  border-radius: 9px;
+}
+.campaign-medals h4 {
+  margin: 10px 0 8px;
+  color: #f3d491;
+  font:
+    16px Georgia,
+    serif;
+}
+.campaign-medals strong {
+  font-size: 10px;
+}
+.campaign-medals p {
+  font-size: 9px;
+  line-height: 1.6;
+  color: #aabfbf;
+}
+.campaign-medals small {
+  color: #cfbd8b;
+  font-size: 10px;
+}
+.medal-symbol {
+  font-size: 28px;
+}
+.campaign-result .result-modal {
+  max-width: none;
+}
+.campaign-result .result-modal > button {
+  width: auto;
+  display: inline-flex;
+  margin: 12px 5px 4px;
+}
+.campaign-result .result-stats {
+  justify-content: center;
+}
+.tutorial-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 95;
+  pointer-events: none;
+}
+.tutorial-spotlight {
+  position: fixed;
+  border: 2px solid #f2d28c;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 5000px #04172533,
+    0 0 20px #e9c87666;
+  pointer-events: none;
+  transition:
+    left 0.15s,
+    top 0.15s,
+    width 0.15s,
+    height 0.15s;
+}
+.tutorial-card {
+  pointer-events: auto;
+  position: absolute;
+  bottom: 102px;
+  right: 15px;
+  width: 325px;
+  max-height: min(380px, 48vh);
+  overflow: auto;
+  background: #18343ef7;
+  border: 1px solid #d1b878;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 36px #03131a99;
+}
+.tutorial-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tutorial-card > header > span {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 8px;
+  color: #d6c28b;
+  letter-spacing: 1px;
+}
+.tutorial-card > header button {
+  padding: 3px;
+  min-height: 22px;
+  border: 0;
+  background: none;
+}
+.tutorial-card ol {
+  display: flex;
+  gap: 8px;
+  padding: 0;
+  margin: 14px 0;
+  list-style: none;
+}
+.tutorial-card li {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 10px;
+  background: #0f2633;
+  border: 1px solid #af9b654d;
+}
+.tutorial-card li.current {
+  background: #b49a59;
+  color: #122630;
+}
+.tutorial-card li.complete {
+  background: #386957;
+}
+.tutorial-card h3 {
+  font:
+    20px Georgia,
+    serif;
+  margin: 8px 0;
+  color: #f0da9f;
+}
+.tutorial-card p {
+  line-height: 1.7;
+  font-size: 11px;
+  color: #c4d0c8;
+}
+.tutorial-card small {
+  font-size: 10px;
+  color: #acbcb4;
+}
+.tutorial-card footer {
+  margin-top: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.tutorial-card footer span {
+  font-size: 8px;
+  color: #c9b987;
+}
+.tutorial-card footer button {
+  font-size: 9px;
+  padding: 6px 9px;
+}
+@media (max-width: 1100px) {
+  .release-candidate-interface .reserves-stat {
+    display: none;
+  }
+  .release-candidate-interface .nation-heading {
+    width: 145px;
+  }
+  .release-candidate-interface .top-resources {
+    gap: 12px;
+  }
+  .release-candidate-interface .unified-navigation button {
+    padding: 7px 9px;
+  }
+  .campaign-medals {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .game-viewport.release-candidate-interface .top-bar {
+    height: 102px;
+    min-height: 102px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: 39px 39px;
+    gap: 7px;
+    padding: 6px 9px;
+  }
+  .release-candidate-interface .nation-heading {
+    grid-area: 1/1;
+    width: 130px;
+  }
+  .release-candidate-interface .nation-heading strong {
+    font-size: 13px;
+  }
+  .release-candidate-interface .nation-heading > svg {
+    width: 23px;
+  }
+  .release-candidate-interface .nation-heading small {
+    display: none;
+  }
+  .release-candidate-interface .top-resources {
+    grid-area: 2/1;
+    gap: 9px;
+  }
+  .release-candidate-interface .hud-stat strong {
+    font-size: 14px;
+  }
+  .release-candidate-interface .hud-stat small {
+    font-size: 6px;
+  }
+  .release-candidate-interface .hud-stat > svg {
+    width: 12px;
+  }
+  .release-candidate-interface .turn-status {
+    position: static;
+    grid-area: 1/2;
+    width: auto;
+    margin-right: 106px;
+    min-width: 70px;
+    text-align: right;
+  }
+  .release-candidate-interface .turn-status strong {
+    font-size: 12px;
+  }
+  .release-candidate-interface .turn-status > span {
+    display: none;
+  }
+  .release-candidate-interface .turn-status > small {
+    font-size: 7px;
+  }
+  .release-candidate-interface .ready-button {
+    grid-area: 2/2;
+    width: 160px;
+    min-height: 34px;
+    height: 34px;
+    padding: 6px 10px;
+    font-size: 10px;
+  }
+  .release-candidate-interface .ready-button small {
+    font-size: 7px;
+  }
+  .release-candidate-interface .top-tools {
+    position: absolute;
+    top: 12px;
+    right: 10px;
+  }
+  .release-candidate-interface .top-tools button {
+    padding: 4px;
+    min-width: 25px;
+  }
+  .release-candidate-interface .top-tools button[aria-label='Como jogar'] {
+    display: none;
+  }
+  .game-viewport.release-candidate-interface .unified-navigation {
+    top: 116px;
+    gap: 4px;
+    right: 10px;
+    justify-content: space-between;
+  }
+  .release-candidate-interface .unified-navigation button {
+    flex: 1;
+    justify-content: center;
+    min-width: 42px;
+    padding: 7px 8px;
+  }
+  .release-candidate-interface .unified-navigation button span {
+    display: none;
+  }
+  .release-candidate-interface .hud-footer {
+    bottom: 8px;
+    right: 8px;
+    left: 8px;
+    padding: 2px;
+  }
+  .release-candidate-interface .footer-tabs {
+    justify-content: space-between;
+  }
+  .release-candidate-interface .footer-tabs button {
+    padding: 4px;
+    font-size: 8px;
+    min-height: 28px;
+  }
+  .release-candidate-interface .footer-tabs button svg {
+    width: 11px;
+  }
+  .game-viewport.release-candidate-interface .map-controls {
+    top: auto;
+    transform: none;
+    height: 34px;
+    bottom: 46px;
+    right: 8px;
+  }
+  .release-candidate-interface .map-mode-buttons button,
+  .release-candidate-interface .camera-controls button {
+    min-height: 24px;
+    min-width: 24px;
+    padding: 4px;
+  }
+  .inspector-dock {
+    left: 8px;
+    bottom: 82px;
+    width: min(320px, calc(100vw - 16px));
+    height: min(250px, 31dvh);
+  }
+  .inspector-dock.report-dock {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    bottom: 82px;
+    height: min(390px, 48dvh);
+  }
+  .strategy-backdrop {
+    padding: 158px 8px 44px;
+  }
+  .strategy-modal {
+    width: 100%;
+    max-height: calc(100dvh - 204px);
+    border-radius: 10px;
+  }
+  .strategy-modal > header {
+    min-height: 49px;
+    padding: 10px 12px;
+  }
+  .strategy-modal > header h2 {
+    font-size: 19px;
+  }
+  .strategy-tabs {
+    padding: 5px;
+    gap: 3px;
+  }
+  .strategy-tabs button {
+    font-size: 9px;
+    padding: 7px 8px;
+  }
+  .strategy-content {
+    padding: 14px;
+  }
+  .strategy-content .skill-nodes {
+    grid-template-columns: 1fr;
+  }
+  .game-viewport.release-candidate-interface > .first-ready-banner {
+    top: 155px;
+    max-width: 240px;
+    font-size: 7px;
+    right: 8px;
+    padding: 4px 6px;
+  }
+  .release-candidate-interface .grace-banner,
+  .release-candidate-interface .sandbox-banner {
+    top: 181px;
+    left: 8px;
+    font-size: 7px;
+    max-width: calc(100vw - 16px);
+  }
+  .release-candidate-interface .personal-alerts {
+    top: 207px;
+    right: 8px;
+    max-width: 300px;
+    max-height: 30vh;
+  }
+  .critical-alert-badge {
+    font-size: 9px;
+    padding: 6px 9px;
+  }
+  .turn-announcement {
+    top: 215px;
+    min-width: 260px;
+    max-width: calc(100vw - 24px);
+    padding: 14px;
+  }
+  .turn-announcement > span {
+    font-size: 20px;
+  }
+  .turn-announcement > small {
+    font-size: 9px;
+  }
+  .tutorial-card {
+    right: 8px;
+    bottom: auto;
+    top: 212px;
+    width: min(310px, calc(100vw - 16px));
+    max-height: 31dvh;
+    padding: 12px;
+  }
+  .tutorial-card h3 {
+    font-size: 17px;
+  }
+  .tutorial-card p {
+    font-size: 10px;
+  }
+  .tutorial-card ol {
+    margin: 9px 0;
+  }
+  .analytics-heading {
+    flex-wrap: wrap;
+  }
+  .analytics-heading h2 {
+    font-size: 24px;
+  }
+  .analytics-tabs button {
+    font-size: 9px;
+    padding: 6px;
+  }
+  .analytics-metric {
+    display: block;
+  }
+  .campaign-medals {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .campaign-medals article {
+    padding: 11px 8px;
+  }
+  .campaign-medals h4 {
+    font-size: 14px;
+  }
+  .chart-legends button {
+    font-size: 8px;
+  }
+  .chart-values > div {
+    flex-basis: 100px;
+  }
+  .chart-scrubber {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .siege-flame,
+  .siege-smoke,
+  .miniature-alert,
+  .miniature-morale,
+  .sea-current-route,
+  .turn-announcement {
+    animation: none !important;
+  }
+  .tutorial-spotlight {
+    transition: none;
+  }
+}
+.quick-recruit-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 10px 0;
+}
+.quick-recruit-actions button {
+  font-size: 9px;
+  min-height: 28px;
+  padding: 6px;
+}
+.tactical-supply {
+  display: block;
+  color: #a8bdb6;
+  font-size: 8px;
+  margin: 5px 0;
+}
+.strategic-resource-summary {
+  padding: 8px;
+  background: #c8a96512;
+  border-left: 2px solid #ad9761;
+}
+.inspector-dock .chart-route-summary {
+  margin: 0 0 5px;
+  padding: 5px 7px;
+  font-size: 8px;
+  line-height: 1.3;
+}
+.inspector-dock .tactical-hud > header > strong {
+  font-size: 17px;
+}
+.inspector-dock .tactical-hud > header > span {
+  margin: 3px 0 5px;
+}
+.inspector-dock .tactical-actions {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+.inspector-dock .tactical-actions button {
+  flex: 0 0 auto;
+  min-width: 56px;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 9px;
+}
+.province-shape:focus {
+  outline: none;
+}
+.province-shape:focus-visible {
+  stroke: #f9dfa0;
+  stroke-width: 2;
+}
+.strategy-modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 12px 15px;
+  background: #102935;
+  border-top: 1px solid #b5a16c55;
+}
+.strategy-modal-footer button {
+  font-size: 10px;
+  min-height: 32px;
+  padding: 8px 12px;
+}
+@media (max-width: 700px) {
+  .strategy-modal-footer {
+    padding: 8px;
+    gap: 5px;
+  }
+  .strategy-modal-footer button {
+    font-size: 9px;
+    padding: 6px 8px;
+  }
+}

@@ -28,7 +28,12 @@ const server = http.createServer((req, res) => {
   if (req.url?.split('?')[0] === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
-      JSON.stringify({ status: 'ok', game: 'concordia', version: '0.7.0', protocolVersion: 7 }),
+      JSON.stringify({
+        status: 'ok',
+        game: 'concordia',
+        version: '0.9.0-rc.1',
+        protocolVersion: 7,
+      }),
     );
     return;
   }

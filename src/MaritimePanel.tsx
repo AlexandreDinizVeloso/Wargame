@@ -105,3 +105,36 @@ export function FleetOperations({
     </section>
   );
 }
+
+export function MaritimeOverview({ game, playerId }: { game: GameView; playerId: string }) {
+  const nodes = seaTradeNodes(game),
+    controlled = nodes.filter((n) => n.ownerId === playerId);
+  return (
+    <section className="maritime-overview">
+      <h2>⚓ Comércio & Mares</h2>
+      <p>
+        Patrulhe com pelo menos um navio de guerra e um transporte livres. Presença vale 2 × navios
+        de guerra + transportes; empates e navios hostis suspendem o comércio.
+      </p>
+      <p className="success-box">
+        Sua presença controla {controlled.length} nós ·{' '}
+        {Math.min(
+          MARITIME_CAP,
+          controlled.reduce((n, s) => n + s.value, 0),
+        )}
+        /{MARITIME_CAP} ouro por rodada
+      </p>
+      <div className="sea-nodes-grid">
+        {game.provinces
+          .filter((p) => p.kind === 'SEA_ZONE')
+          .map((sea) => (
+            <SeaTradeCard key={sea.id} game={game} sea={sea} />
+          ))}
+      </div>
+      <p>
+        Frotas continuam pagando manutenção. Bombardeio custa seis ouro, exige três navios de guerra
+        e ocupa a ação da frota.
+      </p>
+    </section>
+  );
+}

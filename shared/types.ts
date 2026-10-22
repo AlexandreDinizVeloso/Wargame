@@ -409,7 +409,15 @@ export interface TurnResolutionReport {
   desertions: { battalionId: string; ownerId: string; provinceId: string; losses: number }[];
   encirclements: { battalionId: string; ownerId: string; provinceId: string; losses: number }[];
 }
+export interface RealmTurnAnalytics {
+  playerId: string;
+  landTroops?: number;
+  ships?: number;
+  fortLevels: number;
+  tradeNodes: number;
+}
 export interface TurnHistory extends TurnResolutionReport {
+  analytics?: RealmTurnAnalytics[];
   nations: Player[];
   wars: War[];
   control: { provinceId: string; ownerId: string | null; occupierId: string | null }[];
@@ -431,7 +439,8 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.7.0';
+  createdVersion: '0.7.0' | '0.9.0-rc.1';
+  tutorial?: boolean;
   enableSecretObjectives: boolean;
   allowBotSecretVictory: boolean;
   legacyResult?: {
@@ -558,6 +567,7 @@ export type ClientMessage =
       theater?: Theater;
       nationId?: NationId;
       demo?: boolean;
+      tutorial?: boolean;
       roomName?: string;
       isPublic?: boolean;
       enableSecretObjectives?: boolean;

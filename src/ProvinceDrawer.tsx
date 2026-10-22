@@ -1,3 +1,4 @@
+import { levyReason } from '../shared/emergency';
 import { SeaTradeCard } from './MaritimePanel';
 import { independentCity, neutralTarget, nextNeutralTurn } from '../shared/neutral';
 import CityDevelopment from './CityDevelopment';
@@ -84,7 +85,7 @@ export default function ProvinceDrawer({
     ruler = game.players.find((p) => p.id === controller(province));
   const own = controller(province) === playerId,
     legalOwn = own && province.ownerId === playerId,
-    active = game.phase === 'planning';
+    active = game.phase === 'planning' && !me.ready;
   const armies = game.battalions.filter((a) => a.provinceId === province.id && !a.embarkedOnId),
     total = armies.reduce((n, a) => n + unitCount(a), 0),
     limit = effectiveSupply(game, playerId, province);
@@ -226,9 +227,9 @@ export default function ProvinceDrawer({
         <div className="context-tabs" role="tablist" aria-label="Ações da província">
           {(
             [
-              ['build', '🏗️ Construir'],
-              ['recruit', '⚔️ Recrutar'],
-              ['diplomacy', '👑 Diplomacia'],
+              ['build', '🏛️ Cidade & Economia'],
+              ['recruit', '⚔️ Recrutamento & Guarnição'],
+              ['diplomacy', '📜 Diplomacia do Reino'],
             ] as const
           ).map(([key, label]) => (
             <button key={key} role="tab" aria-selected={tab === key} onClick={() => setTab(key)}>
@@ -296,7 +297,11 @@ export default function ProvinceDrawer({
           tratado.
         </p>
       )}
-      <details className="province-facts" open={!compact}>
+      <details
+        className="province-facts"
+        open={!compact || tab === 'build'}
+        hidden={compact && tab !== 'build'}
+      >
         <summary>Terreno, fé e suprimento</summary>
         <div className="ledger-grid">
           <div>
@@ -416,6 +421,13 @@ export default function ProvinceDrawer({
       {province.kind === 'LAND' && (
         <>
           <section hidden={compact && tab !== 'build'}>
+            {province.strategicResource && (
+              <p className="strategic-resource-summary">
+                {RESOURCES[province.strategicResource].icon}{' '}
+                {RESOURCES[province.strategicResource].name} ·{' '}
+                {RESOURCES[province.strategicResource].effect}
+              </p>
+            )}
             <div className="field-heading">Administração da cidade</div>
             {build(
               'PACIFY',
@@ -452,9 +464,21 @@ export default function ProvinceDrawer({
           <section hidden={compact && tab !== 'recruit'}>
             {legalOwn && (
               <div className="recruit-section">
+                <button
+                  className="emergency-levy"
+                  disabled={!!levyReason(game, playerId)}
+                  title={levyReason(game, playerId) ?? '50 ouro e 15 estabilidade'}
+                  onClick={() => command({ type: 'EMERGENCY_LEVY' })}
+                >
+                  🛡️ Convocar Defesa da Pátria
+                </button>
                 <div className="field-heading">
                   Recrutamento <span>ORDEM DE CIDADE</span>
                 </div>
+                <Meter
+                  label="Capacidade de recrutamento"
+                  value={(100 * localCount) / provinceRecruitLimit(province)}
+                />
                 <p className="recruit-capacity">
                   Capacidade de Recrutamento Local: {localCount}/{provinceRecruitLimit(province)}{' '}
                   neste turno
@@ -465,6 +489,48 @@ export default function ProvinceDrawer({
                   </p>
                 )}
                 {recruitReason && <p className="warning-box">{recruitReason}</p>}
+                <div className="quick-recruit-actions" aria-label="Recrutamento rápido">
+                  {(
+                    [
+                      { label: '1 Infantaria', composition: { infantry: 1 } },
+                      { label: '1 Cavalaria', composition: { cavalry: 1 } },
+                      { label: '1 Artilharia', composition: { artillery: 1 } },
+                      {
+                        label: 'Frota mista',
+                        composition: { warships: 1, transports: 1 },
+                        fleet: true,
+                      },
+                    ] as const
+                  ).map((quick) => {
+                    const fleet = 'fleet' in quick;
+                    const order: PlayerOrder = {
+                      type: 'RECRUIT_BATTALION',
+                      provinceId: province.id,
+                      ...compositionOf(quick.composition),
+                      isFleet: fleet,
+                    };
+                    const budget = budgetFor(game, playerId, order),
+                      reason = recruitmentBlock(province, order, game.turn);
+                    return (
+                      <button
+                        key={quick.label}
+                        disabled={
+                          !active ||
+                          !budget.affordable ||
+                          !!reason ||
+                          (fleet && province.portLevel < 1)
+                        }
+                        title={
+                          reason ??
+                          'Prepara esta composição; substitui outra ação da cidade na fila.'
+                        }
+                        onClick={() => command({ type: 'SUBMIT_ORDER', order })}
+                      >
+                        {quick.label}
+                      </button>
+                    );
+                  })}
+                </div>
                 <div className="segmented-control">
                   <button
                     className={kind === 'regular' ? 'selected' : ''}

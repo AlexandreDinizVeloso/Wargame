@@ -3,7 +3,7 @@ import type { CasusBelli, GameView } from '../shared/types';
 import { getRelation } from '../shared/rules';
 import { hegemonicThreat } from '../shared/strategy';
 import type { Command } from './ui';
-import { FloatingWindow } from './FloatingWindow';
+import { TopBarModal } from './TopBarModal';
 export default function WarModal({
   game,
   playerId,
@@ -14,8 +14,6 @@ export default function WarModal({
   autoTransport,
   command,
   close,
-  active,
-  onActivate,
 }: {
   game: GameView;
   playerId: string;
@@ -47,15 +45,7 @@ export default function WarModal({
     game.phase !== 'planning' ||
     game.turn <= game.graceUntilTurn;
   return (
-    <FloatingWindow
-      id="war"
-      title={`Ato de Guerra contra ${target.nation}`}
-      width={500}
-      height={480}
-      active={active}
-      onActivate={onActivate}
-      onClose={close}
-    >
+    <TopBarModal id="war" title={`Ato de Guerra contra ${target.nation}`} onClose={close}>
       <section className="war-modal popup-sheet">
         <h2>⚔️ Ato de Guerra contra {target.nation}</h2>
         <p>
@@ -134,6 +124,6 @@ export default function WarModal({
           <button onClick={close}>Cancelar</button>
         </div>
       </section>
-    </FloatingWindow>
+    </TopBarModal>
   );
 }
