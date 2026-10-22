@@ -1,7 +1,10 @@
+import PeaceTreatyTable from './PeaceTreatyTable';
+import { goldRules, FACTION_TRAITS } from '../shared/factions';
 import { useEffect, useState } from 'react';
 import { ArrowRight, Coins, Flag, Handshake, ScrollText, Swords, Users } from 'lucide-react';
 import type { CasusBelli, DiplomacyAction, GameView, PeaceTerm } from '../shared/types';
 import {
+  nationOf,
   CASUS_LABELS,
   peaceDescription,
   controller,
@@ -15,12 +18,14 @@ export default function DiplomacyDrawer({
   command,
   focusedRealmId,
   onDeclareWar,
+  onInspectRealm,
 }: {
   game: GameView;
   playerId: string;
   command: Command;
   focusedRealmId?: string;
   onDeclareWar: (id: string) => void;
+  onInspectRealm?: (id: string) => void;
 }) {
   const me = game.players.find((p) => p.id === playerId)!,
     [targetId, setTarget] = useState(game.players.find((p) => p.id !== playerId)?.id ?? ''),
@@ -119,6 +124,7 @@ export default function DiplomacyDrawer({
               disabled={p.id === playerId}
               onClick={() => {
                 setTarget(p.id);
+                onInspectRealm?.(p.id);
                 setProvince('');
               }}
             >
@@ -149,6 +155,17 @@ export default function DiplomacyDrawer({
           );
         })}
       </div>
+      <section className="faction-trait-card">
+        <h3>{goldRules(game) ? FACTION_TRAITS[target.nationId].name : 'Tradições nacionais'}</h3>
+        <ul>
+          {(goldRules(game)
+            ? FACTION_TRAITS[target.nationId].effects
+            : nationOf(target.nationId).ideas
+          ).map((effect) => (
+            <li key={effect}>{effect}</li>
+          ))}
+        </ul>
+      </section>
       <div className="realm-detail">
         <div className="section-heading">
           <h3>{target.nation}</h3>
@@ -338,6 +355,7 @@ export default function DiplomacyDrawer({
             </strong>
             <small>
               {game.players.find((p) => p.id === o.from)?.nation}
+              {o.concession ? ' · Oferece concessões' : ''}
               {o.kind === 'tribute' ? ` · ${o.amount} ouro por rodada` : ''}
             </small>
             {o.kind === 'call_to_arms' && o.defensive && (
@@ -395,127 +413,131 @@ export default function DiplomacyDrawer({
           </div>
         ))
       )}
-      {war && (
-        <details className="command-details peace-builder" open>
-          <summary>
-            <ScrollText size={16} />
-            Negociar paz
-          </summary>
-          <label>
-            Guerra
-            <select
-              value={war.id}
-              onChange={(e) => {
-                setWarId(e.target.value);
-                setProvinces([]);
-              }}
-            >
-              {mine.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="fine-print">
-            Pontuação disponível: {number(Math.max(0, score))}. Com 100, os termos podem ser
-            impostos. Sem termos, a paz depende de aceite.
-          </p>
-          <fieldset>
-            <legend>Ceder províncias ocupadas</legend>
-            {occupied.length ? (
-              occupied.map((p) => (
-                <label className="check-label" key={p.id}>
-                  <input
-                    type="checkbox"
-                    checked={selectedProvinces.includes(p.id)}
-                    onChange={(e) =>
-                      setProvinces((v) =>
-                        e.target.checked ? [...v, p.id] : v.filter((id) => id !== p.id),
-                      )
-                    }
-                  />
-                  {p.name}
-                  <small>{12 + p.baseTax} pontos</small>
-                </label>
-              ))
-            ) : (
-              <p className="muted">Nenhuma ocupação disponível para cessão.</p>
-            )}
-          </fieldset>
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={reparations}
-              onChange={(e) => setReparations(e.target.checked)}
-            />
-            Reparações de guerra <small>20 pontos</small>
-          </label>
-          {reparations && (
+      {goldRules(game) ? (
+        <PeaceTreatyTable game={game} playerId={playerId} command={command} />
+      ) : (
+        war && (
+          <details className="command-details peace-builder" open>
+            <summary>
+              <ScrollText size={16} />
+              Negociar paz
+            </summary>
             <label>
-              Tributo imediato
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={tribute}
-                onChange={(e) =>
-                  setTribute(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
-                }
-              />
-              <small>Mais 25% da renda bruta por cinco rodadas.</small>
-            </label>
-          )}
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={humiliate}
-              onChange={(e) => setHumiliate(e.target.checked)}
-            />
-            Humilhar e desarmar <small>25 pontos</small>
-          </label>
-          <label>
-            Exigência de Estado
-            <select value={force} onChange={(e) => setForce(e.target.value as typeof force)}>
-              <option value="NONE">Nenhuma</option>
-              <option value="RELIGION">Impor religião estatal · 30 pontos</option>
-            </select>
-          </label>
-          <label className="check-label">
-            <input
-              type="checkbox"
-              checked={subjugate}
-              onChange={(e) => setSubjugate(e.target.checked)}
-            />
-            Subjugar reino <small>70 pontos</small>
-          </label>
-          <p className={cost > score && terms.length ? 'danger' : 'muted'}>
-            Custo do tratado: {cost} / {number(Math.max(0, score))}
-          </p>
-          <button
-            className="primary"
-            disabled={
-              !active ||
-              ![war.attackerLeaderId, war.defenderLeaderId].includes(playerId) ||
-              (terms.length > 0 && cost > score)
-            }
-            onClick={() => command({ type: 'OFFER_PEACE', warId: war.id, terms })}
-          >
-            {score >= 100 && terms.length ? 'Impor tratado' : 'Oferecer paz'}
-            <ArrowRight size={15} />
-          </button>
-          {availableAllies
-            .filter((p) => ![...war.attackerIds, ...war.defenderIds].includes(p.id))
-            .map((p) => (
-              <button
-                key={p.id}
-                disabled={!active}
-                onClick={() => command({ type: 'CALL_TO_ARMS', warId: war.id, allyId: p.id })}
+              Guerra
+              <select
+                value={war.id}
+                onChange={(e) => {
+                  setWarId(e.target.value);
+                  setProvinces([]);
+                }}
               >
-                Convocar {p.nation}
-              </button>
-            ))}
-        </details>
+                {mine.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="fine-print">
+              Pontuação disponível: {number(Math.max(0, score))}. Com 100, os termos podem ser
+              impostos. Sem termos, a paz depende de aceite.
+            </p>
+            <fieldset>
+              <legend>Ceder províncias ocupadas</legend>
+              {occupied.length ? (
+                occupied.map((p) => (
+                  <label className="check-label" key={p.id}>
+                    <input
+                      type="checkbox"
+                      checked={selectedProvinces.includes(p.id)}
+                      onChange={(e) =>
+                        setProvinces((v) =>
+                          e.target.checked ? [...v, p.id] : v.filter((id) => id !== p.id),
+                        )
+                      }
+                    />
+                    {p.name}
+                    <small>{12 + p.baseTax} pontos</small>
+                  </label>
+                ))
+              ) : (
+                <p className="muted">Nenhuma ocupação disponível para cessão.</p>
+              )}
+            </fieldset>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={reparations}
+                onChange={(e) => setReparations(e.target.checked)}
+              />
+              Reparações de guerra <small>20 pontos</small>
+            </label>
+            {reparations && (
+              <label>
+                Tributo imediato
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={tribute}
+                  onChange={(e) =>
+                    setTribute(Math.max(0, Math.min(100, Number(e.target.value) || 0)))
+                  }
+                />
+                <small>Mais 25% da renda bruta por cinco rodadas.</small>
+              </label>
+            )}
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={humiliate}
+                onChange={(e) => setHumiliate(e.target.checked)}
+              />
+              Humilhar e desarmar <small>25 pontos</small>
+            </label>
+            <label>
+              Exigência de Estado
+              <select value={force} onChange={(e) => setForce(e.target.value as typeof force)}>
+                <option value="NONE">Nenhuma</option>
+                <option value="RELIGION">Impor religião estatal · 30 pontos</option>
+              </select>
+            </label>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={subjugate}
+                onChange={(e) => setSubjugate(e.target.checked)}
+              />
+              Subjugar reino <small>70 pontos</small>
+            </label>
+            <p className={cost > score && terms.length ? 'danger' : 'muted'}>
+              Custo do tratado: {cost} / {number(Math.max(0, score))}
+            </p>
+            <button
+              className="primary"
+              disabled={
+                !active ||
+                ![war.attackerLeaderId, war.defenderLeaderId].includes(playerId) ||
+                (terms.length > 0 && cost > score)
+              }
+              onClick={() => command({ type: 'OFFER_PEACE', warId: war.id, terms })}
+            >
+              {score >= 100 && terms.length ? 'Impor tratado' : 'Oferecer paz'}
+              <ArrowRight size={15} />
+            </button>
+            {availableAllies
+              .filter((p) => ![...war.attackerIds, ...war.defenderIds].includes(p.id))
+              .map((p) => (
+                <button
+                  key={p.id}
+                  disabled={!active}
+                  onClick={() => command({ type: 'CALL_TO_ARMS', warId: war.id, allyId: p.id })}
+                >
+                  Convocar {p.nation}
+                </button>
+              ))}
+          </details>
+        )
       )}
     </div>
   );

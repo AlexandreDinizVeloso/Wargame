@@ -133,6 +133,8 @@ try {
   await page.goto(base);
   await page.getByRole('button', { name: 'Criar uma sala', exact: true }).click();
   await page.getByLabel('Como devemos chamar você?').fill('Capitã');
+  await page.getByLabel('Cenário de Campanha', { exact: true }).selectOption('CLASSIC');
+  await page.getByRole('button', { name: /Teatro continental/ }).click();
   await page.getByLabel('Nome da sala', { exact: true }).fill('Fronteiras v0.6');
   await page.getByLabel('Timer após o primeiro pronto').fill('15');
   await page.getByRole('button', { name: 'Reunir o conselho' }).click();
@@ -156,6 +158,8 @@ try {
   await pages[1].getByRole('button', { name: 'Salvar nome', exact: true }).click();
   await states[0].until((g) => g.players[1].name === 'Almirante convidado');
   await pages[1].getByRole('button', { name: 'Fechar Conselho da nação', exact: true }).click();
+  const collapseOutliner = page.getByRole('button', { name: 'Recolher Outliner', exact: true });
+  if (await collapseOutliner.isVisible()) await collapseOutliner.click();
   let g = states[0].get();
   assert.equal(g.version, 7);
   assert.equal(g.turnDeadlineAt, null);
@@ -163,7 +167,7 @@ try {
   assert.ok(g.players.slice(1).every((p) => p.secretObjectives.length === 0));
   await viewport(page);
   await page.getByText('Aguardando o 1º jogador finalizar', { exact: false }).waitFor();
-  for (const name of ['Político', 'Religião', 'Economia', 'Diplomacia', 'Estabilidade'])
+  for (const name of ['Político', 'Suprimento', 'Economia', 'Diplomacia', 'Estabilidade'])
     await page.getByRole('button', { name: `Mapa ${name}`, exact: true }).click();
   assert.ok((await page.locator('.resource-badge').count()) > 0);
   await page.getByRole('button', { name: 'Mapa Economia', exact: true }).click();
@@ -603,7 +607,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Smoke v0.95 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
+    'Smoke v0.98 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
 } finally {
   await browser.close();

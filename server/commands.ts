@@ -156,7 +156,13 @@ export function parseTerms(value: unknown): PeaceTerm[] {
       type = string(t.type);
     if (type === 'CEDE_PROVINCES') return { type, provinceIds: strings(t.provinceIds, 56) };
     if (type === 'WAR_REPARATIONS')
-      return { type, immediateTribute: integer(t.immediateTribute, 0, 100) };
+      return {
+        type,
+        immediateTribute:
+          t.immediateTribute === undefined ? 0 : integer(t.immediateTribute, 0, 100),
+      };
+    if (type === 'WHITE_PEACE' || type === 'HUMILIATE_DEMILITARIZE' || type === 'SUBJUGATE_VASSAL')
+      return { type };
     if (type === 'HUMILIATE_DISARM' || type === 'SUBJUGATE') return { type };
     if (type === 'FORCE_EMPIRE_OR_RELIGION') {
       assert(t.choice === 'RELIGION', 'Exigência inválida.');
@@ -168,6 +174,7 @@ export function parseTerms(value: unknown): PeaceTerm[] {
 export function parseCommand(value: unknown): GameCommand {
   const c = object(value),
     type = string(c.type);
+  if (type === 'CAST_IMPERIAL_VOTE') return { type, candidateId: string(c.candidateId) };
   if (type === 'ASSIGN_LEADER')
     return {
       type,
@@ -302,6 +309,12 @@ export function parseCommand(value: unknown): GameCommand {
         : {}),
     };
   }
-  if (type === 'OFFER_PEACE') return { type, warId: string(c.warId), terms: parseTerms(c.terms) };
+  if (type === 'OFFER_PEACE')
+    return {
+      type,
+      warId: string(c.warId),
+      terms: parseTerms(c.terms),
+      ...(c.concession === undefined ? {} : { concession: boolean(c.concession) }),
+    };
   throw new Error('Comando desconhecido para o protocolo 6.');
 }

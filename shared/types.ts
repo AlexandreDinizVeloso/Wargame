@@ -6,7 +6,14 @@ export type ReligionId = 'SOLAR' | 'MERCHANT' | 'REFORMED' | 'ANCESTRAL';
 export type ReligiousPolicy = 'INQUISITION' | 'TOLERANCE';
 export type Objective = 'DOMINATION' | 'SECRET_OBJECTIVE';
 export type BotArchetype = 'Militarist' | 'Merchant' | 'Theocrat' | 'Diplomat';
-export type MapMode = 'POLITICAL' | 'RELIGIOUS' | 'ECONOMIC_SUPPLY' | 'DIPLOMATIC' | 'UNREST';
+export type MapMode =
+  | 'POLITICAL'
+  | 'ECONOMIC'
+  | 'LOGISTICS'
+  | 'DIPLOMATIC'
+  | 'UNREST'
+  | 'RELIGIOUS'
+  | 'ECONOMIC_SUPPLY';
 export type NationId =
   | 'vespera'
   | 'sol_invicto'
@@ -24,6 +31,7 @@ export interface Composition {
   transports: number;
 }
 export interface Battalion extends Composition {
+  moraleCap?: 100 | 110;
   id: string;
   ownerId: string;
   name: string;
@@ -128,6 +136,9 @@ export interface DiplomaticOrder {
 export type PlayerOrder = CityOrder | BattalionOrder | DiplomaticOrder;
 export type CasusBelli = 'CONQUEST' | 'IMPERIAL_BAN' | 'HOLY_WAR' | 'HUMILIATION' | 'COALITION';
 export type PeaceTerm =
+  | { type: 'WHITE_PEACE' }
+  | { type: 'HUMILIATE_DEMILITARIZE' }
+  | { type: 'SUBJUGATE_VASSAL' }
   | { type: 'CEDE_PROVINCES'; provinceIds: string[] }
   | { type: 'WAR_REPARATIONS'; immediateTribute: number }
   | { type: 'HUMILIATE_DISARM' }
@@ -149,6 +160,9 @@ export interface War {
   active: boolean;
   imperialBanAgainstId: string | null;
   peaceTerms: PeaceTerm[];
+  treatyWinnerId?: string;
+  treatyScore?: number;
+  battleWins?: number;
 }
 export interface ImperialDiet {
   emperorId: string | null;
@@ -160,6 +174,7 @@ export interface ImperialDiet {
   bannedRealmIds: string[];
 }
 export interface NationDefinition {
+  factionTrait: import('./factions').FactionTrait;
   id: NationId;
   style: string;
   mechanic: string;
@@ -236,7 +251,13 @@ export interface Relation {
   embargoes: string[];
   tribute: { payerId: string; recipientId: string; amount: number; untilTurn: number } | null;
 }
+export interface PeaceTreatyOffer {
+  warId: string;
+  terms: PeaceTerm[];
+  concession?: boolean;
+}
 export interface Offer {
+  concession?: boolean;
   id: string;
   from: string;
   to: string;
@@ -429,17 +450,22 @@ export interface LogEntry {
   kind: 'battle' | 'economy' | 'diplomacy' | 'system';
 }
 export interface ChatEntry {
+  turn?: number;
   id: number;
   playerId: string;
   text: string;
 }
 export interface MatchConfig {
+  ruleset?: 'GOLD_098';
+  campaignId?: string;
+  sourceReport?: { code: string; turn: number };
+  scenarioId?: import('./scenarios').ScenarioId;
   mode: GameMode;
   theater: Theater;
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0';
+  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0';
   tutorial?: boolean;
   enableSecretObjectives: boolean;
   allowBotSecretVictory: boolean;
@@ -450,6 +476,10 @@ export interface MatchConfig {
   };
 }
 export interface GameState {
+  pendingEraEvent?: string;
+  lastEra?: import('./world').CampaignEra;
+  botCouncilTurn?: number;
+  hegemonyWarned?: string[];
   version: 7;
   allowBotSecretVictory: boolean;
   graceUntilTurn: number;
@@ -511,6 +541,7 @@ export type GameView = Omit<
 };
 export type GameCommand =
   | { type: 'EMERGENCY_LEVY' }
+  | { type: 'CAST_IMPERIAL_VOTE'; candidateId: string }
   | { type: 'CONTINUE_SANDBOX' }
   | { type: 'READ_NOTIFICATIONS'; notificationIds: string[] }
   | { type: 'SUBMIT_ORDER'; order: PlayerOrder }
@@ -537,7 +568,7 @@ export type GameCommand =
       casusBelli: CasusBelli;
       offensiveAllyIds?: string[];
     }
-  | { type: 'OFFER_PEACE'; warId: string; terms: PeaceTerm[] }
+  | { type: 'OFFER_PEACE'; warId: string; terms: PeaceTerm[]; concession?: boolean }
   | { type: 'JOIN_COALITION' | 'DECLARE_COALITION_WAR'; targetRealmId: string }
   | { type: 'CHOOSE_SECRET_OBJECTIVE'; objectiveId: string }
   | {
@@ -576,6 +607,7 @@ export type ClientMessage =
       nationId?: NationId;
       demo?: boolean;
       tutorial?: boolean;
+      scenarioId?: import('./scenarios').ScenarioId;
       roomName?: string;
       isPublic?: boolean;
       enableSecretObjectives?: boolean;
@@ -586,8 +618,23 @@ export type ClientMessage =
   | { type: 'resume'; code: string; playerId: string; token: string }
   | { type: 'leave' }
   | { type: 'command'; command: GameCommand }
-  | { type: 'map_ping'; provinceId: string; note?: string };
+  | { type: 'map_ping'; provinceId: string; note?: string }
+  | { type: 'export_campaign' }
+  | { type: 'import_campaign'; save: unknown };
+export interface SeatInvite {
+  playerId: string;
+  name: string;
+  token: string;
+  code: string;
+}
+export interface CampaignSave {
+  format: 'CONCORDIA_SAVE_098';
+  game: GameState;
+  exporterId: string;
+}
 export type ServerMessage =
+  | { type: 'campaign_export'; save: CampaignSave }
+  | { type: 'seat_invites'; invites: SeatInvite[] }
   | { type: 'map_ping'; ping: MapPing }
   | { type: 'joined'; code: string; playerId: string; token: string }
   | { type: 'state'; state: GameView }
@@ -657,7 +704,8 @@ export type InstantArmyAction =
   | Extract<BattalionOrder, { type: 'MERGE_BATTALIONS' | 'SPLIT_BATTALION' }>
   | { type: 'MERGE_ALL'; battalionId: string }
   | { type: 'ASSIGN_LEADER'; battalionId: string; commanderId: string | null };
-export type StrategicResource = 'GRAIN' | 'IRON' | 'HORSES' | 'GOLD_MINE' | 'RELIC' | null;
+export type StrategicResource =
+  'GRAIN' | 'IRON' | 'HORSES' | 'GOLD_MINE' | 'GOLD' | 'TIMBER' | 'SPICES' | 'RELIC' | null;
 export type Season = 'SPRING' | 'SUMMER' | 'AUTUMN' | 'WINTER';
 export type GlobalEventId =
   'GOLD_RUSH' | 'HARSH_WINTER' | 'CRUSADE' | 'MERCENARY_CRISIS' | 'REBEL_AGITATORS';

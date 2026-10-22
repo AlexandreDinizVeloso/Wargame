@@ -31,7 +31,7 @@ const server = http.createServer((req, res) => {
       JSON.stringify({
         status: 'ok',
         game: 'concordia',
-        version: '0.95.0',
+        version: '0.98.0',
         protocolVersion: 7,
       }),
     );

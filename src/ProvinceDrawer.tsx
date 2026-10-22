@@ -1,3 +1,4 @@
+import { goldRules } from '../shared/factions';
 import { buildingSlots, usedSlots } from '../shared/development';
 import { levyReason } from '../shared/emergency';
 import { SeaTradeCard } from './MaritimePanel';
@@ -122,7 +123,7 @@ export default function ProvinceDrawer({
     ...(name.trim() ? { name: name.trim() } : {}),
   };
   const price = budgetFor(game, playerId, recruit);
-  const recruitReason = recruitmentBlock(province, recruit, game.turn);
+  const recruitReason = recruitmentBlock(province, recruit, game.turn, me, game);
   const queued = game.plannedOrders.find(
     (o) => o.type === 'RECRUIT_BATTALION' && o.provinceId === province.id,
   );
@@ -130,7 +131,12 @@ export default function ProvinceDrawer({
     recruitedCount(province, game.turn) + (queued ? unitCount(queued as Partial<Composition>) : 0);
   useEffect(() => {
     if (!province.barracksLevel && !province.foundryLevel)
-      setValues((v) => ({ ...v, infantry: Math.min(v.infantry, 2), cavalry: 0, artillery: 0 }));
+      setValues((v) => ({
+        ...v,
+        infantry: Math.min(v.infantry, 2),
+        cavalry: goldRules(game) && me.nationId === 'turan' ? Math.min(v.cavalry, 2) : 0,
+        artillery: 0,
+      }));
   }, [province.id, province.barracksLevel, province.foundryLevel]);
   const build = (
     type: 'BUILD_FORT' | 'BUILD_PORT' | 'BUILD_MARKET' | 'PACIFY',
@@ -226,7 +232,7 @@ export default function ProvinceDrawer({
           <div>
             <small>RECRUTAMENTO</small>
             <strong>
-              {localCount}/{provinceRecruitLimit(province)}
+              {localCount}/{provinceRecruitLimit(province, me, game, recruit)}
             </strong>
           </div>
         </div>
@@ -538,11 +544,11 @@ export default function ProvinceDrawer({
                 </div>
                 <Meter
                   label="Capacidade de recrutamento"
-                  value={(100 * localCount) / provinceRecruitLimit(province)}
+                  value={(100 * localCount) / provinceRecruitLimit(province, me, game, recruit)}
                 />
                 <p className="recruit-capacity">
-                  Capacidade de Recrutamento Local: {localCount}/{provinceRecruitLimit(province)}{' '}
-                  neste turno
+                  Capacidade de Recrutamento Local: {localCount}/
+                  {provinceRecruitLimit(province, me, game, recruit)} neste turno
                 </p>
                 {!province.barracksLevel && !province.foundryLevel && (
                   <p className="fine-print">
@@ -571,7 +577,7 @@ export default function ProvinceDrawer({
                       isFleet: fleet,
                     };
                     const budget = budgetFor(game, playerId, order),
-                      reason = recruitmentBlock(province, order, game.turn);
+                      reason = recruitmentBlock(province, order, game.turn, me, game);
                     return (
                       <button
                         key={quick.label}
@@ -640,11 +646,12 @@ export default function ProvinceDrawer({
                       <input
                         type="number"
                         min="0"
-                        max={provinceRecruitLimit(province)}
+                        max={provinceRecruitLimit(province, me, game, recruit)}
                         disabled={
                           !province.barracksLevel &&
                           !province.foundryLevel &&
-                          (key === 'cavalry' || key === 'artillery')
+                          (key === 'artillery' ||
+                            (key === 'cavalry' && !(goldRules(game) && me.nationId === 'turan')))
                         }
                         value={values[key]}
                         onChange={(e) =>

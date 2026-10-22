@@ -2,7 +2,7 @@ import { markDisorganized } from '../shared/morale';
 import type { GameState, TurnResolutionReport } from '../shared/types';
 import { atWar, clamp, unitCount, supplyLimit } from '../shared/rules';
 import { commanderFor } from '../shared/military';
-import { supplyConnected } from '../shared/logistics';
+import { supplyConnected, invasionAttrition } from '../shared/logistics';
 import { destroyBattalion, removeUnits } from './state';
 import { notify } from './notifications';
 export function applyEncirclement(g: GameState, report: TurnResolutionReport) {
@@ -16,7 +16,12 @@ export function applyEncirclement(g: GameState, report: TurnResolutionReport) {
     const count = unitCount(a);
     a.morale = clamp(a.morale - 20);
     markDisorganized(a);
-    removeUnits(a, commanderFor(g, a)?.trait === 'QUARTERMASTER' ? 0 : Math.ceil(count * 0.15));
+    removeUnits(
+      a,
+      commanderFor(g, a)?.trait === 'QUARTERMASTER'
+        ? 0
+        : Math.ceil(count * 0.15 * invasionAttrition(g, p.id, a.ownerId)),
+    );
     report.encirclements.push({
       battalionId: a.id,
       ownerId: a.ownerId,

@@ -1,3 +1,4 @@
+import { siegeResistance } from '../shared/siege';
 import {
   closeSync,
   copyFileSync,
@@ -162,7 +163,7 @@ export function validGame(g: GameState): boolean {
         ) ||
         !Number.isInteger(p.recruitedThisTurn) ||
         p.recruitedThisTurn < 0 ||
-        p.recruitedThisTurn > 7 ||
+        p.recruitedThisTurn > 8 ||
         !Number.isInteger(p.recruitmentTurn) ||
         p.recruitmentTurn < 0 ||
         p.recruitmentTurn > g.turn ||
@@ -179,7 +180,7 @@ export function validGame(g: GameState): boolean {
               p.siege.lastProgressTurn,
             ].every(Number.isInteger) ||
             p.siege.progress < 1 ||
-            p.siege.required !== 2 + p.fortLevel * 2 ||
+            p.siege.required !== siegeResistance(g, p) ||
             p.siege.turnsUnderSiege < 1)) ||
         p.pacification < 0 ||
         p.pacification > 100 ||
@@ -244,7 +245,7 @@ export function validGame(g: GameState): boolean {
         unitCount(a) < 1 ||
         !Number.isFinite(a.morale) ||
         a.morale < 0 ||
-        a.morale > 100 ||
+        a.morale > (g.matchConfig?.ruleset === 'GOLD_098' && a.moraleCap === 110 ? 110 : 100) ||
         !Number.isFinite(a.training) ||
         a.training < 1 - 1e-8 ||
         a.training > 1.5 + 1e-8 ||

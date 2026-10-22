@@ -78,7 +78,7 @@ export default function TurnPanel({
           {game.plannedOrders.map((o) => {
             const key = orderKey(o),
               p = game.provinces.find((p) => p.id === orderProvinceId(o, game)),
-              cost = orderCost(o, p, me),
+              cost = orderCost(o, p, me, game),
               a = 'battalionId' in o ? game.battalions.find((a) => a.id === o.battalionId) : null;
             return (
               <div className="order-row" key={key}>
@@ -86,13 +86,13 @@ export default function TurnPanel({
                 <span>
                   <strong>{a?.name ?? p?.name ?? 'Diplomacia'}</strong>
                   <small>
-                    {orderName(o)}
+                    {orderName(o, game, playerId)}
                     {o.type === 'MOVE_BATTALION' ? ` · ${o.path?.length ?? 1} ligação(ões)` : ''}
                   </small>
                 </span>
                 <b>{cost.gold > 0 ? `${number(cost.gold)} ouro` : '—'}</b>
                 <button
-                  aria-label={`Cancelar ${orderName(o)} em ${a?.name ?? p?.name}`}
+                  aria-label={`Cancelar ${orderName(o, game, playerId)} em ${a?.name ?? p?.name}`}
                   disabled={game.phase !== 'planning'}
                   title="Cancelar e liberar recursos reservados"
                   onClick={() => command({ type: 'CANCEL_ORDER', key })}

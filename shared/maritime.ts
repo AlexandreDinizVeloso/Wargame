@@ -1,3 +1,5 @@
+import { goldRules } from './factions';
+import { eraTradeMultiplier } from './world';
 import type { Battalion, GameState, Province } from './types';
 export const MARITIME_CAP = 12;
 export const BOMBARDMENT_COST = 6;
@@ -16,7 +18,8 @@ export const SEA_TRADE_VALUE: Record<string, number> = {
   'south-china-sea': 6,
   'east-asian-sea': 5,
 };
-type NavalWorld = Pick<GameState, 'provinces' | 'battalions' | 'players' | 'wars'>;
+type NavalWorld = Pick<GameState, 'provinces' | 'battalions' | 'players' | 'wars'> &
+  Partial<Pick<GameState, 'turn' | 'matchConfig'>>;
 const enemies = (g: Pick<GameState, 'wars'>, a: string, b: string) =>
   g.wars.some(
     (w) =>
@@ -45,7 +48,23 @@ export function seaTradeNodes(g: NavalWorld) {
           const group = fleets.filter((f) => f.ownerId === ownerId),
             warships = group.reduce((n, a) => n + a.warships, 0),
             transports = group.reduce((n, a) => n + a.transports, 0);
-          return { ownerId, warships, transports, power: warships * 2 + transports };
+          return {
+            ownerId,
+            warships,
+            transports,
+            power:
+              (warships * 2 + transports) *
+              (goldRules(g) &&
+              g.players.find((p) => p.id === ownerId)?.nationId === 'vespera' &&
+              g.provinces.some(
+                (p) =>
+                  (p.occupierId ?? p.ownerId) === ownerId &&
+                  p.portLevel > 0 &&
+                  sea.neighbors.includes(p.id),
+              )
+                ? 1.5
+                : 1),
+          };
         })
         .filter((c) => c.warships >= 1 && c.transports >= 1)
         .sort((a, b) => b.power - a.power || a.ownerId.localeCompare(b.ownerId));
@@ -65,7 +84,13 @@ export function seaTradeNodes(g: NavalWorld) {
       return {
         seaId: sea.id,
         name: sea.name,
-        value: SEA_TRADE_VALUE[sea.id] ?? 3,
+        value:
+          Math.round(
+            (SEA_TRADE_VALUE[sea.id] ?? 3) *
+              eraTradeMultiplier(g) *
+              (goldRules(g) && g.matchConfig?.scenarioId === 'AGE_OF_SAIL' ? 2 : 1) *
+              100,
+          ) / 100,
         ownerId: leading && !contested ? leading.ownerId : null,
         contested,
         contenders,
@@ -74,7 +99,7 @@ export function seaTradeNodes(g: NavalWorld) {
 }
 export const maritimeIncome = (g: NavalWorld, id: string) =>
   Math.min(
-    MARITIME_CAP,
+    goldRules(g) ? 40 : MARITIME_CAP,
     seaTradeNodes(g).reduce((n, s) => n + (s.ownerId === id ? s.value : 0), 0),
   );
 export function bombardmentBlock(

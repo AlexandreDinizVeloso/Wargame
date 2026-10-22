@@ -1,3 +1,10 @@
+import { useStrategistProfile } from './useStrategistProfile';
+const StrategistProfileModal = lazy(() => import('./StrategistProfileModal'));
+import CampaignSaveControls from './CampaignSaveControls';
+import MapLensSelector from './MapLensSelector';
+import OutlinerDock from './OutlinerDock';
+import { ERAS, campaignEra } from '../shared/world';
+import { goldRules, FACTION_TRAITS } from '../shared/factions';
 const PostGameAnalytics = lazy(() => import('./PostGameAnalytics'));
 import TutorialOverlay from './TutorialOverlay';
 import { TopBarModal } from './TopBarModal';
@@ -9,7 +16,7 @@ import PlayerNameForm from './PlayerNameForm';
 const SkillTreeDrawer = lazy(() => import('./SkillTreeDrawer'));
 import { crossingOptions } from '../shared/naval';
 import PersonalAlerts from './Notifications';
-import { lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Anchor,
   BookOpen,
@@ -29,7 +36,6 @@ import {
   Plus,
   RotateCcw,
   ScrollText,
-  Shield,
   Swords,
   Users,
   Volume2,
@@ -39,6 +45,7 @@ import {
 import type { Battalion, GameView, MapMode, Province, TurnResolutionReport } from '../shared/types';
 import { OBJECTIVES } from '../shared/types';
 import {
+  nationOf,
   atWar,
   canUnitVisit,
   chronicle,
@@ -146,12 +153,12 @@ function Manual({ close }: { close: () => void; active?: boolean; onActivate?: (
         <p>
           O dock reúne as ações da cidade ou formação selecionada; os botões do conselho abrem uma
           consulta por vez. Arraste o título para mover e as bordas para redimensionar. Use Esc para
-          fechar. A Crônica mostra gráficos da campanha; o Conselho da nação permite baixar JSON e
-          TXT.
+          fechar. Estatísticas mostra gráficos da campanha; o Conselho da nação permite baixar JSON
+          e TXT.
         </p>
         <div className="keyboard-guide">
           <span>
-            <kbd>1–5</kbd> mapas
+            <kbd>F1–F5</kbd> lentes
           </span>
           <span>
             <kbd>Scroll</kbd> zoom
@@ -200,7 +207,19 @@ const REPORT_TITLES: Record<ReportTab, string> = {
 };
 const GLOBAL_PANELS: Panel[] = ['diplomacy', 'skills', 'maritime', 'world', 'secret', 'analytics'];
 export default function App() {
-  const { game, playerId, status, error, setError, send, command, leave, pings } = useGame();
+  const { game, playerId, status, error, setError, send, command, leave, pings, seatInvites } =
+    useGame();
+  const { profile, setProfile, toast: achievementToast } = useStrategistProfile(game, playerId);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileModal = profileOpen && (
+    <Suspense fallback={<p role="status">Abrindo perfil…</p>}>
+      <StrategistProfileModal
+        profile={profile}
+        onChange={setProfile}
+        onClose={() => setProfileOpen(false)}
+      />
+    </Suspense>
+  );
   const camera = useRef<CameraHandle>(null);
   const [cartographic, setCartographic] = useState(() => {
     try {
@@ -220,6 +239,7 @@ export default function App() {
   const tutorialRoom = useRef('');
   const [focusedWindow, setFocusedWindow] = useState('');
   const openMenu = () => {
+    setProfileOpen(false);
     setPanels([]);
     setManual(false);
     setWarRequest(null);
@@ -227,11 +247,24 @@ export default function App() {
     setMenu(true);
     setFocusedWindow('council-menu');
   };
+  const inviteShown = useRef('');
+  useEffect(() => {
+    if (
+      game &&
+      seatInvites.length &&
+      seatInvites[0].code === game.code &&
+      inviteShown.current !== game.code
+    ) {
+      inviteShown.current = game.code;
+      openMenu();
+    }
+  }, [game?.code, seatInvites]);
   const closeMenu = () => {
     setMenu(false);
     focusRemaining('council-menu');
   };
   const openManual = () => {
+    setProfileOpen(false);
     setPanels([]);
     setMenu(false);
     setWarRequest(null);
@@ -362,6 +395,7 @@ export default function App() {
   const seenWars = useRef(new Set<string>()),
     seenWinner = useRef('');
   const open = (panel: Panel) => {
+    setProfileOpen(false);
     setFocusedWindow(panel);
     setMenu(false);
     setManual(false);
@@ -486,8 +520,15 @@ export default function App() {
         return;
       }
       if (typing(e.target)) return;
-      const map = MAP_MODES.find((m) => m.key === e.key);
-      if (map) setMode(map.id);
+      if (e.key === 'F1' || e.key === 'F2' || e.key === 'F3' || e.key === 'F4' || e.key === 'F5')
+        e.preventDefault();
+      const map = MAP_MODES.find(
+        (m) => m.key === e.key || String(MAP_MODES.indexOf(m) + 1) === e.key,
+      );
+      if (map) {
+        e.preventDefault();
+        setMode(map.id);
+      }
     };
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
@@ -514,6 +555,7 @@ export default function App() {
           online={status === 'online'}
           onHelp={openManual}
           onTutorial={startTutorial}
+          onProfile={() => setProfileOpen(true)}
         />
         {manual && (
           <Manual
@@ -522,13 +564,22 @@ export default function App() {
             onActivate={() => setFocusedWindow('manual')}
           />
         )}
+        {profileModal}
         <ConnectionToast error={error} status={status} dismiss={() => setError('')} />
       </div>
     );
   if (game.phase === 'lobby')
     return (
       <div className="application" onClickCapture={rootClick}>
-        <Lobby game={game} playerId={playerId} command={command} leave={leave} />
+        <Lobby
+          game={game}
+          playerId={playerId}
+          command={command}
+          leave={leave}
+          send={send}
+          seatInvites={seatInvites}
+        />
+        {profileModal}
         <ConnectionToast error={error} status={status} dismiss={() => setError('')} />
       </div>
     );
@@ -544,6 +595,16 @@ export default function App() {
         controller(p) === playerId ||
         game.players.find((q) => q.id === controller(p))?.subjectOfId === playerId,
     );
+  const diplomaticReference =
+    referenceId ||
+    (mode === 'DIPLOMATIC'
+      ? selectedArmy?.ownerId && selectedArmy.ownerId !== 'NEUTRAL'
+        ? selectedArmy.ownerId
+        : selected
+          ? controller(selected)
+          : null
+      : null) ||
+    playerId;
   const troopTotal = game.battalions
     .filter((a) => a.ownerId === playerId)
     .reduce((n, a) => n + unitCount(a), 0);
@@ -555,6 +616,7 @@ export default function App() {
   };
   const signal = (p: Province, note = '') => send({ type: 'map_ping', provinceId: p.id, note });
   const selectArmy = (a: Battalion) => {
+    setReference('');
     if (a.isFleet) audio.playSailSound();
     setUnitTab('command');
     setArmy(a.id);
@@ -562,6 +624,7 @@ export default function App() {
     open('battalion');
   };
   const selectProvince = (p: Province) => {
+    setReference('');
     setArmy('');
     setProvinceTab('build');
     setProvince(p.id);
@@ -659,6 +722,11 @@ export default function App() {
       data-interface={cartographic ? 'cartographic' : 'classic'}
       data-audio-muted={muted}
     >
+      {achievementToast.length > 0 && (
+        <aside className="achievement-toast" role="status">
+          🏅 Conquista desbloqueada: {achievementToast.join(' · ')}
+        </aside>
+      )}
       <Atlas
         ref={camera}
         cartographic={cartographic}
@@ -666,7 +734,7 @@ export default function App() {
         players={game.players}
         game={game}
         mode={mode}
-        referenceId={referenceId || playerId}
+        referenceId={diplomaticReference}
         selectedId={provinceId}
         selectedArmyId={armyId}
         orders={game.plannedOrders}
@@ -680,13 +748,32 @@ export default function App() {
         pings={pings}
         onPing={signal}
       />
+      <MapLensSelector mode={mode} onChange={setMode} />
+      <OutlinerDock
+        game={game}
+        playerId={playerId}
+        onArmy={(a) => {
+          selectArmy(a);
+          focus(a.provinceId);
+        }}
+        onProvince={(p) => {
+          selectProvince(p);
+          focus(p.id);
+        }}
+      />
       <header className="top-bar framed-panel" data-hud-surface>
         <button className="nation-heading" onClick={openMenu} title="Conselho da nação">
           <CoatOfArms nationId={me.nationId} size={32} />
           <span>
             <strong>{me.nation}</strong>
-            <small>
-              {me.name} · prestígio {number(me.prestige)}
+            <small
+              title={(goldRules(game)
+                ? FACTION_TRAITS[me.nationId].effects
+                : nationOf(me.nationId).ideas
+              ).join(' · ')}
+            >
+              {goldRules(game) ? FACTION_TRAITS[me.nationId].name : 'Campanha clássica'} · {me.name}{' '}
+              · prestígio {number(me.prestige)}
             </small>
           </span>
           <ChevronDown size={12} />
@@ -752,12 +839,25 @@ export default function App() {
           </div>
         </div>
         <div className="turn-status">
+          {goldRules(game) && (
+            <span
+              className="era-pill"
+              title={ERAS[campaignEra(game.turn)].description}
+              data-campaign-era={campaignEra(game.turn)}
+            >
+              {ERAS[campaignEra(game.turn)].icon} {ERAS[campaignEra(game.turn)].act} ·{' '}
+              {ERAS[campaignEra(game.turn)].name}
+            </span>
+          )}
           <strong>
             Rodada {String(game.turn).padStart(2, '0')} <small>∞</small>
           </strong>
           <span>
-            {1550 + Math.floor((game.turn - 1) / 4)} · {SEASONS[game.season].icon}{' '}
-            {SEASONS[game.season].name}
+            {(game.matchConfig.scenarioId === 'WORLD_GRAND_CAMPAIGN' ||
+            game.matchConfig.scenarioId === 'AGE_OF_SAIL'
+              ? 1500
+              : 1550) + Math.floor((game.turn - 1) / 4)}{' '}
+            · {SEASONS[game.season].icon} {SEASONS[game.season].name}
           </span>
           <small>
             {game.phase === 'finished'
@@ -783,6 +883,18 @@ export default function App() {
           </span>
         </button>
         <div className="top-tools">
+          <button
+            aria-label="Perfil do Estrategista"
+            title={profile.title}
+            onClick={() => {
+              setPanels([]);
+              setMenu(false);
+              setManual(false);
+              setProfileOpen(true);
+            }}
+          >
+            🏅
+          </button>
           <button
             aria-label="🎓 Tutorial Rápido (5 Passos)"
             title="Tutorial Rápido (5 Passos)"
@@ -949,6 +1061,7 @@ export default function App() {
               playerId={playerId}
               command={command}
               focusedRealmId={diplomacyTarget}
+              onInspectRealm={(id) => setReference(id)}
               onDeclareWar={(id) => setWarRequest({ targetId: id })}
             />
           )}
@@ -1037,7 +1150,7 @@ export default function App() {
                   .filter((o) => 'battalionId' in o && o.battalionId === selectedArmy.id)
                   .map((o) =>
                     o.type === 'AUTO_TRANSPORT'
-                      ? `Destino: ${game.provinces.find((p) => p.id === o.targetProvinceId)?.name} · ${o.fleetId ? 'ponte naval grátis' : 'fretamento 15 ouro'}`
+                      ? `Destino: ${game.provinces.find((p) => p.id === o.targetProvinceId)?.name} · ${o.fleetId ? 'ponte naval grátis' : `fretamento ${goldRules(game) && me.nationId === 'vespera' ? '7,5' : '15'} ouro`}`
                       : o.type === 'MOVE_BATTALION'
                         ? `Marcha: ${game.provinces.find((p) => p.id === (o.path?.at(-1) ?? o.targetProvinceId))?.name}`
                         : null,
@@ -1212,31 +1325,6 @@ export default function App() {
         </span>
       </footer>
       <div className="map-controls framed-panel" data-hud-surface>
-        <div className="map-mode-buttons">
-          {MAP_MODES.map((m) => (
-            <button
-              key={m.id}
-              className={mode === m.id ? 'selected' : ''}
-              aria-label={`Mapa ${m.name}`}
-              aria-pressed={mode === m.id}
-              title={`${m.key} · ${m.description}`}
-              onClick={() => setMode(m.id)}
-            >
-              {m.id === 'POLITICAL' ? (
-                <Flag size={16} />
-              ) : m.id === 'RELIGIOUS' ? (
-                <Landmark size={16} />
-              ) : m.id === 'ECONOMIC_SUPPLY' ? (
-                <Coins size={16} />
-              ) : m.id === 'DIPLOMATIC' ? (
-                <Handshake size={16} />
-              ) : (
-                <Shield size={16} />
-              )}
-              <small>{m.key}</small>
-            </button>
-          ))}
-        </div>
         <div className="camera-controls">
           <button aria-label="Diminuir zoom" onClick={() => camera.current?.zoomOut()}>
             <Minus size={15} />
@@ -1252,7 +1340,7 @@ export default function App() {
       {mode === 'DIPLOMATIC' && (
         <label className="reference-realm">
           Referência diplomática
-          <select value={referenceId || playerId} onChange={(e) => setReference(e.target.value)}>
+          <select value={diplomaticReference} onChange={(e) => setReference(e.target.value)}>
             {game.players.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nation}
@@ -1299,7 +1387,28 @@ export default function App() {
               Relevo cartográfico 2,5D
             </label>
             <PlayerNameForm name={me.name} command={command} />
+            <section className="faction-trait-card">
+              <h3>{goldRules(game) ? FACTION_TRAITS[me.nationId].name : 'Tradições nacionais'}</h3>
+              <ul>
+                {(goldRules(game)
+                  ? FACTION_TRAITS[me.nationId].effects
+                  : nationOf(me.nationId).ideas
+                ).map((effect) => (
+                  <li key={effect}>{effect}</li>
+                ))}
+              </ul>
+            </section>
+            {game.matchConfig.sourceReport && (
+              <p className="warning-box">
+                Cenário derivado de relatório da rodada {game.matchConfig.sourceReport.turn}: novas
+                ordens, novos eventos aleatórios e objetivos secretos desativados. Para retomada
+                integral, use o Save JSON completo.
+              </p>
+            )}
             <AudioControls />
+            {game.hostId === playerId && (
+              <CampaignSaveControls send={send} canExport invites={seatInvites} />
+            )}
             <label>
               Política religiosa
               <select
@@ -1471,6 +1580,7 @@ export default function App() {
           }}
         />
       )}
+      {profileModal}
       <ConnectionToast error={error} status={status} dismiss={() => setError('')} />
     </div>
   );

@@ -1,3 +1,4 @@
+import { goldRules } from '../shared/factions';
 import type { GameState } from '../shared/types';
 import { levyReason } from '../shared/emergency';
 import { atWar, compositionOf, reservedResources } from '../shared/rules';
@@ -32,8 +33,8 @@ export function emergencyLevy(g: GameState, id: string) {
   p.emergencyLevyTurn = g.turn;
   p.homelandDefenseUntil = g.turn + 1;
   createBattalion(g, id, target.id, compositionOf({ infantry: 5 }), {
-    morale: 90,
-    training: 1,
+    morale: goldRules(g) && p.nationId === 'sol_invicto' ? 100 : 90,
+    training: goldRules(g) && p.nationId === 'sol_invicto' ? 1.25 : 1,
     name: 'Defesa da Pátria',
   });
   notify(g, {

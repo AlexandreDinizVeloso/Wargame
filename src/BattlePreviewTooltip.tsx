@@ -1,4 +1,4 @@
-import { siegeProgressPerTurn } from '../shared/siege';
+import { siegeProgressPerTurn, siegeResistance } from '../shared/siege';
 import type { Battalion, GameView, Province } from '../shared/types';
 import { atWar, controller, getRelation } from '../shared/rules';
 import { combatPowers } from '../shared/combat';
@@ -41,7 +41,8 @@ export function battlePreview(game: GameView, army: Battalion, province: Provinc
     1,
     (currentSiege ? 0 : 1) +
       Math.ceil(
-        ((currentSiege?.required ?? 2 + province.fortLevel * 2) - (currentSiege?.progress ?? 1)) /
+        ((currentSiege?.required ?? siegeResistance(game, province)) -
+          (currentSiege?.progress ?? 1)) /
           progress,
       ),
   );

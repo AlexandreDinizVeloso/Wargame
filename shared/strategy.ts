@@ -1,3 +1,4 @@
+import { goldRules } from './factions';
 import type {
   Battalion,
   GameState,
@@ -39,6 +40,9 @@ export const RESOURCES: Record<
   NonNullable<StrategicResource>,
   { icon: string; name: string; effect: string }
 > = {
+  GOLD: { icon: '🪙', name: 'Ouro', effect: 'Receita mineral e especialização comercial' },
+  TIMBER: { icon: '🪵', name: 'Madeira', effect: '+10% comércio local de porto' },
+  SPICES: { icon: '🌶️', name: 'Especiarias', effect: '+2 comércio local' },
   GRAIN: { icon: '🌾', name: 'Trigo', effect: '+6 suprimento local e +2 suprimento nacional' },
   IRON: {
     icon: '⚒️',
@@ -71,7 +75,7 @@ export const globalSupplyBonus = (g: Pick<GameState, 'provinces'>, id: string) =
 export const coalitionFighter = (g: Pick<GameState, 'wars'>, id: string) =>
   g.wars.some((w) => w.active && w.casusBelli === 'COALITION' && w.attackerIds.includes(id));
 export const hegemonicThreat = (g: Pick<GameState, 'provinces' | 'players'>, id: string) =>
-  (g.players.find((p) => p.id === id)?.aggressiveExpansion ?? 0) >= 60 ||
+  (g.players.find((p) => p.id === id)?.aggressiveExpansion ?? 0) >= (goldRules(g) ? 55 : 60) ||
   g.provinces.filter((p) => p.kind === 'LAND' && controller(p) === id).length /
     Math.max(1, g.provinces.filter((p) => p.kind === 'LAND').length) >=
     0.4;

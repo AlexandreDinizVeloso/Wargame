@@ -1,3 +1,5 @@
+import { goldReparationPayments } from '../shared/economy';
+import { realmEconomy } from '../shared/rules';
 import type { GameState, TurnResolutionReport } from '../shared/types';
 import { unitCount } from '../shared/rules';
 import { destroyBattalion, removeUnits } from './state';
@@ -42,4 +44,21 @@ export function desertForMaintenance(
       involvesPlayerIds: [id],
       text: `Manutenção sem cobertura: deserção de ${total} tropas. Reforce sua economia ou reduza o exército.`,
     });
+}
+
+export function recordGoldReparations(g: GameState, report: TurnResolutionReport) {
+  for (const r of goldReparationPayments(g, (id) => realmEconomy(g, id, false))) {
+    const payer = g.players.find((p) => p.id === r.payerId),
+      recipient = g.players.find((p) => p.id === r.recipientId);
+    if (!payer || !recipient) continue;
+    report.diplomaticChanges.push({
+      action: 'WAR_REPARATIONS_PAYMENT',
+      actorId: payer.id,
+      targetId: recipient.id,
+      amount: r.amount,
+      provinceId: null,
+      covert: false,
+      text: `${payer.nation} pagou ${r.amount} ouro de reparações a ${recipient.nation}.`,
+    });
+  }
 }

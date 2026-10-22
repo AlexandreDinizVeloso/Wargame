@@ -179,3 +179,13 @@ O protocolo/snapshot permanece em **7**. O release HTTP é `0.9.0-rc.1`; `MatchC
 Protocolo e snapshots permanecem em **7**. O cliente autenticado envia `{ "type": "map_ping", "provinceId": "portugal", "note": "Atacar juntos!" }`. A nota é opcional, limitada a 80 caracteres. O servidor valida sala, sessão, nação ativa e província; aplica intervalo mínimo de 1,5 segundo por jogador/sala (inclusive após reconectar) e envia `{ "type": "map_ping", "ping": { "id", "code", "playerId", "provinceId", "note", "expiresAt" } }` somente ao remetente e seus aliados atuais. Identidade, código, ID e expiração são definidos pelo servidor.
 
 O sinal dura seis segundos, não prepara ordens, não altera recursos/turno e não entra em snapshots, relatórios, chat público ou histórico. Clientes antigos podem ignorar a nova mensagem. Não há replay de sinais ao retomar a sessão. A prévia de combate usa exclusivamente a visão já filtrada pelo servidor e o cálculo puro compartilhado de poder.
+
+## Extensões Gold v0.98 (protocolo 7)
+
+`matchConfig.ruleset = GOLD_098` habilita as regras novas. `scenario`, `campaignId` e `sourceReport` identificam preparação, continuidade e origem de relatório. Salas antigas não recebem o ruleset automaticamente.
+
+`export_campaign` exige anfitrião e responde com `campaign_export`. `import_campaign` recebe `save` e cria sala privada validada. `seat_invites` entrega ao importador convites individuais novos; o token bruto não entra no arquivo exportado. A retomada usa o fluxo normal de sessão com código, vaga e claim novos.
+
+`OFFER_PEACE` aceita `concession` e termos Gold `WHITE_PEACE`, `CEDE_PROVINCES`, `WAR_REPARATIONS`, `HUMILIATE_DEMILITARIZE`, `SUBJUGATE_VASSAL`. A soma é validada pelo servidor na criação e aceitação. `CAST_IMPERIAL_VOTE` registra voto na Dieta do cenário Coroa Continental.
+
+Eventos opcionais de era, metadados do tratado e estados dos cenários permanecem serializáveis/headless. O cliente calcula conquistas locais a partir da visão autorizada, sem enviar incrementos de dinheiro ou estatísticas ao servidor.

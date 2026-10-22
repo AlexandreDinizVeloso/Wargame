@@ -1,0 +1,64 @@
+{
+  "name": "concordia-desktop",
+  "version": "0.98.0",
+  "private": true,
+  "description": "Conc\u00f3rdia desktop client and local multiplayer host",
+  "main": "main.cjs",
+  "author": "Conc\u00f3rdia",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^40.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.concordia.wargame",
+    "productName": "Conc\u00f3rdia",
+    "directories": {
+      "output": "../.local/desktop-build"
+    },
+    "files": [
+      "main.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "game",
+        "filter": [
+          "package.json",
+          "server/**/*",
+          "shared/**/*",
+          "dist/**/*"
+        ]
+      },
+      {
+        "from": "../node_modules",
+        "to": "game/node_modules",
+        "filter": [
+          "tsx/**/*",
+          "esbuild/**/*",
+          "@esbuild/**/*",
+          "ws/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "portable"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Game"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.strategy-games"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlexandreDinizVeloso/Wargame.git"
+  }
+}

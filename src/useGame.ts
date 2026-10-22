@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ClientMessage, GameCommand, GameView, ServerMessage, MapPing } from '../shared/types';
+import type {
+  ClientMessage,
+  GameCommand,
+  GameView,
+  ServerMessage,
+  MapPing,
+  SeatInvite,
+} from '../shared/types';
 
 interface Session {
   code: string;
@@ -23,6 +30,13 @@ function readSession(): Session | null {
   return null;
 }
 export function useGame() {
+  const [seatInvites, setSeatInvites] = useState<SeatInvite[]>(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('concordia-seat-invites') ?? '[]');
+    } catch {
+      return [];
+    }
+  });
   const [pings, setPings] = useState<MapPing[]>([]);
   const [game, setGame] = useState<GameView | null>(null),
     [playerId, setPlayerId] = useState(''),
@@ -50,7 +64,12 @@ export function useGame() {
     [send],
   );
   useEffect(() => {
-    session.current = readSession();
+    const url = new URLSearchParams(location.search),
+      saved = readSession();
+    session.current =
+      url.has('claim') || (url.has('room') && saved?.code !== url.get('room')?.toUpperCase())
+        ? null
+        : saved;
     let stopped = false,
       retry: ReturnType<typeof setTimeout>;
     function connect() {
@@ -72,11 +91,36 @@ export function useGame() {
           return;
         }
         switch (data.type) {
+          case 'campaign_export': {
+            const url = URL.createObjectURL(
+              new Blob([JSON.stringify(data.save, null, 2)], { type: 'application/json' }),
+            );
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `concordia-save-${data.save.game.code}.json`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            break;
+          }
+          case 'seat_invites':
+            setSeatInvites(data.invites);
+            try {
+              sessionStorage.setItem('concordia-seat-invites', JSON.stringify(data.invites));
+            } catch {}
+            break;
           case 'map_ping':
             if (data.ping.code === session.current?.code)
               setPings((p) => [...p.filter((x) => x.expiresAt > Date.now()), data.ping].slice(-12));
             break;
           case 'joined':
+            if (new URLSearchParams(location.search).has('claim')) {
+              const url = new URL(location.href);
+              url.searchParams.delete('claim');
+              url.searchParams.delete('seat');
+              history.replaceState(null, '', url);
+            }
             setPings([]);
             session.current = { code: data.code, playerId: data.playerId, token: data.token };
             saveSession(session.current);
@@ -140,11 +184,15 @@ export function useGame() {
   }, [pings]);
   const leave = () => {
     setPings([]);
+    setSeatInvites([]);
+    try {
+      sessionStorage.removeItem('concordia-seat-invites');
+    } catch {}
     session.current = null;
     saveSession(null);
     if (socket.current?.readyState === WebSocket.OPEN) send({ type: 'leave' });
     setGame(null);
     setPlayerId('');
   };
-  return { game, playerId, status, error, setError, send, command, leave, pings };
+  return { game, playerId, status, error, setError, send, command, leave, pings, seatInvites };
 }

@@ -5700,3 +5700,408 @@ legend {
     grid-template-columns: 1fr;
   }
 }
+
+/* Gold Candidate: strategic overview without blocking the cartographic controls. */
+.map-lens-selector {
+  position: fixed;
+  top: 80px;
+  right: 12px;
+  z-index: 48;
+  width: min(480px, 42vw);
+  padding: 8px;
+  border-radius: 9px;
+}
+.map-lens-selector nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.map-lens-selector button {
+  flex: 1 1 65px;
+  padding: 5px;
+  font-size: 9px;
+  min-height: 30px;
+}
+.map-lens-selector small {
+  display: block;
+  margin-top: 6px;
+  color: #c7d3ca;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.map-lens-selector kbd {
+  font-size: 8px;
+  color: #ddc88d;
+}
+.outliner-dock {
+  position: fixed;
+  right: 12px;
+  top: 184px;
+  z-index: 47;
+  width: 228px;
+  padding: 0;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.outliner-dock.closed {
+  width: auto;
+}
+.outliner-toggle {
+  display: block;
+  width: 100%;
+  border: 0;
+  font-size: 10px;
+  padding: 8px;
+  text-align: left;
+}
+.outliner-body {
+  max-height: min(56vh, 620px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  scrollbar-width: thin;
+}
+.outliner-body h3 {
+  margin: 10px 0 6px;
+  font-size: 11px;
+}
+.outliner-body > button {
+  display: block;
+  width: 100%;
+  font-size: 10px;
+  padding: 7px;
+  text-align: left;
+  margin: 5px 0;
+}
+.outliner-unit > strong,
+.outliner-unit > span,
+.outliner-unit > small {
+  display: block;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.outliner-unit > span,
+.outliner-unit > small {
+  font-size: 9px;
+  color: #c0cfcb;
+}
+.outliner-unit meter {
+  width: 100%;
+  height: 5px;
+  display: block;
+  margin-top: 4px;
+}
+.outliner-unit.status-ALERT {
+  border-color: #e68562;
+}
+.outliner-body > small {
+  display: block;
+  font-size: 9px;
+  color: #b8c9c4;
+  margin: 8px 0;
+}
+.era-pill {
+  font-size: 9px !important;
+  color: #eed69a;
+  max-width: 180px;
+}
+.lens-badge {
+  fill: #fff2c4;
+  stroke: #12303a;
+  stroke-width: 2px;
+  paint-order: stroke;
+  font-family: sans-serif;
+}
+.logistics-danger {
+  animation: logistics-alert 1.5s ease-in-out infinite;
+}
+@keyframes logistics-alert {
+  50% {
+    fill: #991b1b;
+  }
+}
+.faction-trait-card {
+  padding: 12px;
+  border: 1px solid #bdac7355;
+  border-radius: 7px;
+  margin: 12px 0;
+}
+.faction-trait-card h3 {
+  color: #e7cf92;
+  margin: 0;
+}
+.faction-trait-card li {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.nation-card .faction-trait {
+  margin-top: 7px;
+  font-size: 11px;
+  color: #e1c680;
+}
+.nation-card small {
+  white-space: normal;
+  line-height: 1.4;
+}
+.peace-treaty-table {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d4bd7544;
+  margin-top: 16px;
+}
+.peace-treaty-table meter {
+  width: 100%;
+}
+.peace-treaty-table label {
+  font-size: 12px;
+}
+.peace-treaty-table fieldset {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.peace-treaty-table .check-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.peace-treaty-table .check-label input {
+  flex-shrink: 0;
+}
+.achievement-toast {
+  position: fixed;
+  top: 160px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 110;
+  padding: 14px 22px;
+  border: 1px solid #f6d777;
+  border-radius: 9px;
+  background: #44391af2;
+  color: #ffe9ac;
+  box-shadow: 0 0 30px #e6b13a44;
+  max-width: 75vw;
+  pointer-events: none;
+}
+.profile-emblem {
+  text-align: center;
+}
+.profile-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.career-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+.career-grid > div {
+  padding: 10px;
+  border: 1px solid #aa985955;
+  border-radius: 7px;
+}
+.career-grid small,
+.career-grid strong {
+  display: block;
+}
+.career-grid strong {
+  font-size: 21px;
+  color: #edd59a;
+}
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.achievement-grid article {
+  padding: 12px;
+  border: 1px solid #b9ab6644;
+  border-radius: 7px;
+  opacity: 0.7;
+}
+.achievement-grid article.unlocked {
+  border-color: #ecc569;
+  background: #d7bb5820;
+  opacity: 1;
+}
+.achievement-grid article small,
+.achievement-grid article progress {
+  display: block;
+  margin-top: 8px;
+  width: 100%;
+  font-size: 10px;
+}
+.timelapse-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.timelapse-controls button {
+  min-width: 40px;
+}
+.map-timelapse > input {
+  width: 100%;
+  margin: 14px 0;
+}
+.timelapse-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(180px, 1fr);
+  gap: 12px;
+}
+.timelapse-layout svg {
+  width: 100%;
+  min-height: 260px;
+  background: #153841;
+  border: 1px solid #b0a06e66;
+  border-radius: 8px;
+}
+.timelapse-layout path[role='button'] {
+  cursor: pointer;
+}
+.timelapse-layout path:focus {
+  stroke: #fff0ae;
+  stroke-width: 2px;
+  outline: none;
+}
+.timelapse-layout aside {
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 10px;
+  background: #0d253166;
+  font-size: 11px;
+}
+.campaign-save-controls {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  max-width: 100%;
+}
+.campaign-save-controls small {
+  font-size: 10px;
+  color: #b8c5bb;
+}
+.campaign-save-controls .file-button {
+  display: block;
+  cursor: pointer;
+  padding: 9px;
+  border: 1px solid #c4ac7255;
+  border-radius: 5px;
+  font-size: 11px;
+  background: #142e3a;
+}
+.file-button input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  font-size: 10px;
+}
+.entry-save-tools {
+  position: absolute;
+  right: 24px;
+  top: 68px;
+  width: min(285px, 30vw);
+  z-index: 5;
+}
+.entry-save-tools .campaign-save-controls {
+  margin: 0;
+}
+.entry-save-tools small {
+  display: none;
+}
+.friend-pass {
+  color: #ead390;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.release-candidate-interface .top-tools button {
+  min-width: 22px;
+}
+@media (max-width: 1100px) {
+  .map-lens-selector {
+    top: 153px;
+    width: 270px;
+  }
+  .outliner-dock {
+    top: 252px;
+    width: 200px;
+  }
+  .outliner-body {
+    max-height: 46vh;
+  }
+  .era-pill {
+    font-size: 7px !important;
+    max-width: 130px;
+  }
+}
+@media (max-width: 700px) {
+  .map-lens-selector {
+    top: 206px;
+    right: 8px;
+    width: min(260px, calc(100vw - 16px));
+    padding: 5px;
+  }
+  .map-lens-selector nav {
+    gap: 2px;
+  }
+  .map-lens-selector button {
+    flex-basis: 40px;
+    min-height: 25px;
+    font-size: 0;
+    padding: 4px;
+  }
+  .map-lens-selector button kbd {
+    font-size: 10px;
+  }
+  .map-lens-selector small {
+    font-size: 8px;
+  }
+  .outliner-dock {
+    top: 282px;
+    right: 8px;
+    width: min(205px, 55vw);
+  }
+  .outliner-body {
+    max-height: 35vh;
+  }
+  .outliner-toggle {
+    font-size: 9px;
+  }
+  .timelapse-layout {
+    grid-template-columns: 1fr;
+  }
+  .timelapse-layout aside {
+    max-height: 160px;
+  }
+  .achievement-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .profile-settings {
+    grid-template-columns: 1fr;
+  }
+  .entry-save-tools {
+    top: auto;
+    bottom: 30px;
+    right: 16px;
+    width: min(250px, 75vw);
+  }
+  .entry-save-tools .file-button {
+    padding: 4px 8px;
+    font-size: 9px;
+  }
+  .entry-save-tools .file-button input {
+    font-size: 9px;
+    margin-top: 2px;
+  }
+  .entry-header > .quiet-button {
+    font-size: 9px;
+    padding: 5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .logistics-danger {
+    animation: none;
+  }
+}

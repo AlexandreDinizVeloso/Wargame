@@ -1,3 +1,9 @@
+import {
+  MAP_LENSES,
+  provinceLensColor,
+  provinceIncome,
+  provinceLogistics,
+} from '../shared/mapLenses';
 import { lazy, Suspense } from 'react';
 const BattlePreviewTooltip = lazy(() => import('./BattlePreviewTooltip'));
 import type { MapPing } from '../shared/types';
@@ -35,38 +41,7 @@ import {
 } from '../shared/rules';
 import { RESOURCES } from '../shared/strategy';
 import { typing } from './ui';
-export const MAP_MODES: { id: MapMode; name: string; key: string; description: string }[] = [
-  {
-    id: 'POLITICAL',
-    name: 'Político',
-    key: '1',
-    description: 'Cores dos reinos; hachura: integração baixa ou ocupação.',
-  },
-  {
-    id: 'RELIGIOUS',
-    name: 'Religião',
-    key: '2',
-    description: 'Crenças e divergência com a fé estatal.',
-  },
-  {
-    id: 'ECONOMIC_SUPPLY',
-    name: 'Economia',
-    key: '3',
-    description: 'Imposto, mercados e pressão sobre o suprimento.',
-  },
-  {
-    id: 'DIPLOMATIC',
-    name: 'Diplomacia',
-    key: '4',
-    description: 'Próprio, aliados, tréguas, bloqueios e guerras formais.',
-  },
-  {
-    id: 'UNREST',
-    name: 'Estabilidade',
-    key: '5',
-    description: 'Pacificacão, revolta e tensão local.',
-  },
-];
+export const MAP_MODES = MAP_LENSES;
 export const FAITH_COLORS: Record<ReligionId, string> = Object.fromEntries(
   Object.entries(RELIGIONS).map(([id, r]) => [id, r.color]),
 ) as Record<ReligionId, string>;
@@ -248,6 +223,12 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     };
   }, [preview]);
   const color = (p: Province) => {
+    if (
+      game &&
+      referenceId &&
+      ['POLITICAL', 'ECONOMIC', 'LOGISTICS', 'DIPLOMATIC', 'UNREST'].includes(mode)
+    )
+      return provinceLensColor(game, p, mode, referenceId, viewerId);
     const owner = players.find((a) => a.id === controller(p));
     if (preview)
       return {
@@ -260,7 +241,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     if (p.kind === 'SEA_ZONE') return '#19394c';
     if (mode === 'RELIGIOUS') return FAITH_COLORS[p.religion];
     if (mode === 'UNREST') return heat(Math.max(p.unrest / 100, 1 - p.pacification / 100));
-    if (mode === 'ECONOMIC_SUPPLY') {
+    if (mode === 'ECONOMIC_SUPPLY' || mode === 'ECONOMIC') {
       const troops =
         game?.battalions
           .filter((a) => a.provinceId === p.id && !a.embarkedOnId)
@@ -597,7 +578,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
               )}
               {p.kind === 'LAND' && (
                 <path
-                  className={`province-shape ${destination ? `destination-${destination}` : ''}`}
+                  className={`province-shape ${mode === 'LOGISTICS' && game && viewerId && provinceLogistics(game, p, viewerId).danger ? 'logistics-danger' : ''} ${destination ? `destination-${destination}` : ''}`}
                   data-destination={destination ?? undefined}
                   d={p.path}
                   data-province={p.id}
@@ -647,7 +628,12 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   province={p}
                   scale={scale}
                   isTurnReplayPlaying={isTurnReplayPlaying && !!replay}
-                  expanded={camera.zoom > 1.5 || selected || mode === 'ECONOMIC_SUPPLY'}
+                  expanded={
+                    camera.zoom > 1.5 ||
+                    selected ||
+                    mode === 'ECONOMIC_SUPPLY' ||
+                    mode === 'ECONOMIC'
+                  }
                 />
               )}
               {!preview &&
@@ -696,9 +682,10 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   camera.zoom > 2.2 ||
                   hoveredId === p.id ||
                   selected ||
-                  mode === 'ECONOMIC_SUPPLY') && (
+                  mode === 'ECONOMIC_SUPPLY' ||
+                  mode === 'ECONOMIC') && (
                   <g
-                    className={`resource-badge ${mode === 'ECONOMIC_SUPPLY' ? 'emphasized' : ''}`}
+                    className={`resource-badge ${mode === 'ECONOMIC_SUPPLY' || mode === 'ECONOMIC' ? 'emphasized' : ''}`}
                     pointerEvents="none"
                   >
                     <title>
@@ -707,7 +694,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                     <circle
                       cx={p.x + 17 / scale}
                       cy={p.y - 22 / scale}
-                      r={(mode === 'ECONOMIC_SUPPLY' ? 11 : 8) / scale}
+                      r={(mode === 'ECONOMIC_SUPPLY' || mode === 'ECONOMIC' ? 10.8 : 8) / scale}
                       fill="#172933"
                       stroke="#e0c47c"
                       strokeWidth={0.7 / scale}
@@ -716,7 +703,9 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                       x={p.x + 17 / scale}
                       y={p.y - 18 / scale}
                       textAnchor="middle"
-                      fontSize={(mode === 'ECONOMIC_SUPPLY' ? 13 : 10) / scale}
+                      fontSize={
+                        (mode === 'ECONOMIC_SUPPLY' || mode === 'ECONOMIC' ? 13.5 : 10) / scale
+                      }
                     >
                       {RESOURCES[p.strategicResource].icon}
                     </text>
@@ -766,6 +755,48 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   pointerEvents="none"
                 >
                   {p.name.toUpperCase()}
+                </text>
+              )}
+              {p.kind === 'LAND' && game && mode === 'ECONOMIC' && (
+                <text
+                  className="lens-badge"
+                  x={p.x}
+                  y={p.y + 48 / scale}
+                  fontSize={11 / scale}
+                  textAnchor="middle"
+                  pointerEvents="none"
+                >
+                  +{provinceIncome(game, p).toFixed(1)} 🪙
+                </text>
+              )}
+              {p.kind === 'LAND' &&
+                game &&
+                viewerId &&
+                mode === 'LOGISTICS' &&
+                provinceLogistics(game, p, viewerId).troops > 0 && (
+                  <text
+                    className="lens-badge"
+                    x={p.x}
+                    y={p.y + 48 / scale}
+                    fontSize={11 / scale}
+                    textAnchor="middle"
+                    pointerEvents="none"
+                  >
+                    {provinceLogistics(game, p, viewerId).troops}/
+                    {Math.floor(provinceLogistics(game, p, viewerId).limit)}
+                  </text>
+                )}
+              {p.kind === 'LAND' && mode === 'UNREST' && (
+                <text
+                  className="lens-badge"
+                  x={p.x}
+                  y={p.y + 48 / scale}
+                  fontSize={11 / scale}
+                  textAnchor="middle"
+                  pointerEvents="none"
+                >
+                  {{ SOLAR: '☀️', REFORMED: '✝️', ANCESTRAL: '🌿', MERCHANT: '⚖️' }[p.religion]}{' '}
+                  {RELIGIONS[p.religion].name} · {Math.round(p.pacification)}%
                 </text>
               )}
               {mode === 'UNREST' && p.unrest >= 70 && p.kind === 'LAND' && (

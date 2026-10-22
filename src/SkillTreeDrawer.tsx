@@ -1,3 +1,4 @@
+import { technologyCost } from '../shared/world';
 import type { GameView } from '../shared/types';
 import { BRANCHES, SKILLS, skillBlock } from '../shared/military';
 import type { Command } from './ui';
@@ -23,14 +24,15 @@ export default function SkillTreeDrawer({
           <div className="skill-nodes">
             {SKILLS.filter((s) => s.branch === branch).map((s) => {
               const done = me.unlockedSkills.includes(s.id),
-                reason = skillBlock(me, s.id);
+                reason = skillBlock(me, s.id, game);
               return (
                 <article
                   className={`skill-node tier-${s.tier} ${done ? 'unlocked' : ''}`}
                   key={s.id}
                 >
                   <small>
-                    NÍVEL {s.tier} · {s.cost} XP{s.tier === 2 ? ' · ESCOLHA EXCLUSIVA A/B' : ''}
+                    NÍVEL {s.tier} · {technologyCost(game, s.tier, s.cost)} XP
+                    {s.tier === 2 ? ' · ESCOLHA EXCLUSIVA A/B' : ''}
                   </small>
                   <strong>{s.name}</strong>
                   <p>{s.description}</p>
@@ -43,7 +45,7 @@ export default function SkillTreeDrawer({
                       ? '✓ Desbloqueada'
                       : me.ready
                         ? 'Reabra suas ordens'
-                        : (reason ?? `Desbloquear · ${s.cost} XP`)}
+                        : (reason ?? `Desbloquear · ${technologyCost(game, s.tier, s.cost)} XP`)}
                   </button>
                 </article>
               );

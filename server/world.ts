@@ -1,3 +1,4 @@
+import { eraTransition, hegemonyWarning, botDispatch } from './goldWorld';
 import { developNeutralCities } from './neutral';
 import { notify } from './notifications';
 import type { GameState, TurnResolutionReport } from '../shared/types';
@@ -30,6 +31,7 @@ export function joinCoalition(g: GameState, id: string, targetId: string) {
   assert(!coalition.warId, 'Essa coalizão já está em guerra.');
   assert(!coalition.memberIds.includes(id), 'Você já participa dessa coalizão.');
   coalition.memberIds.push(id);
+  botDispatch(g, id, 'COALITION', targetId);
   log(g, `${p.nation} ingressou na coalizão contra ${playerOf(g, targetId).nation}.`, 'diplomacy');
 }
 export function coalitionWar(g: GameState, id: string, targetId: string) {
@@ -67,7 +69,8 @@ export function dealObjectives(g: GameState) {
     p.selectedObjectiveId = p.bot ? (p.secretObjectives[0]?.id ?? null) : null;
   }
 }
-export function advanceWorld(g: GameState, report: TurnResolutionReport) {
+export function advanceWorld(g: GameState, report: TurnResolutionReport, preview = false) {
+  eraTransition(g, preview ? undefined : report);
   for (const p of g.provinces)
     if (p.coastalBombardment && p.coastalBombardment.untilTurn < g.turn)
       p.coastalBombardment = null;
@@ -87,6 +90,7 @@ export function advanceWorld(g: GameState, report: TurnResolutionReport) {
     if (c.warId && !g.wars.some((w) => w.id === c.warId && w.active)) c.warId = null;
 }
 export function endWorld(g: GameState, report: TurnResolutionReport) {
+  hegemonyWarning(g, report);
   for (const p of g.players) {
     if (p.subjectOfId) {
       const lord = g.players.find((q) => q.id === p.subjectOfId);

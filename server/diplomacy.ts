@@ -1,3 +1,7 @@
+import { goldRules } from '../shared/factions';
+import { goldWarScore, treatyCost } from '../shared/treaties';
+import { validateGoldPeace, enactGoldPeace } from './goldPeace';
+import { botDispatch } from './goldWorld';
 import { realmLimits } from '../shared/economy';
 import { notify } from './notifications';
 import { subjugationEligible } from '../shared/development';
@@ -37,6 +41,7 @@ export function diplomaticEvent(
 ) {
   g.pendingDiplomacy.push({ action, actorId, targetId, text, amount, provinceId, covert });
   log(g, text, 'diplomacy');
+  if (actorId) botDispatch(g, actorId, action, targetId);
   const kind =
     action === 'DECLARE_WAR'
       ? 'DECLARE_WAR'
@@ -197,6 +202,13 @@ export function declareWar(
 }
 export function updateWarScores(g: GameState) {
   for (const w of g.wars.filter((w) => w.active)) {
+    if (goldRules(g)) {
+      const score = goldWarScore(g, w);
+      w.warScore = score.score;
+      w.battleScore = score.battle;
+      w.blockadeScore = score.blockade;
+      continue;
+    }
     const occupation = g.provinces.reduce(
       (n, p) =>
         n +
@@ -225,6 +237,7 @@ export function updateWarScores(g: GameState) {
   }
 }
 export function peaceCost(g: GameState, terms: PeaceTerm[]) {
+  if (goldRules(g)) return treatyCost(terms);
   return terms.reduce(
     (sum, t) =>
       sum +
@@ -297,7 +310,19 @@ function validatePeace(g: GameState, war: War, actorId: string, terms: PeaceTerm
   }
   return sides;
 }
-export function applyPeace(g: GameState, war: War, actorId: string, terms: PeaceTerm[]) {
+export function applyPeace(
+  g: GameState,
+  war: War,
+  actorId: string,
+  terms: PeaceTerm[],
+  concession = false,
+) {
+  if (goldRules(g)) {
+    const result = enactGoldPeace(g, war, actorId, terms, concession);
+    syncWars(g);
+    diplomaticEvent(g, 'PEACE', result.winner.id, result.loser.id, result.text);
+    return;
+  }
   const sides = validatePeace(g, war, actorId, terms),
     winner = playerOf(g, actorId),
     loser = playerOf(g, sides.targetId);
@@ -391,13 +416,21 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
     `${winner.nation} e ${loser.nation} encerraram a guerra: ${terms.map((t) => peaceDescription(t, g.provinces)).join('; ') || 'paz sem exigências'}.`,
   );
 }
-export function offerPeace(g: GameState, id: string, warId: string, terms: PeaceTerm[]) {
+export function offerPeace(
+  g: GameState,
+  id: string,
+  warId: string,
+  terms: PeaceTerm[],
+  concession = false,
+) {
   const war = g.wars.find((w) => w.id === warId && w.active);
   assert(war, 'Guerra não encontrada.');
   updateWarScores(g);
-  const sides = validatePeace(g, war, id, terms);
-  if (sides.score >= 100) {
-    applyPeace(g, war, id, terms);
+  const sides = goldRules(g)
+    ? validateGoldPeace(g, war, id, terms, concession)
+    : validatePeace(g, war, id, terms);
+  if (sides.score >= 100 && !concession) {
+    applyPeace(g, war, id, terms, concession);
     return;
   }
   assert(
@@ -407,11 +440,13 @@ export function offerPeace(g: GameState, id: string, warId: string, terms: Peace
   const loser = playerOf(g, sides.targetId);
   if (
     loser.bot &&
-    (terms.length === 0
-      ? loser.warExhaustion >= 15 || g.turn - war.startedTurn >= 4
-      : sides.score >= peaceCost(g, terms) + 10 || loser.warExhaustion >= 55)
+    (goldRules(g)
+      ? sides.score >= treatyCost(terms)
+      : terms.length === 0
+        ? loser.warExhaustion >= 15 || g.turn - war.startedTurn >= 4
+        : sides.score >= peaceCost(g, terms) + 10 || loser.warExhaustion >= 55)
   ) {
-    applyPeace(g, war, id, terms);
+    applyPeace(g, war, id, terms, concession);
     return;
   }
   g.offers.push({
@@ -422,6 +457,7 @@ export function offerPeace(g: GameState, id: string, warId: string, terms: Peace
     amount: 0,
     warId,
     terms: structuredClone(terms),
+    ...(goldRules(g) ? { concession } : {}),
     expiresTurn: g.turn + 2,
   });
   diplomaticEvent(
@@ -476,7 +512,7 @@ export function answerOffer(g: GameState, id: string, offerId: string, accept: b
     if (offer.kind === 'peace') {
       const w = g.wars.find((w) => w.id === offer.warId && w.active);
       assert(w, 'Guerra já encerrada.');
-      applyPeace(g, w, from.id, offer.terms ?? []);
+      applyPeace(g, w, from.id, offer.terms ?? [], offer.concession);
     } else {
       assert(!atWar(g, id, from.id), 'Negocie a paz antes de firmar esse acordo.');
       if (offer.kind === 'vassalage') {
@@ -509,6 +545,10 @@ export function answerOffer(g: GameState, id: string, offerId: string, accept: b
           untilTurn: g.turn + 4,
         };
     }
+  }
+  if (accept && offer.kind === 'alliance') {
+    botDispatch(g, id, 'ALLIANCE', from.id);
+    botDispatch(g, from.id, 'ALLIANCE', id);
   }
   g.offers = g.offers.filter((o) => o.id !== offerId);
   diplomaticEvent(

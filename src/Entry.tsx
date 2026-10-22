@@ -1,3 +1,6 @@
+import { SCENARIOS, type ScenarioId } from '../shared/scenarios';
+import CampaignSaveControls, { inviteUrl } from './CampaignSaveControls';
+import type { SeatInvite } from '../shared/types';
 import PlayerNameForm from './PlayerNameForm';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -51,6 +54,10 @@ export function NationCards({
             <small>{RELIGIONS[n.religion].name}</small>
             <span>{n.ideas[0]}</span>
             <span>{n.ideas[1]}</span>
+            <strong className="faction-trait">{n.factionTrait.name}</strong>
+            {n.factionTrait.effects.map((effect) => (
+              <small key={effect}>{effect}</small>
+            ))}
           </div>
           {selected === n.id && <Check size={14} />}
         </button>
@@ -63,16 +70,23 @@ export function Entry({
   online,
   onHelp,
   onTutorial,
+  onProfile,
 }: {
   send: (message: ClientMessage) => void;
   online: boolean;
   onHelp: () => void;
   onTutorial: () => void;
+  onProfile: () => void;
 }) {
-  const [form, setForm] = useState<'create' | 'join' | null>(null),
+  const [form, setForm] = useState<'create' | 'join' | null>(() =>
+      new URLSearchParams(location.search).has('room') ? 'join' : null,
+    ),
     [name, setName] = useState(''),
-    [code, setCode] = useState(''),
-    [mode, setMode] = useState<GameMode>('quick'),
+    [code, setCode] = useState(
+      () => new URLSearchParams(location.search).get('room')?.slice(0, 6).toUpperCase() ?? '',
+    ),
+    [scenarioId, setScenario] = useState<ScenarioId>('WORLD_GRAND_CAMPAIGN'),
+    [mode, setMode] = useState<GameMode>('campaign'),
     [theater, setTheater] = useState<Theater>('EUROPE'),
     [nationId, setNation] = useState<NationId>('vespera'),
     [roomName, setRoomName] = useState(''),
@@ -104,12 +118,18 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          PRÉVIA <i /> 0.95
+          GOLD CANDIDATE <i /> 0.98
         </span>
+        <button className="quiet-button" onClick={onProfile}>
+          🏅 Perfil do Estrategista
+        </button>
         <button className="quiet-button" onClick={onHelp}>
           Como jogar <ArrowRight size={14} />
         </button>
       </header>
+      <div className="entry-save-tools">
+        <CampaignSaveControls send={send} />
+      </div>
       <div className={`entry-content ${form ? 'with-form' : ''}`}>
         <section className="hero-copy">
           <span className="eyebrow">NAÇÕES, CRISES & OBJETIVOS SECRETOS</span>
@@ -191,6 +211,7 @@ export function Entry({
                 form === 'create'
                   ? {
                       type: 'create',
+                      scenarioId,
                       name: name.trim() || 'Estrategista',
                       mode,
                       theater,
@@ -201,11 +222,19 @@ export function Entry({
                       allowBotSecretVictory: botSecrets,
                       turnTimerSeconds: timer,
                     }
-                  : {
-                      type: 'join',
-                      name: name.trim() || 'Convidado',
-                      code: code.trim().toUpperCase(),
-                    },
+                  : new URLSearchParams(location.search).get('claim') &&
+                      new URLSearchParams(location.search).get('seat')
+                    ? {
+                        type: 'resume',
+                        code: code.trim().toUpperCase(),
+                        playerId: new URLSearchParams(location.search).get('seat')!,
+                        token: new URLSearchParams(location.search).get('claim')!,
+                      }
+                    : {
+                        type: 'join',
+                        name: name.trim() || 'Convidado',
+                        code: code.trim().toUpperCase(),
+                      },
               );
             }}
           >
@@ -247,6 +276,27 @@ export function Entry({
               </>
             ) : (
               <>
+                <label>
+                  Cenário de Campanha
+                  <select
+                    aria-label="Cenário de Campanha"
+                    value={scenarioId}
+                    onChange={(e) => {
+                      const id = e.target.value as ScenarioId;
+                      setScenario(id);
+                      const scenario = SCENARIOS.find((s) => s.id === id)!;
+                      if (scenario.mode) setMode(scenario.mode);
+                      if (scenario.theater) setTheater(scenario.theater);
+                    }}
+                  >
+                    {SCENARIOS.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small>{SCENARIOS.find((s) => s.id === scenarioId)?.description}</small>
+                </label>
                 <label>
                   Nome da sala
                   <input
@@ -299,6 +349,7 @@ export function Entry({
                 <div className="mode-choices">
                   <button
                     type="button"
+                    disabled={!!SCENARIOS.find((s) => s.id === scenarioId)?.mode}
                     aria-pressed={mode === 'quick'}
                     onClick={() => setMode('quick')}
                     className={mode === 'quick' ? 'selected' : ''}
@@ -309,6 +360,7 @@ export function Entry({
                   </button>
                   <button
                     type="button"
+                    disabled={!!SCENARIOS.find((s) => s.id === scenarioId)?.mode}
                     aria-pressed={mode === 'campaign'}
                     onClick={() => setMode('campaign')}
                     className={mode === 'campaign' ? 'selected' : ''}
@@ -321,7 +373,11 @@ export function Entry({
                 {mode === 'quick' && (
                   <label>
                     Teatro da partida
-                    <select value={theater} onChange={(e) => setTheater(e.target.value as Theater)}>
+                    <select
+                      disabled={!!SCENARIOS.find((s) => s.id === scenarioId)?.theater}
+                      value={theater}
+                      onChange={(e) => setTheater(e.target.value as Theater)}
+                    >
                       {THEATERS.map((t) => (
                         <option key={t} value={t}>
                           {CONTINENTS[t]}
@@ -390,12 +446,17 @@ export function Lobby({
   playerId,
   command,
   leave,
+  send,
+  seatInvites = [],
 }: {
   game: GameView;
   playerId: string;
   command: Command;
   leave: () => void;
+  send: (m: ClientMessage) => void;
+  seatInvites?: SeatInvite[];
 }) {
+  const [copyState, setCopyState] = useState('');
   const me = game.players.find((p) => p.id === playerId)!,
     host = game.hostId === playerId;
   const taken = game.players.filter((p) => p.id !== playerId).map((p) => p.nationId);
@@ -414,11 +475,30 @@ export function Lobby({
         <section className="lobby-council">
           <span className="eyebrow">SALA DE GUERRA</span>
           <h1>Reúna o conselho.</h1>
+          <p className="scenario-summary">
+            {SCENARIOS.find((s) => s.id === game.matchConfig.scenarioId)?.name ?? 'Campanha legada'}{' '}
+            · {SCENARIOS.find((s) => s.id === game.matchConfig.scenarioId)?.description}
+          </p>
           <div className="room-invite">
             <small>CÓDIGO DA SALA</small>
             <strong>{game.code}</strong>
             <span>{game.players.length} / 8 lugares ocupados</span>
           </div>
+          <p className="friend-pass">
+            ✨ Friend-Pass Ativo: Convidados jogam gratuitamente na sala do Anfitrião
+          </p>
+          <button
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(inviteUrl(game.code))
+                .then(() => setCopyState('✓ Convite copiado'))
+                .catch(() => setCopyState(inviteUrl(game.code)))
+            }
+          >
+            🔗 Copiar Link de Convite da Sala
+          </button>
+          {copyState && <p role="status">{copyState}</p>}
+          {host && <CampaignSaveControls send={send} canExport invites={seatInvites} />}
           <PlayerNameForm name={me.name} command={command} />
           <div className="council-list">
             {game.players.map((p) => (
@@ -601,7 +681,9 @@ export function Lobby({
             <label>
               Cenário
               <select
-                disabled={!host}
+                disabled={
+                  !host || !!SCENARIOS.find((s) => s.id === game.matchConfig.scenarioId)?.mode
+                }
                 value={game.mode}
                 onChange={(e) => command({ type: 'SET_MODE', mode: e.target.value as GameMode })}
               >
@@ -613,7 +695,9 @@ export function Lobby({
               <label>
                 Continente
                 <select
-                  disabled={!host}
+                  disabled={
+                    !host || !!SCENARIOS.find((s) => s.id === game.matchConfig.scenarioId)?.theater
+                  }
                   value={game.theater}
                   onChange={(e) =>
                     command({ type: 'SET_MODE', mode: 'quick', theater: e.target.value as Theater })
