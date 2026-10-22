@@ -1,5 +1,8 @@
+import PlayerNameForm from './PlayerNameForm';
 import SkillTreeDrawer from './SkillTreeDrawer';
-import { bridgeOptions } from '../shared/naval';
+import { crossingOptions } from '../shared/naval';
+import { levyReason } from '../shared/emergency';
+import PersonalAlerts from './Notifications';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
@@ -38,7 +41,6 @@ import {
   livingPlayers,
   realmEconomy,
   RELIGIONS,
-  supplyLimit,
   telemetry,
   unitCount,
   unitPath,
@@ -53,7 +55,7 @@ import WorldDrawer from './WorldDrawer';
 import SecretDrawer from './SecretDrawer';
 import WarModal from './WarModal';
 import FirstReadyBanner from './FirstReadyBanner';
-import { SEASONS, hegemonicThreat, globalSupplyBonus } from '../shared/strategy';
+import { SEASONS, hegemonicThreat } from '../shared/strategy';
 import TurnPanel, { type ReportTab } from './TurnPanel';
 import { FloatingWindow } from './FloatingWindow';
 import { audio } from './audio';
@@ -183,11 +185,12 @@ export default function App() {
       armyId?: string;
       provinceId?: string;
       bridgeFleetId?: string;
+      autoTransport?: boolean;
     } | null>(null),
     [armyId, setArmy] = useState(''),
     [mode, setMode] = useState<MapMode>('POLITICAL'),
     [referenceId, setReference] = useState(''),
-    [reportTab, setReportTab] = useState<ReportTab>('orders'),
+    [reportTab, setReportTab] = useState<ReportTab>('personal'),
     [manual, setManual] = useState(false),
     [menu, setMenu] = useState(false),
     [endOpen, setEndOpen] = useState(false),
@@ -329,15 +332,8 @@ export default function App() {
         game.players.find((q) => q.id === controller(p))?.subjectOfId === playerId,
     );
   const troopTotal = game.battalions
-      .filter((a) => a.ownerId === playerId)
-      .reduce((n, a) => n + unitCount(a), 0),
-    maxSupply = game.provinces
-      .filter(
-        (p) =>
-          controller(p) === playerId ||
-          game.battalions.some((a) => a.ownerId === playerId && a.provinceId === p.id),
-      )
-      .reduce((n, p) => n + supplyLimit(p), globalSupplyBonus(game, playerId));
+    .filter((a) => a.ownerId === playerId)
+    .reduce((n, a) => n + unitCount(a), 0);
   const remaining = game.deadline ? Math.max(0, Math.ceil((game.deadline - now) / 1000)) : null;
   const ready = alive.filter((p) => p.ready || p.bot).length;
   const focus = (id: string) => {
@@ -397,20 +393,20 @@ export default function App() {
         targetId: host,
         armyId: selectedArmy.id,
         provinceId: p.id,
-        bridgeFleetId: bridgeOptions(game, selectedArmy, p)[0]?.id,
+        autoTransport:
+          !game.provinces.find((q) => q.id === selectedArmy.provinceId)?.neighbors.includes(p.id) &&
+          crossingOptions(game, selectedArmy, p, game.plannedOrders, true).length > 0,
       });
       return;
     }
-    const bridge = bridgeOptions(game, selectedArmy, p)[0];
-    if (bridge) {
+    const from = game.provinces.find((q) => q.id === selectedArmy.provinceId)!;
+    if (
+      !from.neighbors.includes(p.id) &&
+      crossingOptions(game, selectedArmy, p, game.plannedOrders).length
+    ) {
       command({
         type: 'SUBMIT_ORDER',
-        order: {
-          type: 'NAVAL_BRIDGE',
-          battalionId: selectedArmy.id,
-          fleetId: bridge.id,
-          targetProvinceId: p.id,
-        },
+        order: { type: 'AUTO_TRANSPORT', battalionId: selectedArmy.id, targetProvinceId: p.id },
       });
       return;
     }
@@ -481,19 +477,19 @@ export default function App() {
             <span>
               <strong>
                 {troopTotal}
-                <em> / {maxSupply}</em>
+                <em> / {eco.armyCap}</em>
               </strong>
-              <small>FORÇAS / SUPRIMENTO</small>
+              <small>FORÇAS / LIMITE DO EXÉRCITO</small>
             </span>
           </div>
           <div className="hud-stat reserves-stat">
             <Flag size={15} />
             <span>
               <strong>
-                {number(me.manpower)}
+                {number(me.manpower)} / {number(eco.manpowerCap, 1)}
                 <em> / {number(me.influence)}</em>
               </strong>
-              <small>RESERVAS / INFLUÊNCIA</small>
+              <small>RESERVAS / TETO · INFLUÊNCIA</small>
             </span>
           </div>
           <div className="hud-stat faith-stat" title={RELIGIONS[me.faith].tenet}>
@@ -599,7 +595,18 @@ export default function App() {
           );
         })}
       </div>
+      {game.sandboxContinued && (
+        <div className="sandbox-banner">
+          ⚔️ Dominação Livre · vitória original preservada na rodada {game.victoryRecord?.turn}
+        </div>
+      )}
+      {game.turn <= game.graceUntilTurn && (
+        <div className="grace-banner">
+          🕊️ Pacto de não agressão · guerras liberadas na rodada {game.graceUntilTurn + 1}
+        </div>
+      )}
       <FirstReadyBanner game={game} />
+      <PersonalAlerts game={game} playerId={playerId} command={command} onFocus={focus} />
       <nav className="hud-navigation">
         <button
           onClick={() => {
@@ -637,6 +644,16 @@ export default function App() {
         </button>
         <button onClick={() => open('skills')}>
           🎖️ Doutrinas & Árvore de Tropas · {me.militaryXP} XP
+        </button>
+        <button
+          title={
+            levyReason(game, playerId) ??
+            '50 ouro, 15 estabilidade; cinco infantarias e defesa territorial.'
+          }
+          disabled={!!levyReason(game, playerId)}
+          onClick={() => command({ type: 'EMERGENCY_LEVY' })}
+        >
+          🛡️ Convocar Defesa da Pátria
         </button>
         {game.enableSecretObjectives && (
           <button onClick={() => open('secret')}>🎯 Meu Objetivo Secreto</button>
@@ -869,6 +886,18 @@ export default function App() {
       )}
       <footer className="hud-footer">
         <div className="footer-tabs">
+          <button onClick={() => showReport('personal')}>
+            🔔 Minha Nação (
+            {
+              game.notifications.filter(
+                (n) =>
+                  n.type !== 'WORLD' &&
+                  n.involvesPlayerIds.includes(playerId) &&
+                  !game.readNotificationIds.includes(n.id),
+              ).length
+            }
+            )
+          </button>
           <button onClick={() => showReport('orders')}>
             <ScrollText size={14} />
             Ordens <b>{game.plannedOrders.length}</b>
@@ -977,6 +1006,7 @@ export default function App() {
               {RELIGIONS[me.faith].name} · estabilidade {number(me.stability)}% · prestígio{' '}
               {number(me.prestige)}
             </p>
+            <PlayerNameForm name={me.name} command={command} />
             <label>
               Política religiosa
               <select
@@ -1119,6 +1149,27 @@ export default function App() {
               <ScrollText size={16} />
               Baixar Crônica (.TXT)
             </button>
+            <button
+              className="primary"
+              onClick={() => {
+                download(game, 'json');
+                setEndOpen(false);
+              }}
+            >
+              🏆 Encerrar Campanha e Baixar Relatório
+            </button>
+            {game.finishReason === 'victory' && (
+              <button
+                disabled={game.hostId !== playerId}
+                title={game.hostId !== playerId ? 'O anfitrião decide pela sala.' : ''}
+                onClick={() => {
+                  command({ type: 'CONTINUE_SANDBOX' });
+                  setEndOpen(false);
+                }}
+              >
+                ⚔️ Continuar Jogando (Modo Dominação Livre)
+              </button>
+            )}
             <button className="text-button" onClick={() => setEndOpen(false)}>
               Explorar o mapa final
             </button>

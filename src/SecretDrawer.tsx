@@ -16,13 +16,13 @@ export default function SecretDrawer({
       <h2>🎯 Meu Objetivo Secreto</h2>
       <p>
         {me.selectedObjectiveId
-          ? 'Sustente todos os requisitos por duas rodadas consecutivas para vencer. A primeira gera um alerta mundial.'
+          ? 'Sustente todos os requisitos por três rodadas consecutivas para vencer. A primeira gera um alerta mundial.'
           : 'Escolha uma carta na primeira rodada. Se não escolher, a primeira será adotada ao resolver.'}
       </p>
       <Meter
         label="Condição completa sustentada"
-        value={(me.objectiveStreak / 2) * 100}
-        display={`${me.objectiveStreak}/2 rodadas`}
+        value={(me.objectiveStreak / 3) * 100}
+        display={`${me.objectiveStreak}/3 rodadas`}
       />
       {me.secretObjectives
         .filter((c) => !me.selectedObjectiveId || c.id === me.selectedObjectiveId)

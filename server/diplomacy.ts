@@ -1,3 +1,5 @@
+import { realmLimits } from '../shared/economy';
+import { notify } from './notifications';
 import { subjugationEligible } from '../shared/development';
 import { hegemonicThreat } from '../shared/strategy';
 import type { CasusBelli, DiplomaticOrder, GameState, PeaceTerm, War } from '../shared/types';
@@ -35,6 +37,33 @@ export function diplomaticEvent(
 ) {
   g.pendingDiplomacy.push({ action, actorId, targetId, text, amount, provinceId, covert });
   log(g, text, 'diplomacy');
+  const kind =
+    action === 'DECLARE_WAR'
+      ? 'DECLARE_WAR'
+      : action === 'CALL_TO_ARMS'
+        ? 'CALL_TO_ARMS'
+        : action === 'PEACE_OFFER'
+          ? 'PEACE_OFFER'
+          : 'DIPLOMACY';
+  const offer = g.offers.find(
+    (o) =>
+      o.to === targetId &&
+      o.from === actorId &&
+      (kind === 'CALL_TO_ARMS'
+        ? o.kind === 'call_to_arms'
+        : kind === 'PEACE_OFFER'
+          ? o.kind === 'peace'
+          : true),
+  );
+  notify(g, {
+    type: kind,
+    text,
+    involvesPlayerIds: [...(actorId ? [actorId] : []), targetId],
+    severity: ['DECLARE_WAR', 'CALL_TO_ARMS', 'PEACE_OFFER'].includes(kind) ? 'CRITICAL' : 'INFO',
+    focusProvinceId:
+      provinceId ?? g.players.find((p) => p.id === targetId)?.originalCapitalId ?? undefined,
+    ...(offer ? { offerId: offer.id } : {}),
+  });
 }
 export function syncWars(g: GameState) {
   for (const r of g.relations) {
@@ -101,6 +130,10 @@ export function declareWar(
     target = playerOf(g, targetId),
     r = getRelation(g, id, targetId);
   assert(g.phase === 'planning', 'A campanha não está em andamento.');
+  assert(
+    g.turn > g.graceUntilTurn,
+    'Pacto inicial de não agressão: guerras entre nações liberadas na rodada 3.',
+  );
   assert(
     id !== targetId && g.provinces.some((p) => p.ownerId === targetId),
     'Alvo de guerra inválido.',
@@ -273,6 +306,10 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
       for (const id of t.provinceIds) {
         const p = provinceOf(g, id);
         winner.aggressiveExpansion = clamp(winner.aggressiveExpansion + 12);
+        if (p.ownerId && p.ownerId !== actorId) {
+          const previous = playerOf(g, p.ownerId);
+          previous.lostProvinceIds = [...new Set([...previous.lostProvinceIds, p.id])];
+        }
         p.ownerId = actorId;
         p.occupierId = null;
         p.siege = null;
@@ -294,7 +331,7 @@ export function applyPeace(g: GameState, war: War, actorId: string, terms: Peace
       winner.moraleBonusUntil = g.turn + 3;
       loser.prestige -= 20;
       loser.disarmUntil = g.turn + 3;
-      loser.armyCap = 8;
+      loser.armyCap = realmLimits(g, loser.id).armyCap;
 
       let excess = liveArmySize(g, loser.id) - 8;
       for (const a of g.battalions
@@ -387,6 +424,15 @@ export function offerPeace(g: GameState, id: string, warId: string, terms: Peace
     terms: structuredClone(terms),
     expiresTurn: g.turn + 2,
   });
+  diplomaticEvent(
+    g,
+    'PEACE_OFFER',
+    id,
+    sides.targetId,
+    `${playerOf(g, id).nation} enviou uma proposta de paz.`,
+    0,
+    g.players.find((p) => p.id === sides.targetId)?.originalCapitalId ?? null,
+  );
 }
 export function breakAlliance(g: GameState, id: string, targetId: string) {
   const r = getRelation(g, id, targetId);

@@ -1,5 +1,6 @@
 import CityDevelopment from './CityDevelopment';
-import { useState } from 'react';
+import { provinceRecruitLimit, recruitedCount, recruitmentBlock } from '../shared/economy';
+import { useState, useEffect } from 'react';
 import {
   Anchor,
   ArrowUpRight,
@@ -83,7 +84,7 @@ export default function ProvinceDrawer({
     limit = effectiveSupply(game, playerId, province);
   const [kind, setKind] = useState<'regular' | 'mercenary' | 'fleet'>('regular'),
     [values, setValues] = useState<Composition>({
-      infantry: 3,
+      infantry: 2,
       cavalry: 0,
       artillery: 0,
       warships: 1,
@@ -108,6 +109,16 @@ export default function ProvinceDrawer({
     ...(name.trim() ? { name: name.trim() } : {}),
   };
   const price = budgetFor(game, playerId, recruit);
+  const recruitReason = recruitmentBlock(province, recruit, game.turn);
+  const queued = game.plannedOrders.find(
+    (o) => o.type === 'RECRUIT_BATTALION' && o.provinceId === province.id,
+  );
+  const localCount =
+    recruitedCount(province, game.turn) + (queued ? unitCount(queued as Partial<Composition>) : 0);
+  useEffect(() => {
+    if (!province.barracksLevel && !province.foundryLevel)
+      setValues((v) => ({ ...v, infantry: Math.min(v.infantry, 2), cavalry: 0, artillery: 0 }));
+  }, [province.id, province.barracksLevel, province.foundryLevel]);
   const build = (
     type: 'BUILD_FORT' | 'BUILD_PORT' | 'BUILD_MARKET' | 'PACIFY',
     label: string,
@@ -257,8 +268,8 @@ export default function ProvinceDrawer({
       </div>
       {total > limit && (
         <p className="warning-box">
-          Atrito previsto: {Math.ceil((total - limit) * 0.15)} unidades. A manutenção cresce com o
-          excesso.
+          Atrito previsto: {Math.ceil((total - limit) * 0.15)} unidades. O atrito reduz a formação
+          enquanto houver excesso.
         </p>
       )}
       {isBlockaded(game, province) && (
@@ -290,7 +301,10 @@ export default function ProvinceDrawer({
               <p className="holy-city" key={id}>
                 <Church size={15} />
                 Cidade Sagrada · {faith.name}
-                <small>+1,5 ouro por província desta fé no mapa.</small>
+                <small>
+                  +0,5 por província de nação ativa desta fé; teto 6, ou 12 com templo. Neutros não
+                  pagam dízimo.
+                </small>
               </p>
             ))}
           <div className="building-levels">
@@ -375,6 +389,16 @@ export default function ProvinceDrawer({
               <div className="field-heading">
                 Recrutamento <span>ORDEM DE CIDADE</span>
               </div>
+              <p className="recruit-capacity">
+                Capacidade de Recrutamento Local: {localCount}/{provinceRecruitLimit(province)}{' '}
+                neste turno
+              </p>
+              {!province.barracksLevel && !province.foundryLevel && (
+                <p className="fine-print">
+                  Construa um Quartel para recrutar Cavalaria/Artilharia e ampliar o limite.
+                </p>
+              )}
+              {recruitReason && <p className="warning-box">{recruitReason}</p>}
               <div className="segmented-control">
                 <button
                   className={kind === 'regular' ? 'selected' : ''}
@@ -423,7 +447,12 @@ export default function ProvinceDrawer({
                     <input
                       type="number"
                       min="0"
-                      max="50"
+                      max={provinceRecruitLimit(province)}
+                      disabled={
+                        !province.barracksLevel &&
+                        !province.foundryLevel &&
+                        (key === 'cavalry' || key === 'artillery')
+                      }
                       value={values[key]}
                       onChange={(e) =>
                         setValues((v) => ({
@@ -477,6 +506,7 @@ export default function ProvinceDrawer({
                 disabled={
                   !active ||
                   !price.affordable ||
+                  !!recruitReason ||
                   unitCount(composition) < 1 ||
                   unitCount(composition) > 50 ||
                   (isMercenary &&

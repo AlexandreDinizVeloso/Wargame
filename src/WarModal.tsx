@@ -10,6 +10,7 @@ export default function WarModal({
   armyId,
   provinceId,
   bridgeFleetId,
+  autoTransport,
   command,
   close,
 }: {
@@ -19,6 +20,7 @@ export default function WarModal({
   armyId?: string;
   provinceId?: string;
   bridgeFleetId?: string;
+  autoTransport?: boolean;
   command: Command;
   close: () => void;
 }) {
@@ -34,7 +36,11 @@ export default function WarModal({
     (c) => c.targetId === targetId && c.memberIds.includes(playerId),
   );
   const blocked =
-    r.allied || r.truceUntil >= game.turn || !!me.subjectOfId || game.phase !== 'planning';
+    r.allied ||
+    r.truceUntil >= game.turn ||
+    !!me.subjectOfId ||
+    game.phase !== 'planning' ||
+    game.turn <= game.graceUntilTurn;
   return (
     <div className="modal-backdrop">
       <section
@@ -83,7 +89,9 @@ export default function WarModal({
         )}
         {blocked && (
           <p className="warning-box">
-            Rompa a aliança, aguarde a trégua ou obtenha independência antes de declarar guerra.
+            {game.turn <= game.graceUntilTurn
+              ? 'Pacto de não agressão inicial: guerras liberadas na rodada 3.'
+              : 'Rompa a aliança, aguarde a trégua ou obtenha independência antes de declarar guerra.'}
           </p>
         )}
         <div className="button-pair">
@@ -101,6 +109,7 @@ export default function WarModal({
                       battalionId: armyId,
                       targetProvinceId: provinceId,
                       bridgeFleetId,
+                      autoTransport,
                     }
                   : {
                       type: 'DECLARE_WAR',

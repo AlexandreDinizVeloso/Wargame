@@ -5,6 +5,18 @@ export function orderName(o: PlayerOrder) {
       return o.isFleet ? 'Construir frota' : 'Recrutar batalhão';
     case 'MOVE_BATTALION':
       return 'Marchar / navegar';
+    case 'AUTO_TRANSPORT':
+      return o.fleetId ? 'Ponte naval automática (grátis)' : '⛵ Travessia Marítima (15 Ouro)';
+    case 'NAVAL_BRIDGE':
+      return 'Ponte naval';
+    case 'ASSAULT_SIEGE':
+      return 'Assaltar muralha';
+    case 'BUILD_BUILDING':
+      return `Construir ${o.building}`;
+    case 'DEMOLISH_BUILDING':
+      return `Demolir ${o.building}`;
+    case 'MERGE_ALL':
+      return 'Fundir agora';
     case 'ENTRENCH_BATTALION':
       return 'Entrincheirar';
     case 'TRAIN_BATTALION':

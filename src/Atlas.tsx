@@ -1,4 +1,4 @@
-import { bridgeOptions } from '../shared/naval';
+import { crossingOptions } from '../shared/naval';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type {
   Battalion,
@@ -263,7 +263,11 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     .filter((a) => a.ownerId === (viewerId ?? referenceId) || a.pathQueue.length > 0)
     .map((a) => {
       const order = orders.find(
-        (o) => (o.type === 'MOVE_BATTALION' || o.type === 'NAVAL_BRIDGE') && o.battalionId === a.id,
+        (o) =>
+          (o.type === 'MOVE_BATTALION' ||
+            o.type === 'NAVAL_BRIDGE' ||
+            o.type === 'AUTO_TRANSPORT') &&
+          o.battalionId === a.id,
       );
       const path =
         order?.type === 'MOVE_BATTALION'
@@ -271,12 +275,14 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             (order.targetProvinceId && game
               ? (unitPath(game, a, order.targetProvinceId) ?? [])
               : []))
-          : order?.type === 'NAVAL_BRIDGE'
-            ? [
-                game!.battalions.find((f) => f.id === order.fleetId)!.provinceId,
-                order.targetProvinceId,
-              ]
-            : a.pathQueue;
+          : order?.type === 'AUTO_TRANSPORT'
+            ? [...(order.seaPath ?? []), order.targetProvinceId]
+            : order?.type === 'NAVAL_BRIDGE'
+              ? [
+                  game!.battalions.find((f) => f.id === order.fleetId)?.provinceId ?? a.provinceId,
+                  order.targetProvinceId,
+                ]
+              : a.pathQueue;
       return { army: a, path };
     })
     .filter((r) => r.path.length);
@@ -287,7 +293,19 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   const highlight = (p: Province) => {
     if (!selectedArmy || !current || !game) return null;
     if (!current.neighbors.includes(p.id))
-      return bridgeOptions(game, selectedArmy, p).length ? 'naval' : null;
+      return crossingOptions(game, selectedArmy, p, orders, true).length ? 'naval' : null;
+    const strait = current.straitSeaIds?.[p.id];
+    if (
+      strait &&
+      game.battalions.some(
+        (f) =>
+          f.isFleet &&
+          f.warships > 0 &&
+          f.provinceId === strait &&
+          atWar(game, selectedArmy.ownerId, f.ownerId),
+      )
+    )
+      return null;
     if (selectedArmy.embarkedOnId)
       return p.kind === 'LAND' && p.isCoastal && canUnitVisit(game, selectedArmy, p)
         ? 'naval'
@@ -495,6 +513,45 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   if (e.key === 'Enter') pick(p);
                 }}
               />
+              {!preview &&
+                p.straitNeighbors
+                  .filter((id) => p.id < id)
+                  .map((id) => {
+                    const to = provinces.find((q) => q.id === id);
+                    if (!to) return null;
+                    const dx = to.x - p.x;
+                    const wrap = Math.abs(dx) > 720 ? (dx > 0 ? -1440 : 1440) : 0;
+                    return (
+                      <g key={id} className="strait-link" pointerEvents="none">
+                        <title>
+                          Estreito: {p.name} ↔ {to.name}
+                        </title>
+                        <path
+                          d={`M${p.x},${p.y}L${to.x + wrap},${to.y}${wrap ? `M${p.x - wrap},${p.y}L${to.x},${to.y}` : ''}`}
+                          fill="none"
+                          stroke="#ebca83"
+                          strokeWidth={1.2 / scale}
+                          strokeDasharray={`${5 / scale} ${4 / scale}`}
+                        />
+                      </g>
+                    );
+                  })}
+              {destination === 'naval' &&
+                p.kind === 'LAND' &&
+                selectedArmy &&
+                game &&
+                !current?.neighbors.includes(p.id) && (
+                  <text
+                    className="charter-price"
+                    x={p.x}
+                    y={p.y + 29 / scale}
+                    fontSize={10 / scale}
+                    textAnchor="middle"
+                    pointerEvents="none"
+                  >
+                    ⛵ {crossingOptions(game, selectedArmy, p, orders, true)[0]?.cost ?? 0} ouro
+                  </text>
+                )}
               {!preview && p.strategicResource && (
                 <g
                   className={`resource-badge ${mode === 'ECONOMIC_SUPPLY' ? 'emphasized' : ''}`}

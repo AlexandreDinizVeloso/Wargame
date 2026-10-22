@@ -86,6 +86,12 @@ test('salvamento atômico restaura salas, ordens e tokens após reinício, pausa
     'state',
     (m) => m.state.phase === 'planning',
   );
+  await action(
+    b,
+    { type: 'command', command: { type: 'SET_PLAYER_NAME', name: 'Nome persistido' } },
+    'state',
+    (m) => m.state.players[1].name === 'Nome persistido',
+  );
   const planned = await action(
     a,
     {
@@ -115,6 +121,7 @@ test('salvamento atômico restaura salas, ordens e tokens após reinício, pausa
   const state = (await recoveredState).state;
   assert.equal(state.plannedOrders[0].type, 'TRAIN_BATTALION');
   assert.equal(state.players[0].gold, savedGold);
+  assert.equal(state.players[1].name, 'Nome persistido');
   assert.equal(state.paused, false);
   assert.equal(state.deadline, null);
   const impostor = await second.connect();
@@ -266,7 +273,7 @@ test('snapshot v2 é migrado sem perder tesouro, dono, tropas, ordens locais ou 
     }),
   );
   const room = readSnapshot(filename)[0];
-  assert.equal(room.game.version, 5);
+  assert.equal(room.game.version, 6);
   assert.equal(room.game.turn, 4);
   assert.equal(room.game.players[0].gold, 50);
   assert.equal(room.game.provinces[0].ownerId, 'OLD-p1');

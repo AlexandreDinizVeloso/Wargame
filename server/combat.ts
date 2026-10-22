@@ -132,6 +132,9 @@ export function compositionPower(
     (defending && isCamouflaged(g, a) ? 1.5 : 1) *
     (defending && a.entrenched ? 1.15 : 1) *
     (defending && c?.trait === 'IRON_WALL' ? 1.2 : 1) *
+    (defending && actor && actor.homelandDefenseUntil >= g.turn && p.ownerId === a.ownerId
+      ? 1.15
+      : 1) *
     (!defending &&
     c?.trait === 'BLITZ_VANGUARD' &&
     controller(p) !== a.ownerId &&
@@ -417,8 +420,8 @@ export function resolveBattle(
   const ratio = attackWins
     ? powers.attackPower / Math.max(1, powers.defensePower)
     : powers.defensePower / Math.max(1, powers.attackPower);
-  const winRate = Math.min(0.25, 0.12 / Math.sqrt(Math.max(1, ratio))),
-    loseRate = Math.min(0.65, 0.25 + 0.12 * ratio);
+  const winRate = Math.min(0.4125, (0.12 * 1.65) / Math.sqrt(Math.max(1, ratio))),
+    loseRate = Math.min(0.9, (0.25 + 0.12 * ratio) * 1.65);
   const aArtillery = a.artillery,
     enArtillery = enemies.reduce((n, b) => n + b.artillery, 0);
   const aLoss = battleLosses(g, [a], attackWins ? winRate : loseRate),
@@ -470,7 +473,8 @@ export function resolveBattle(
     battle.outcome = 'attacker_victory';
     battle.winnerId = a.ownerId;
   }
-  const pursuit = winners.some((b) => b.cavalry > 0);
+  const pursuit =
+    ratio >= 2 || losers.some((l) => l.morale <= 25) || winners.some((b) => b.cavalry > 0);
   for (const loser of losers) {
     const count = unitCount(loser);
     const wipedComposition = compositionOf(loser);

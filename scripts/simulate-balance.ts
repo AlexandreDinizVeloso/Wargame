@@ -1,3 +1,4 @@
+import { realmLimits } from '../shared/economy';
 import { buildingSlots, usedSlots } from '../shared/development';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -19,6 +20,12 @@ interface MatchResult {
   skillsUnlocked: number;
   leaderXP: number;
   peakTroopsByTurn15: number;
+  peakLandTroops: number;
+  peakGoldWithoutEconomicBuildings: number;
+  peakOverArmyCap: number;
+  desertions: number;
+  seaCrossings: number;
+  encirclements: number;
   mode: GameMode;
   theater: Theater;
   winnerId: string | null;
@@ -45,6 +52,7 @@ export function simulateBalance(
   seed = 20261020,
   scenario: 'mixed' | 'quick' | 'campaign' = 'mixed',
   maxTurns = 40,
+  allowBotSecretVictory = false,
 ) {
   if (!Number.isInteger(games) || games < 1 || games > 10000 || !Number.isSafeInteger(seed))
     throw new Error('Use 1–10000 partidas e uma semente inteira.');
@@ -60,6 +68,8 @@ export function simulateBalance(
       const archetype = ARCHETYPES[(seat + Math.floor(i / 8)) % 4];
       addPlayer(g, `${archetype} ${seat + 1}`, true, NATIONS[(seat + i) % 8].id, archetype);
     }
+    g.allowBotSecretVictory = allowBotSecretVictory;
+    g.matchConfig.allowBotSecretVictory = allowBotSecretVictory;
     startGame(g, 0);
     const result: MatchResult = {
       seed: gameSeed,
@@ -67,6 +77,12 @@ export function simulateBalance(
       skillsUnlocked: 0,
       leaderXP: 0,
       peakTroopsByTurn15: 0,
+      peakLandTroops: 0,
+      peakGoldWithoutEconomicBuildings: 0,
+      peakOverArmyCap: 0,
+      desertions: 0,
+      seaCrossings: 0,
+      encirclements: 0,
       mode,
       theater,
       winnerId: null,
@@ -91,6 +107,39 @@ export function simulateBalance(
     while (g.phase === 'planning' && g.history.length < maxTurns) {
       const r = resolveTurn(g, g.turn * g.turnSeconds * 1000);
       if (!validGame(g)) throw new Error(`Estado inválido: semente ${gameSeed}, rodada ${r.turn}.`);
+      if (g.winnerObjective === 'SECRET_OBJECTIVE' && !allowBotSecretVictory)
+        throw new Error('Bot venceu por carta sem autorização do host.');
+      for (const a of g.players) {
+        const troops = g.battalions
+          .filter((u) => u.ownerId === a.id && !u.isFleet)
+          .reduce((n, u) => n + unitCount(u), 0);
+        result.peakLandTroops = Math.max(result.peakLandTroops, troops);
+        result.peakOverArmyCap = Math.max(
+          result.peakOverArmyCap,
+          troops - realmLimits(g, a.id).armyCap,
+        );
+        if (
+          !g.provinces.some(
+            (q) =>
+              (q.occupierId ?? q.ownerId) === a.id &&
+              (q.marketLevel > 0 || q.foundryLevel > 0 || q.portLevel > 1),
+          )
+        ) {
+          result.peakGoldWithoutEconomicBuildings = Math.max(
+            result.peakGoldWithoutEconomicBuildings,
+            a.gold,
+          );
+          if (a.gold >= 1000)
+            throw new Error(
+              `Tesouro sem infraestrutura atingiu 1000: ${gameSeed}/${r.turn}/${a.nationId}`,
+            );
+        }
+        if (troops >= 200)
+          throw new Error(`Exército atingiu 200: ${gameSeed}/${r.turn}/${a.nationId}`);
+      }
+      result.desertions += r.desertions.reduce((n, d) => n + d.losses, 0);
+      result.seaCrossings += r.movements.filter((m) => m.viaSeaId).length;
+      result.encirclements += r.encirclements.length;
       for (const p of g.provinces) {
         if (usedSlots(p) > buildingSlots(p))
           throw new Error(`Slots excedidos: ${gameSeed}, ${p.id}`);
@@ -195,7 +244,8 @@ export function simulateBalance(
       | 'attritionLosses',
   ) => matches.reduce((n, m) => n + m[key], 0) / games;
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
+    allowBotSecretVictory,
     games,
     maxTurns,
     seed,
@@ -240,9 +290,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     Number(argument('seed') ?? 20261020),
     scenario as 'mixed' | 'quick' | 'campaign',
     Number(argument('max-turns') ?? 40),
+    process.argv.includes('--allow-bot-secrets'),
   );
   console.log(
-    `\nConcórdia v0.5 · ${result.games} partidas reais do motor · 6 bots · cenário ${scenario} · semente ${result.seed}`,
+    `\nConcórdia v0.6 · ${result.games} partidas reais do motor · 6 bots · cenário ${scenario} · semente ${result.seed}`,
   );
   console.table([
     ...result.conditions.map((c) => ({

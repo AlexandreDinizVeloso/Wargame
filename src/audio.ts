@@ -1,4 +1,4 @@
-export type Sound = 'click' | 'coins' | 'march' | 'cannon' | 'war' | 'peace' | 'victory';
+export type Sound = 'click' | 'coins' | 'march' | 'cannon' | 'war' | 'peace' | 'victory' | 'alert';
 class Synthesizer {
   private context: AudioContext | null = null;
   private mutedValue: boolean;
@@ -52,6 +52,9 @@ class Synthesizer {
       oscillator.start(ctx.currentTime + at);
       oscillator.stop(ctx.currentTime + at + duration);
     };
+    if (sound === 'alert') {
+      [880, 660, 880].forEach((hz, i) => tone(hz, i * 0.18, 0.16, 'triangle', 0.085));
+    }
     if (sound === 'click') tone(760, 0, 0.06, 'triangle', 0.035);
     if (sound === 'coins') {
       [1046, 1568, 2093].forEach((hz, i) => tone(hz, i * 0.055, 0.18, 'sine', 0.045));

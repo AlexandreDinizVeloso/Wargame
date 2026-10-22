@@ -1,3 +1,4 @@
+import { NotificationCard } from './Notifications';
 import FirstReadyBanner from './FirstReadyBanner';
 import { useEffect, useState } from 'react';
 import { ArrowRight, Coins, MessageSquare, Play, ScrollText, Swords, X } from 'lucide-react';
@@ -5,7 +6,7 @@ import type { GameView, TurnResolutionReport } from '../shared/types';
 import { RETREAT_LABELS, orderCost, orderKey, orderProvinceId } from '../shared/rules';
 import { orderName } from './orders';
 import { Empty, number, type Command } from './ui';
-export type ReportTab = 'orders' | 'reports' | 'chat';
+export type ReportTab = 'personal' | 'world' | 'orders' | 'reports' | 'chat';
 export default function TurnPanel({
   game,
   playerId,
@@ -32,6 +33,38 @@ export default function TurnPanel({
     <div className="turn-panel">
       <FirstReadyBanner game={game} />
       <div className="panel-tabs">
+        <button className={tab === 'personal' ? 'selected' : ''} onClick={() => setTab('personal')}>
+          🔔 Comunique-se / Minha Nação (
+          {
+            game.notifications.filter(
+              (n) =>
+                n.type !== 'WORLD' &&
+                n.involvesPlayerIds.includes(playerId) &&
+                !game.readNotificationIds.includes(n.id),
+            ).length
+          }
+          )
+        </button>
+        <button
+          className={tab === 'world' ? 'selected' : ''}
+          onClick={() => {
+            setTab('world');
+            command({
+              type: 'READ_NOTIFICATIONS',
+              notificationIds: game.notifications
+                .filter((n) => n.type === 'WORLD' && !game.readNotificationIds.includes(n.id))
+                .map((n) => n.id),
+            });
+          }}
+        >
+          🌍 Jornal do Mundo (
+          {
+            game.notifications.filter(
+              (n) => n.type === 'WORLD' && !game.readNotificationIds.includes(n.id),
+            ).length
+          }
+          )
+        </button>
         <button className={tab === 'orders' ? 'selected' : ''} onClick={() => setTab('orders')}>
           <ScrollText size={14} />
           Ordens <b>{game.plannedOrders.length}</b>
@@ -45,6 +78,59 @@ export default function TurnPanel({
           Conselho <b>{game.chat.length}</b>
         </button>
       </div>
+      {tab === 'personal' && (
+        <section className="personal-inbox">
+          <div className="section-heading">
+            <h3>Minha nação</h3>
+            <button
+              onClick={() =>
+                command({
+                  type: 'READ_NOTIFICATIONS',
+                  notificationIds: game.notifications
+                    .filter((n) => n.type !== 'WORLD' && n.involvesPlayerIds.includes(playerId))
+                    .map((n) => n.id),
+                })
+              }
+            >
+              Marcar todos como lidos
+            </button>
+          </div>
+          {game.notifications
+            .filter((n) => n.type !== 'WORLD' && n.involvesPlayerIds.includes(playerId))
+            .slice()
+            .reverse()
+            .map((n) => (
+              <NotificationCard
+                key={n.id}
+                notice={n}
+                game={game}
+                playerId={playerId}
+                command={command}
+                onFocus={onFocus}
+              />
+            ))}
+          {!game.notifications.some(
+            (n) => n.type !== 'WORLD' && n.involvesPlayerIds.includes(playerId),
+          ) && (
+            <Empty>
+              Alertas de guerra, cercos, propostas e batalhas da sua nação aparecerão aqui.
+            </Empty>
+          )}
+        </section>
+      )}
+      {tab === 'world' && (
+        <section className="world-newspaper">
+          <h3>🌍 Jornal do Mundo</h3>
+          {game.log
+            .slice()
+            .reverse()
+            .map((n) => (
+              <p className="chronicle-line" key={n.id}>
+                <b>Rodada {n.turn}</b> · {n.text}
+              </p>
+            ))}
+        </section>
+      )}
       {tab === 'orders' && (
         <div className="orders-content">
           <div className="section-heading">

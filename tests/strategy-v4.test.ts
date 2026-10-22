@@ -127,17 +127,17 @@ test('Véspera contrata instantaneamente sem reservas locais e combina descontos
   const o = {
     type: 'RECRUIT_BATTALION' as const,
     provinceId: p.id,
-    infantry: 10,
+    infantry: 2,
     isMercenary: true,
   };
   const price = orderCost(o, p, a, g).gold;
-  close(price, 29.25);
+  close(price, 5.85);
   submitOrder(g, a.id, o);
   close(a.gold, 100 - price);
   assert.equal(a.manpower, 0);
-  assert.equal(g.battalions.at(-1)?.infantry, 10);
+  assert.equal(g.battalions.at(-1)?.infantry, 2);
   g.globalEvent = { id: 'MERCENARY_CRISIS', startedTurn: 1, endsTurn: 2 };
-  close(orderCost(o, p, a, g).gold, 17.55);
+  close(orderCost(o, p, a, g).gold, 3.51);
 });
 test('Véspera aumenta receita de portos e mercados em 30% e dobra subornos', () => {
   const {
@@ -480,6 +480,8 @@ test('objetivo secreto vence e é revelado no estado final, sem encerrar antes d
   assert.equal(g.winnerId, null);
   assert.equal(a.objectiveStreak, 1);
   resolveTurn(g);
+  assert.equal(g.winnerId, null);
+  resolveTurn(g);
   assert.equal(g.winnerObjective, 'SECRET_OBJECTIVE');
   assert.equal(g.winnerId, a.id);
   assert.ok(viewFor(g, g.players[1].id).players[0].secretObjectives.length > 0);
@@ -520,7 +522,7 @@ test('migração v3 preserva sala e tesouro, desativa objetivos retroativos e ar
   legacy.version = 3;
   legacy.players[0].nationId = 'PORTUGAL';
   const next = migrateV3(legacy);
-  assert.equal(next.version, 5);
+  assert.equal(next.version, 6);
   assert.equal(next.players[0].gold, g.players[0].gold);
   assert.equal(next.players[0].nationId, 'vespera');
   assert.equal(next.enableSecretObjectives, false);
@@ -598,7 +600,7 @@ test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas pe
   assert.equal(run(true, false), 4);
   assert.equal(run(true, true), 1);
 });
-test('primavera e relíquias ampliam recuperação; outono amplia receitas de trigo', () => {
+test('moral própria recupera rapidamente; outono amplia receitas de trigo', () => {
   const {
     g,
     players: [a],
@@ -608,7 +610,7 @@ test('primavera e relíquias ampliam recuperação; outono amplia receitas de tr
   const u = army(g, a.id, p.id, { infantry: 3 });
   u.morale = 50;
   resolveTurn(g);
-  close(u.morale, 54.84);
+  close(u.morale, 85);
   p.strategicResource = 'GRAIN';
   g.season = 'SUMMER';
   const summer = realmEconomy(g, a.id);

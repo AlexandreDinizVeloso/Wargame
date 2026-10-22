@@ -1,3 +1,5 @@
+import { isLegacySeaShortcut, makeStaticMap } from '../shared/map';
+import { realmLimits } from '../shared/economy';
 import {
   buildingSlots,
   buildingLevel,
@@ -155,6 +157,10 @@ export function migrateV2(value: unknown): GameState {
       id: p.id,
       name: p.name,
       kind: 'LAND',
+      straitNeighbors: [],
+      straitSeaIds: {},
+      recruitedThisTurn: 0,
+      recruitmentTurn: 0,
       continent: 'EUROPE',
       terrain: p.terrain,
       terrainDefenseBonus: p.terrainDefenseBonus,
@@ -339,7 +345,8 @@ export function migrateV3(value: unknown): GameState {
   g.matchConfig = {
     ...g.matchConfig,
     maxTurns: 0,
-    createdVersion: '0.5.0',
+    createdVersion: '0.6.0',
+    allowBotSecretVictory: false,
     enableSecretObjectives: false,
   };
   g.season = (['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'] as const)[(g.turn - 1) % 4];
@@ -396,9 +403,9 @@ export function migrateV4(value: unknown): GameState {
   return finalizeV5(g);
 }
 function finalizeV5(g: GameState): GameState {
-  g.version = 5;
+  g.version = 6;
   g.commanders ??= [];
-  g.matchConfig.createdVersion = '0.5.0';
+  g.matchConfig.createdVersion = '0.6.0';
   for (const p of g.players) {
     p.militaryXP ??= 0;
     p.unlockedSkills ??= [];
@@ -495,6 +502,111 @@ function finalizeV5(g: GameState): GameState {
   log(
     g,
     'Campanha migrada para v0.5: cidades ajustadas aos slots, ordens antigas reabertas e objetivos reescalados.',
+  );
+  return finalizeV6(g);
+}
+
+export function migrateV5(value: unknown): GameState {
+  const g = structuredClone(value) as GameState;
+  if ((g as unknown as { version: number }).version !== 5) throw new Error('Campanha v5 inválida.');
+  if (g.phase === 'finished' && !g.matchConfig.legacyResult) {
+    g.matchConfig.legacyResult = {
+      winnerId: g.winnerId,
+      objective: g.winnerObjective,
+      version: '0.5.0',
+    };
+    g.finishReason = 'legacy_finished';
+  }
+  return finalizeV6(g);
+}
+function finalizeV6(g: GameState): GameState {
+  g.version = 6;
+  g.baseUpkeep = 0.75;
+  g.allowBotSecretVictory ??= false;
+  g.sandboxContinued ??= false;
+  g.graceUntilTurn ??= g.turn <= 2 ? 2 : 0;
+  g.notifications ??= [];
+  g.notificationReads ??= {};
+  g.victoryRecord ??= g.winnerId
+    ? { winnerId: g.winnerId, objective: g.winnerObjective, turn: g.turn }
+    : null;
+  g.matchConfig.createdVersion = '0.6.0';
+  g.matchConfig.allowBotSecretVictory = g.allowBotSecretVictory;
+  const map = makeStaticMap(g.mode, g.theater);
+  for (const p of g.provinces) {
+    const definition = map.find((q) => q.id === p.id);
+    p.straitNeighbors =
+      definition?.straitNeighbors.filter((id) => g.provinces.some((q) => q.id === id)) ?? [];
+    p.straitSeaIds = Object.fromEntries(
+      Object.entries(definition?.straitSeaIds ?? {}).filter(
+        ([id, sea]) => p.straitNeighbors.includes(id) && g.provinces.some((q) => q.id === sea),
+      ),
+    );
+    p.neighbors = [
+      ...new Set([
+        ...p.neighbors.filter((id) => !isLegacySeaShortcut(p.id, id)),
+        ...p.straitNeighbors,
+        ...(definition?.neighbors.filter((id) =>
+          g.provinces.some((q) => q.id === id && q.kind === 'SEA_ZONE'),
+        ) ?? []),
+      ]),
+    ];
+    p.recruitedThisTurn ??= 0;
+    p.recruitmentTurn ??= 0;
+  }
+  for (const p of g.provinces)
+    for (const id of p.neighbors) {
+      const q = g.provinces.find((q) => q.id === id);
+      if (q && !q.neighbors.includes(p.id)) q.neighbors.push(p.id);
+    }
+  for (const a of g.battalions) a.encircled ??= false;
+  for (const p of g.players) {
+    p.emergencyLevyTurn ??= null;
+    p.homelandDefenseUntil ??= 0;
+    p.lostProvinceIds ??= [];
+    p.objectiveStreak = 0;
+    p.paxStreak = 0;
+    const l = realmLimits(g, p.id);
+    p.armyCap = l.armyCap;
+    p.manpowerCap = l.manpowerCap;
+    p.manpower = Math.min(p.manpower, l.manpowerCap);
+    const kind = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId)?.kind;
+    if (g.enableSecretObjectives && g.players.length >= 3) {
+      p.secretObjectives = objectiveCards(g, p);
+      p.selectedObjectiveId =
+        p.secretObjectives.find((c) => c.kind === kind)?.id ?? p.secretObjectives[0]?.id ?? null;
+    }
+  }
+  for (const r of [...g.history, ...g.reports, ...(g.lastReport ? [g.lastReport] : [])]) {
+    r.notifications ??= [];
+    r.encirclements ??= [];
+    r.desertions ??= [];
+    for (const p of 'nations' in r ? (r.nations as Player[]) : []) {
+      p.manpowerCap ??= 18;
+      p.emergencyLevyTurn ??= null;
+      p.homelandDefenseUntil ??= 0;
+      p.lostProvinceIds ??= [];
+    }
+  }
+  g.orders = Object.fromEntries(
+    g.players.map((p) => [
+      p.id,
+      (g.orders[p.id] ?? []).filter(
+        (o) =>
+          !['RECRUIT_BATTALION', 'AUTO_TRANSPORT', 'NAVAL_BRIDGE', 'MOVE_BATTALION'].includes(
+            o.type,
+          ),
+      ),
+    ]),
+  );
+  for (const a of g.battalions) a.pathQueue = [];
+  for (const p of g.players) p.ready = p.bot;
+  g.deadline = null;
+  g.turnDeadlineAt = null;
+  g.firstReadyPlayerName = null;
+  log(
+    g,
+    'Campanha migrada para v0.6: economia, limites e estreitos atualizados; planejamento reaberto.',
   );
   return g;
 }

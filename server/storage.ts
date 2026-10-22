@@ -15,7 +15,8 @@ import { UNIT_KEYS, unitCount } from '../shared/rules';
 import { SKILLS, TRAITS } from '../shared/military';
 import { buildingSlots, usedSlots } from '../shared/development';
 import { parseOrder } from './commands';
-import { migrateV2, migrateV3, migrateV4 } from './migration';
+import { isLegacySeaShortcut } from '../shared/map';
+import { migrateV2, migrateV3, migrateV4, migrateV5 } from './migration';
 export interface SavedRoom {
   game: GameState;
   sessions: { playerId: string; tokenHash: string }[];
@@ -23,7 +24,7 @@ export interface SavedRoom {
   remainingMs: number;
 }
 interface Snapshot {
-  schemaVersion: 5;
+  schemaVersion: 6;
   savedAt: number;
   rooms: SavedRoom[];
 }
@@ -31,7 +32,7 @@ export function validGame(g: GameState): boolean {
   try {
     if (
       !g ||
-      g.version !== 5 ||
+      g.version !== 6 ||
       typeof g.code !== 'string' ||
       !['lobby', 'planning', 'finished'].includes(g.phase) ||
       !Array.isArray(g.players) ||
@@ -53,6 +54,14 @@ export function validGame(g: GameState): boolean {
       typeof g.enableSecretObjectives !== 'boolean' ||
       typeof g.isPublic !== 'boolean' ||
       typeof g.roomName !== 'string' ||
+      typeof g.allowBotSecretVictory !== 'boolean' ||
+      typeof g.sandboxContinued !== 'boolean' ||
+      !Number.isInteger(g.graceUntilTurn) ||
+      g.graceUntilTurn < 0 ||
+      !Array.isArray(g.notifications) ||
+      !g.notificationReads ||
+      typeof g.notificationReads !== 'object' ||
+      Array.isArray(g.notificationReads) ||
       !['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'].includes(g.season) ||
       !Number.isFinite(g.seed) ||
       !Number.isInteger(g.nextId) ||
@@ -83,7 +92,19 @@ export function validGame(g: GameState): boolean {
           p.objectiveStreak,
           p.paxStreak,
           p.militaryXP,
+          p.armyCap,
+          p.manpowerCap,
+          p.homelandDefenseUntil,
         ].every(Number.isFinite) ||
+        p.armyCap < 12 ||
+        p.manpowerCap < 18 ||
+        p.manpower > p.manpowerCap + 1e-7 ||
+        (p.emergencyLevyTurn !== null &&
+          (!Number.isInteger(p.emergencyLevyTurn) ||
+            p.emergencyLevyTurn < 1 ||
+            p.emergencyLevyTurn > g.turn)) ||
+        !Array.isArray(p.lostProvinceIds) ||
+        p.lostProvinceIds.some((id) => typeof id !== 'string') ||
         p.militaryXP < 0 ||
         !Array.isArray(p.unlockedSkills) ||
         new Set(p.unlockedSkills).size !== p.unlockedSkills.length ||
@@ -117,6 +138,20 @@ export function validGame(g: GameState): boolean {
           p.portLevel,
           p.marketLevel,
         ].every(Number.isFinite) ||
+        !Array.isArray(p.straitNeighbors) ||
+        !p.straitSeaIds ||
+        p.straitNeighbors.some(
+          (id) =>
+            !provinceIds.has(id) ||
+            !g.provinces.find((q) => q.id === id)?.straitNeighbors.includes(p.id) ||
+            !g.provinces.some((s) => s.id === p.straitSeaIds[id] && s.kind === 'SEA_ZONE'),
+        ) ||
+        !Number.isInteger(p.recruitedThisTurn) ||
+        p.recruitedThisTurn < 0 ||
+        p.recruitedThisTurn > 7 ||
+        !Number.isInteger(p.recruitmentTurn) ||
+        p.recruitmentTurn < 0 ||
+        p.recruitmentTurn > g.turn ||
         usedSlots(p) > buildingSlots(p) ||
         (p.siege !== null &&
           (!p.siege ||
@@ -201,6 +236,7 @@ export function validGame(g: GameState): boolean {
         a.training > 1.5 + 1e-8 ||
         typeof a.isFleet !== 'boolean' ||
         typeof a.autoMerge !== 'boolean' ||
+        typeof a.encircled !== 'boolean' ||
         ![a.infantryPower, a.artilleryPower].every(
           (n) => Number.isFinite(n) && n >= 1 && n <= 1.2 + 1e-8,
         ) ||
@@ -254,6 +290,44 @@ export function validGame(g: GameState): boolean {
         w.attackerIds.some((id) => w.defenderIds.includes(id))
       )
         return false;
+    const noticeIds = new Set<string>();
+    for (const n of g.notifications) {
+      if (
+        typeof n.id !== 'string' ||
+        noticeIds.has(n.id) ||
+        typeof n.text !== 'string' ||
+        !Number.isInteger(n.turn) ||
+        n.turn < 1 ||
+        !['CRITICAL', 'WARNING', 'INFO'].includes(n.severity) ||
+        ![
+          'DECLARE_WAR',
+          'CALL_TO_ARMS',
+          'SIEGE_STARTED',
+          'PEACE_OFFER',
+          'BATTALION_WIPED',
+          'VICTORY_WARNING',
+          'BATTLE',
+          'ENCIRCLEMENT',
+          'EMERGENCY_LEVY',
+          'ECONOMY',
+          'DIPLOMACY',
+          'WORLD',
+        ].includes(n.type) ||
+        !Array.isArray(n.involvesPlayerIds) ||
+        n.involvesPlayerIds.some((id) => !ids.has(id)) ||
+        (n.focusProvinceId && !provinceIds.has(n.focusProvinceId))
+      )
+        return false;
+      noticeIds.add(n.id);
+    }
+    for (const [id, read] of Object.entries(g.notificationReads))
+      if (
+        !ids.has(id) ||
+        !Array.isArray(read) ||
+        read.length > 500 ||
+        read.some((n) => typeof n !== 'string')
+      )
+        return false;
     for (const [id, orders] of Object.entries(g.orders)) {
       if (!ids.has(id) || !Array.isArray(orders)) return false;
       for (const o of orders) parseOrder(o);
@@ -267,7 +341,7 @@ function decode(value: unknown): SavedRoom[] {
   const snapshot = value as { schemaVersion: number; rooms: SavedRoom[] };
   if (
     !snapshot ||
-    ![2, 3, 4, 5].includes(snapshot.schemaVersion) ||
+    ![2, 3, 4, 5, 6].includes(snapshot.schemaVersion) ||
     !Array.isArray(snapshot.rooms) ||
     snapshot.rooms.length > 200
   )
@@ -281,8 +355,13 @@ function decode(value: unknown): SavedRoom[] {
           ? migrateV3(room.game)
           : snapshot.schemaVersion === 4
             ? migrateV4(room.game)
-            : room.game,
+            : snapshot.schemaVersion === 5
+              ? migrateV5(room.game)
+              : room.game,
   }));
+  for (const room of rooms)
+    for (const p of room.game.provinces)
+      p.neighbors = p.neighbors.filter((id) => !isLegacySeaShortcut(p.id, id));
   for (const room of rooms) {
     if (
       !validGame(room.game) ||
@@ -323,6 +402,11 @@ export function readSnapshot(filename: string): SavedRoom[] {
         !existsSync(`${filename}.v4-backup`)
       )
         copyFileSync(candidate, `${filename}.v4-backup`);
+      if (
+        (raw as { schemaVersion: number }).schemaVersion === 5 &&
+        !existsSync(`${filename}.v5-backup`)
+      )
+        copyFileSync(candidate, `${filename}.v5-backup`);
       return rooms;
     } catch {
       continue;
@@ -335,7 +419,7 @@ export function readSnapshot(filename: string): SavedRoom[] {
   return [];
 }
 export function writeSnapshot(filename: string, rooms: SavedRoom[], now: number) {
-  const snapshot: Snapshot = { schemaVersion: 5, savedAt: now, rooms };
+  const snapshot: Snapshot = { schemaVersion: 6, savedAt: now, rooms };
   decode(snapshot);
   const temporary = `${filename}.tmp`;
   mkdirSync(path.dirname(filename), { recursive: true });

@@ -31,6 +31,16 @@ export function battalionOf(g: Pick<GameState, 'battalions'>, id: string) {
 export const nextId = (g: GameState, prefix: string) => `${prefix}-${g.nextId++}`;
 export function log(g: GameState, text: string, kind: GameState['log'][number]['kind'] = 'system') {
   g.log.push({ id: (g.log.at(-1)?.id ?? 0) + 1, turn: g.turn, text, kind });
+  g.notifications ??= [];
+  g.notifications.push({
+    id: nextId(g, 'world'),
+    turn: g.turn,
+    type: 'WORLD',
+    text,
+    involvesPlayerIds: [],
+    severity: 'INFO',
+  });
+  g.notifications = g.notifications.slice(-250);
 }
 export const relation = getRelation;
 export const activeAlliances = (g: GameState, id: string) =>
@@ -103,6 +113,7 @@ export function createBattalion(
     autoMerge: options.autoMerge ?? false,
     infantryPower: options.infantryPower ?? 1,
     artilleryPower: options.artilleryPower ?? 1,
+    encircled: false,
   };
   g.battalions.push(army);
   return army;

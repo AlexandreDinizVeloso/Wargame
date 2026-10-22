@@ -3659,3 +3659,182 @@ legend {
     grid-column: 1 !important;
   }
 }
+/* v0.6: personal alerts, transport and recruitment */
+.personal-alerts {
+  position: absolute;
+  top: 145px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 24px));
+  max-height: 42vh;
+  overflow: auto;
+  z-index: 45;
+  pointer-events: auto;
+  padding: 4px;
+  scrollbar-width: thin;
+}
+.alert-count {
+  color: #f4d78d;
+  text-align: center;
+  font-size: 11px;
+  padding: 3px;
+  background: #101b29e8;
+  border-radius: 4px;
+}
+.notification-card {
+  border: 1px solid #9c8050;
+  background: #152334f5;
+  padding: 12px;
+  margin: 7px 0;
+  border-radius: 7px;
+  box-shadow: 0 5px 20px #0005;
+}
+.notification-card.severity-critical {
+  border-color: #de8272;
+  background: #301c24f7;
+}
+.notification-card.severity-warning {
+  border-color: #d8ad5e;
+}
+.notification-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #e6c78a;
+}
+.notification-card header button {
+  padding: 2px 8px;
+}
+.notification-card p {
+  font-size: 12px;
+  margin: 7px 0;
+  line-height: 1.5;
+}
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.notification-actions button {
+  font-size: 11px;
+  padding: 6px 8px;
+}
+.personal-inbox,
+.world-newspaper {
+  padding: 8px 0;
+}
+.turn-panel .panel-tabs {
+  flex-wrap: wrap;
+}
+.charter-price {
+  fill: #a8dbef;
+  paint-order: stroke;
+  stroke: #12212e;
+  stroke-width: 3px;
+  font-weight: 700;
+}
+.strait-link {
+  opacity: 0.85;
+}
+.grace-banner,
+.sandbox-banner {
+  position: absolute;
+  top: 174px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border: 1px solid #806e48;
+  border-radius: 5px;
+  background: #14293aee;
+  color: #e0c88d;
+  font-size: 11px;
+  max-width: 90vw;
+  z-index: 14;
+  pointer-events: none;
+}
+.recruit-capacity {
+  padding: 9px;
+  border: 1px solid #6a7e81;
+  background: #18303d;
+  color: #d8d9bc;
+  font-size: 12px;
+}
+.transport-hint {
+  font-size: 11px;
+  color: #9fd4e6;
+  margin: 5px 0;
+}
+@media (max-width: 700px) {
+  .personal-alerts {
+    top: 157px;
+    max-height: 33vh;
+    width: min(350px, calc(100vw - 20px));
+  }
+  .notification-card {
+    padding: 8px;
+  }
+  .notification-card p {
+    font-size: 11px;
+  }
+  .grace-banner,
+  .sandbox-banner {
+    top: 206px;
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  .tactical-hud .transport-hint {
+    max-width: 100%;
+    font-size: 10px;
+  }
+}
+.replay-indicator {
+  z-index: 46;
+}
+.game-viewport:has(.replay-indicator) .personal-alerts {
+  top: 275px;
+}
+
+.player-name-form {
+  margin: 16px 0;
+  text-align: left;
+}
+.player-name-form > label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--gold);
+  font-size: 11px;
+}
+.player-name-form > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.player-name-form input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.player-name-form button {
+  flex-shrink: 0;
+}
+.player-name-form small {
+  display: block;
+  margin-top: 7px;
+  color: #91a6ac;
+  font-size: 9px;
+}
+.council-seat > div {
+  min-width: 0;
+}
+.bot-nation-label {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+}
+.bot-nation-label select {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 5px;
+  font-size: 10px;
+}

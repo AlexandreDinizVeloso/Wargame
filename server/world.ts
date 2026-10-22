@@ -1,3 +1,4 @@
+import { notify } from './notifications';
 import type { GameState, TurnResolutionReport } from '../shared/types';
 import { atWar, clamp, getRelation, livingPlayers, roundMoney, unitCount } from '../shared/rules';
 import {
@@ -115,13 +116,22 @@ export function endWorld(g: GameState, report: TurnResolutionReport) {
     const card = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId);
     p.objectiveStreak =
       g.enableSecretObjectives &&
+      !g.sandboxContinued &&
+      (!p.bot || g.allowBotSecretVictory) &&
       card &&
       objectiveProgress(g, p, card).every((r) => r.progress >= 1)
         ? p.objectiveStreak + 1
         : 0;
-    if (p.objectiveStreak === 1) {
-      const warning = `⚠️ ${p.nation} está a 1 rodada de concluir seu Objetivo Secreto!`;
+    if (p.objectiveStreak === 1 || p.objectiveStreak === 2) {
+      const warning = `⚠️ ${p.nation} está a ${3 - p.objectiveStreak} rodada(s) de concluir seu Objetivo Secreto!`;
       report.events.push(warning);
+      notify(g, {
+        type: 'VICTORY_WARNING',
+        text: warning,
+        involvesPlayerIds: g.players.map((p) => p.id),
+        severity: 'CRITICAL',
+        focusProvinceId: p.originalCapitalId ?? undefined,
+      });
       log(g, warning);
     }
   }

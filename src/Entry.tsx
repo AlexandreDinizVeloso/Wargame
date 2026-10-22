@@ -1,3 +1,4 @@
+import PlayerNameForm from './PlayerNameForm';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
@@ -75,6 +76,7 @@ export function Entry({
     [roomName, setRoomName] = useState(''),
     [isPublic, setPublic] = useState(true),
     [secrets, setSecrets] = useState(true),
+    [botSecrets, setBotSecrets] = useState(false),
     [timer, setTimer] = useState(60),
     [rooms, setRooms] = useState<PublicRoom[]>([]),
     [browserError, setBrowserError] = useState('');
@@ -100,7 +102,7 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          QUINTA EDIÇÃO <i /> 0.5
+          SEXTA EDIÇÃO <i /> 0.6
         </span>
         <button className="quiet-button" onClick={onHelp}>
           Como jogar <ArrowRight size={14} />
@@ -191,6 +193,7 @@ export function Entry({
                       roomName: roomName.trim() || `Campanha de ${name.trim() || 'Estrategista'}`,
                       isPublic,
                       enableSecretObjectives: secrets,
+                      allowBotSecretVictory: botSecrets,
                       turnTimerSeconds: timer,
                     }
                   : {
@@ -274,6 +277,20 @@ export function Entry({
                     onChange={(e) => setTimer(Number(e.target.value))}
                   />
                 </label>
+                <details>
+                  <summary>Opções avançadas</summary>
+                  <label className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={botSecrets}
+                      onChange={(e) => setBotSecrets(e.target.checked)}
+                    />
+                    Permitir vitória secreta de bots
+                  </label>
+                  <p className="fine-print">
+                    Desativado por padrão; bots continuam podendo vencer por dominação.
+                  </p>
+                </details>
                 <div className="mode-choices">
                   <button
                     type="button"
@@ -397,9 +414,10 @@ export function Lobby({
             <strong>{game.code}</strong>
             <span>{game.players.length} / 8 lugares ocupados</span>
           </div>
+          <PlayerNameForm name={me.name} command={command} />
           <div className="council-list">
             {game.players.map((p) => (
-              <div className="council-seat" key={p.id}>
+              <div className="council-seat" key={p.id} data-player-seat={p.id}>
                 <CoatOfArms nationId={p.nationId} size={26} />
                 <div>
                   <strong>
@@ -409,6 +427,38 @@ export function Lobby({
                   <small>
                     {p.nation} · {p.bot ? 'Conselho autônomo' : p.online ? 'Presente' : 'Ausente'}
                   </small>
+                  {host && p.bot && (
+                    <label className="bot-nation-label">
+                      Nação do bot
+                      <select
+                        aria-label={`Nação de ${p.name}`}
+                        value={p.nationId}
+                        onChange={(e) =>
+                          command({
+                            type: 'SET_BOT_NATION',
+                            playerId: p.id,
+                            nationId: e.target.value as NationId,
+                          })
+                        }
+                      >
+                        {NATIONS.map((n) => {
+                          const owner = game.players.find(
+                            (q) => q.id !== p.id && q.nationId === n.id,
+                          );
+                          return (
+                            <option key={n.id} value={n.id} disabled={!!owner && !owner.bot}>
+                              {n.name}
+                              {owner?.bot
+                                ? ` (trocar com ${owner.name})`
+                                : owner
+                                  ? ' (ocupada)'
+                                  : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
+                  )}
                 </div>
                 {host && !p.online && !p.bot && (
                   <button
@@ -431,7 +481,8 @@ export function Lobby({
             </button>
           )}
           <p className="muted">
-            Todos usam o mesmo servidor. Compartilhe o código com os demais estrategistas.
+            Todos usam o mesmo servidor. Compartilhe o código com os demais estrategistas. O
+            anfitrião escolhe as nações dos bots; escolher a de outro bot troca as duas.
           </p>
         </section>
         <section className="lobby-selection">
@@ -499,6 +550,27 @@ export function Lobby({
               />
               Ativar Objetivos Secretos (Estilo War)
             </label>
+            <details>
+              <summary>Opções avançadas</summary>
+              <label className="check-label">
+                <input
+                  type="checkbox"
+                  disabled={!host}
+                  checked={game.allowBotSecretVictory}
+                  onChange={(e) =>
+                    command({
+                      type: 'SET_LOBBY_OPTIONS',
+                      roomName: game.roomName,
+                      isPublic: game.isPublic,
+                      enableSecretObjectives: game.enableSecretObjectives,
+                      allowBotSecretVictory: e.target.checked,
+                      turnTimerSeconds: game.turnSeconds,
+                    })
+                  }
+                />
+                Permitir vitória secreta de bots
+              </label>
+            </details>
             <label>
               Timer First-Ready
               <select

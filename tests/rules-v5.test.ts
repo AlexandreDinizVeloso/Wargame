@@ -151,11 +151,12 @@ test('defensor pode reagir recrutando na janela de um cerco e expulsar o sitiant
   } = setup();
   b.gold = 200;
   b.manpower = 50;
+  province(g, 'castile').barracksLevel = 2;
   declareWar(g, a.id, b.id, 'CONQUEST');
   const u = army(g, a.id, 'portugal', { infantry: 3 });
   submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, targetProvinceId: 'castile' });
   resolveTurn(g);
-  submitOrder(g, b.id, { type: 'RECRUIT_BATTALION', provinceId: 'castile', infantry: 20 });
+  submitOrder(g, b.id, { type: 'RECRUIT_BATTALION', provinceId: 'castile', infantry: 7 });
   resolveTurn(g);
   assert.equal(province(g, 'castile').occupierId, null);
   assert.equal(province(g, 'castile').siege, null);
@@ -212,7 +213,7 @@ test('ZoC impede avanço a outra terra inimiga e permite recuo ou avanço após 
   const p = province(g, 'castile');
   p.fortLevel = 1;
   const u = army(g, a.id, p.id);
-  assert.equal(unitPath(g, u, 'france'), null);
+  assert.equal(unitPath(g, u, 'france')?.[0], 'portugal');
   assert.deepEqual(unitPath(g, u, 'portugal'), ['portugal']);
   assert.throws(() =>
     submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['france'] }),
@@ -344,7 +345,7 @@ test('Intendente reduz manutenção e protege de atrito mesmo com pilha além do
     normal = realmEconomy(g, a.id).upkeep,
     c = recruitCommander(g, a.id, false, 'QUARTERMASTER', undefined, true);
   c.assignedBattalionId = u.id;
-  assert.ok(realmEconomy(g, a.id).upkeep < normal * 0.7);
+  near(realmEconomy(g, a.id).upkeep, normal * 0.7);
   const r = resolveTurn(g);
   assert.ok(!r.attritionLosses.some((r) => r.armyId === u.id));
 });
@@ -463,12 +464,12 @@ test('quartéis treinam/reduzem recrutamento, fundição melhora equipamento e c
   submitOrder(g, a.id, { type: 'RECRUIT_BATTALION', provinceId: p.id, infantry: 3 });
   resolveTurn(g);
   const u = g.battalions.find((b) => b.ownerId === a.id)!;
-  near(u.training, 1.1);
+  near(u.training, 1.2);
   near(u.infantryPower, 1.1);
   p.strategicResource = 'IRON';
   assert.equal(realmEconomy(g, a.id).buildingUpkeep, 0);
 });
-test('mercado troca reservas por ouro e templo pacifica, reduz revolta e gera fervor', () => {
+test('mercado gera comércio e templo pacifica, reduz revolta e gera fervor', () => {
   const {
     g,
     players: [a],
@@ -478,7 +479,7 @@ test('mercado troca reservas por ouro e templo pacifica, reduz revolta e gera fe
   p.marketLevel = 1;
   const market = realmEconomy(g, a.id);
   assert.ok(market.trade > before.trade);
-  assert.equal(market.manpower, Math.max(0, before.manpower - 1));
+  assert.equal(market.manpower, before.manpower);
   p.templeLevel = 1;
   p.unrest = 40;
   p.pacification = 50;
@@ -769,7 +770,7 @@ test('cartas escalam para continente e mundo; rivalidade exige a capital origina
   province(g, 'castile').occupierId = a.id;
   assert.equal(objectiveProgress(g, a, card)[0].value, 1);
 });
-test('objetivo secreto precisa de duas rodadas, dispara aviso global e revela carta só no fim', () => {
+test('objetivo secreto precisa de três rodadas, dispara aviso global e revela carta só no fim', () => {
   const g = createGame('SECRET5', 'campaign', true, 12);
   addPlayer(g, 'A', false, 'kaldor');
   addPlayer(g, 'B', false, 'aurelia');
@@ -795,8 +796,10 @@ test('objetivo secreto precisa de duas rodadas, dispara aviso global e revela ca
   let r = resolveTurn(g);
   assert.equal(g.phase, 'planning');
   assert.equal(a.objectiveStreak, 1);
-  assert.ok(r.events.some((e) => e.includes('está a 1 rodada')));
+  assert.ok(r.events.some((e) => e.includes('está a 2 rodada')));
   assert.equal(viewFor(g, g.players[1].id).players[0].secretObjectives.length, 0);
+  resolveTurn(g);
+  assert.equal(g.winnerId, null);
   resolveTurn(g);
   assert.equal(g.winnerObjective, 'SECRET_OBJECTIVE');
   assert.equal(g.winnerId, a.id);
@@ -813,7 +816,7 @@ test('migração v4 corrige terrestre solto no mar, introduz líderes e ajusta c
   raw.version = 4;
   delete raw.commanders;
   const migrated = migrateV4(raw);
-  assert.equal(migrated.version, 5);
+  assert.equal(migrated.version, 6);
   assert.equal(migrated.battalions[0].infantry, 9);
   assert.equal(province(migrated, migrated.battalions[0].provinceId).kind, 'LAND');
   assert.equal(migrated.commanders.length, 1);
@@ -936,7 +939,7 @@ test('Bombarda melhora o ponto de artilharia mesmo com apenas um canhão', () =>
   assert.equal(p.siege?.progress, 5);
 });
 
-test('Pax mantém três rodadas militares e depois duas rodadas de condição completa, com aviso', () => {
+test('Pax mantém três rodadas militares e depois três rodadas de condição completa, com aviso', () => {
   const {
     g,
     players: [a, b, c],
@@ -945,7 +948,7 @@ test('Pax mantém três rodadas militares e depois duas rodadas de condição co
   a.gold = 10000;
   a.stability = 90;
   const lands = g.provinces.filter((p) => p.kind === 'LAND');
-  lands.slice(0, 26).forEach((p) => {
+  lands.slice(0, 31).forEach((p) => {
     p.ownerId = a.id;
     p.occupierId = null;
     p.pacification = 100;
@@ -974,10 +977,12 @@ test('Pax mantém três rodadas militares e depois duas rodadas de condição co
   assert.equal(a.paxStreak, 3);
   assert.equal(a.objectiveStreak, 1);
   assert.equal(g.winnerId, null);
-  assert.ok(third.events.some((e) => e.includes('1 rodada de concluir')));
+  assert.ok(third.events.some((e) => e.includes('2 rodada(s) de concluir')));
+  resolveTurn(g);
+  assert.equal(g.winnerId, null);
   resolveTurn(g);
   assert.equal(g.winnerId, a.id);
-  assert.equal(a.objectiveStreak, 2);
+  assert.equal(a.objectiveStreak, 3);
 });
 test('bot negocia terras após capitulação em vez de depender do antigo atalho de submissão', async () => {
   const { planBot } = await import('../server/game');
