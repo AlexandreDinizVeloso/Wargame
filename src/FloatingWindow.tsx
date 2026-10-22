@@ -1,171 +1,172 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Maximize2, Minimize2, Minus, MoveUpRight, Pin, X } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Maximize2, Minus, X } from 'lucide-react';
 interface Geometry {
   x: number;
   y: number;
   width: number;
   height: number;
-  docked: boolean;
   minimized: boolean;
 }
+type GestureKind = 'drag' | 'right' | 'bottom' | 'corner';
 export interface WindowProps {
   id: string;
   title: string;
   icon?: ReactNode;
-  anchor?: 'left' | 'right' | 'bottom';
+  anchor?: 'left' | 'right' | 'bottom' | 'center';
   width?: number;
   height?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
   children: ReactNode;
+  footer?: ReactNode;
+  headerActions?: ReactNode;
   onClose: () => void;
   active?: boolean;
   onActivate?: () => void;
   className?: string;
+  bodyClassName?: string;
+  role?: 'dialog' | 'region';
+  rootRef?: RefObject<HTMLElement | null>;
+  hudSurface?: boolean;
 }
 export function FloatingWindow({
   id,
   title,
   icon,
   anchor = 'left',
-  width = 340,
-  height = 570,
+  width = 480,
+  height = 540,
+  minWidth = 400,
+  maxWidth = 760,
+  minHeight = 240,
   children,
+  footer,
+  headerActions,
   onClose,
   active = false,
   onActivate,
   className = '',
+  bodyClassName = '',
+  role = 'region',
+  rootRef,
+  hudSurface = false,
 }: WindowProps) {
-  const key = `concordia-v4-window-${id}`,
-    root = useRef<HTMLElement>(null);
-  const defaults = (): Geometry => ({
-    x:
-      anchor === 'right'
-        ? innerWidth - width - 16
-        : anchor === 'bottom'
-          ? (innerWidth - width) / 2
-          : 16,
-    y: anchor === 'bottom' ? innerHeight - height - 24 : innerWidth < 700 ? 235 : 188,
-    width,
-    height,
-    docked: true,
-    minimized: false,
-  });
+  const key = `concordia-v095-window-${id}`;
+  const [viewport, setViewport] = useState({ width: innerWidth, height: innerHeight });
+  const defaults = (): Geometry => {
+    const w = Math.min(width, innerWidth - 16);
+    const h = Math.min(height, innerHeight * (anchor === 'center' ? 0.8 : 0.72), innerHeight - 130);
+    return {
+      width: w,
+      height: h,
+      minimized: false,
+      x:
+        anchor === 'center' || anchor === 'bottom'
+          ? (innerWidth - w) / 2
+          : anchor === 'right'
+            ? innerWidth - w - 12
+            : 12,
+      y:
+        anchor === 'center'
+          ? Math.max(116, (innerHeight - h) / 2)
+          : Math.max(116, innerHeight - h - 54),
+    };
+  };
   const [geometry, setGeometry] = useState<Geometry>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(key) ?? 'null');
+      const v = JSON.parse(localStorage.getItem(key) ?? 'null');
       if (
-        saved &&
-        ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(saved[k])) &&
-        typeof saved.docked === 'boolean' &&
-        typeof saved.minimized === 'boolean'
+        v &&
+        ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(v[k])) &&
+        typeof v.minimized === 'boolean'
       )
-        return saved;
+        return v;
     } catch {}
     return defaults();
   });
-  const [viewport, setViewport] = useState({ width: innerWidth, height: innerHeight }),
-    [raised, setRaised] = useState(false);
-  const zIndex = active ? 44 : 40;
-  const gesture = useRef<{
-    kind: 'drag' | 'resize';
-    clientX: number;
-    clientY: number;
-    start: Geometry;
-  } | null>(null);
+  const gesture = useRef<{ kind: GestureKind; x: number; y: number; start: Geometry } | null>(null);
+  const actualWidth = Math.min(viewport.width - 16, maxWidth, Math.max(minWidth, geometry.width));
+  const actualHeight = Math.min(viewport.height - 16, Math.max(minHeight, geometry.height));
+  const visibleHeight = geometry.minimized ? 42 : actualHeight;
+  const left = Math.max(8, Math.min(viewport.width - actualWidth - 8, geometry.x));
+  const top = Math.max(8, Math.min(viewport.height - visibleHeight - 8, geometry.y));
   useEffect(() => {
     const resize = () => setViewport({ width: innerWidth, height: innerHeight });
     window.addEventListener('resize', resize);
     return () => window.removeEventListener('resize', resize);
   }, []);
-  const usableWidth = Math.max(280, viewport.width - 16),
-    usableHeight = Math.max(170, viewport.height - (viewport.width < 700 ? 270 : 184));
-  const actualWidth = Math.min(usableWidth, Math.max(280, geometry.width)),
-    actualHeight = Math.min(usableHeight, Math.max(170, geometry.height));
-  const dock = defaults();
-  const left = Math.max(
-      8,
-      Math.min(viewport.width - actualWidth - 8, geometry.docked ? dock.x : geometry.x),
-    ),
-    top = Math.max(
-      viewport.width < 700 ? 174 : 118,
-      Math.min(
-        viewport.height - (geometry.minimized ? 42 : actualHeight) - 12,
-        geometry.docked ? dock.y : geometry.y,
-      ),
-    );
   useEffect(() => {
     try {
       localStorage.setItem(key, JSON.stringify(geometry));
     } catch {}
   }, [geometry, key]);
-  const begin = (event: React.PointerEvent, kind: 'drag' | 'resize') => {
-    if (event.button !== 0) return;
-    if (kind === 'drag' && event.target instanceof Element && event.target.closest('button'))
+  const begin = (e: React.PointerEvent, kind: GestureKind) => {
+    if (
+      e.button !== 0 ||
+      (kind === 'drag' && e.target instanceof Element && e.target.closest('button,input,select'))
+    )
       return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     gesture.current = {
       kind,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      start: {
-        ...geometry,
-        x: left,
-        y: top,
-        width: actualWidth,
-        height: actualHeight,
-        docked: false,
-      },
+      x: e.clientX,
+      y: e.clientY,
+      start: { ...geometry, x: left, y: top, width: actualWidth, height: actualHeight },
     };
-    setRaised(true);
   };
-  const move = (event: React.PointerEvent) => {
-    const drag = gesture.current;
-    if (!drag) return;
-    const dx = event.clientX - drag.clientX,
-      dy = event.clientY - drag.clientY;
+  const move = (e: React.PointerEvent) => {
+    const g = gesture.current;
+    if (!g) return;
+    const dx = e.clientX - g.x,
+      dy = e.clientY - g.y;
     setGeometry(
-      drag.kind === 'drag'
+      g.kind === 'drag'
         ? {
-            ...drag.start,
-            x: Math.max(8, Math.min(viewport.width - actualWidth - 8, drag.start.x + dx)),
-            y: Math.max(
-              viewport.width < 700 ? 174 : 118,
-              Math.min(viewport.height - 50, drag.start.y + dy),
-            ),
+            ...g.start,
+            x: Math.max(8, Math.min(viewport.width - actualWidth - 8, g.start.x + dx)),
+            y: Math.max(8, Math.min(viewport.height - visibleHeight - 8, g.start.y + dy)),
           }
         : {
-            ...drag.start,
-            width: Math.max(280, Math.min(usableWidth, drag.start.width + dx)),
-            height: Math.max(170, Math.min(usableHeight, drag.start.height + dy)),
+            ...g.start,
             minimized: false,
+            width:
+              g.kind === 'bottom'
+                ? g.start.width
+                : Math.min(
+                    maxWidth,
+                    viewport.width - g.start.x - 8,
+                    Math.max(minWidth, g.start.width + dx),
+                  ),
+            height:
+              g.kind === 'right'
+                ? g.start.height
+                : Math.min(
+                    viewport.height - g.start.y - 8,
+                    Math.max(minHeight, g.start.height + dy),
+                  ),
           },
     );
   };
-  const end = (event: React.PointerEvent) => {
+  const end = (e: React.PointerEvent) => {
     gesture.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId))
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId);
   };
   return (
     <section
-      ref={root}
-      className={`floating-window ${geometry.docked ? 'docked' : 'undocked'} ${geometry.minimized ? 'minimized' : ''} ${raised ? 'raised' : ''} ${className}`}
+      ref={rootRef}
+      role={role}
+      tabIndex={-1}
       aria-label={title}
+      className={`floating-window ${geometry.minimized ? 'minimized' : ''} ${className}`}
       data-window={id}
       data-context-panel={id === 'province' || id === 'battalion' || undefined}
-      data-docked={geometry.docked}
+      data-hud-surface={hudSurface || undefined}
+      onPointerDownCapture={() => onActivate?.()}
       onFocusCapture={() => onActivate?.()}
-      onPointerDownCapture={() => {
-        setRaised(true);
-        onActivate?.();
-      }}
-      style={{
-        left,
-        top,
-        zIndex,
-        width: actualWidth,
-        height: geometry.minimized ? 42 : actualHeight,
-      }}
+      style={{ left, top, width: actualWidth, height: visibleHeight, zIndex: active ? 76 : 72 }}
     >
       <header
         className="window-title"
@@ -174,17 +175,20 @@ export function FloatingWindow({
         onPointerUp={end}
         onPointerCancel={end}
       >
-        <span>
+        <span className="window-heading">
           {icon}
-          <strong>{title}</strong>
+          <strong role="heading" aria-level={2}>
+            {title}
+          </strong>
         </span>
         <div className="window-controls">
+          {headerActions}
           <button
-            title={geometry.docked ? 'Desanexar janela' : 'Fixar janela'}
-            aria-label={`${geometry.docked ? 'Desanexar' : 'Fixar'} ${title}`}
-            onClick={() => setGeometry((g) => ({ ...g, x: left, y: top, docked: !g.docked }))}
+            aria-label={`Restaurar tamanho e posição de ${title}`}
+            title="Restaurar tamanho e posição"
+            onClick={() => setGeometry(defaults())}
           >
-            {geometry.docked ? <MoveUpRight size={14} /> : <Pin size={14} />}
+            ↺
           </button>
           <button
             aria-label={`${geometry.minimized ? 'Restaurar' : 'Minimizar'} ${title}`}
@@ -199,18 +203,41 @@ export function FloatingWindow({
       </header>
       {!geometry.minimized && (
         <>
-          <div className="window-body">{children}</div>
-          <button
-            className="window-resize"
-            title="Arraste para redimensionar"
-            aria-label={`Redimensionar ${title}`}
-            onPointerDown={(e) => begin(e, 'resize')}
-            onPointerMove={move}
-            onPointerUp={end}
-            onPointerCancel={end}
-          >
-            <Minimize2 size={12} />
-          </button>
+          <div className={`window-body ${bodyClassName}`}>{children}</div>
+          {footer && <footer className="strategy-modal-footer">{footer}</footer>}
+          {(['right', 'bottom', 'corner'] as const).map((kind) => (
+            <button
+              key={kind}
+              className={`window-resize-handle resize-${kind}`}
+              aria-label={`Redimensionar ${title}: ${kind === 'right' ? 'largura' : kind === 'bottom' ? 'altura' : 'canto'}`}
+              onPointerDown={(e) => begin(e, kind)}
+              onPointerMove={move}
+              onPointerUp={end}
+              onPointerCancel={end}
+              onKeyDown={(e) => {
+                if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+                e.preventDefault();
+                setGeometry((g) => ({
+                  ...g,
+                  width: Math.min(
+                    maxWidth,
+                    viewport.width - left - 8,
+                    Math.max(
+                      minWidth,
+                      actualWidth + (e.key === 'ArrowRight' ? 20 : e.key === 'ArrowLeft' ? -20 : 0),
+                    ),
+                  ),
+                  height: Math.min(
+                    viewport.height - top - 8,
+                    Math.max(
+                      minHeight,
+                      actualHeight + (e.key === 'ArrowDown' ? 20 : e.key === 'ArrowUp' ? -20 : 0),
+                    ),
+                  ),
+                }));
+              }}
+            />
+          ))}
         </>
       )}
     </section>

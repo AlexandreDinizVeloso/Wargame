@@ -1,3 +1,4 @@
+import { createMapPing, pingRecipients } from './mapPings';
 import { prepareTutorial } from './tutorial';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Server } from 'node:http';
@@ -59,6 +60,7 @@ const nationOfMessage = (value: unknown): NationId | undefined => {
 export function attachRooms(server: Server, options: Options = {}) {
   const clock = options.now ?? Date.now,
     rooms = new Map<string, Room>();
+  const lastPings = new WeakMap<Room, Map<string, number>>();
   let closed = false;
   if (options.stateFile)
     for (const saved of readSnapshot(options.stateFile)) {
@@ -305,6 +307,22 @@ export function attachRooms(server: Server, options: Options = {}) {
           room.sessions.get(playerId)?.socket === ws,
           'Esta sessão está ativa em outra conexão.',
         );
+        if (msg.type === 'map_ping') {
+          const now = clock();
+          const limits = lastPings.get(room) ?? new Map<string, number>();
+          assert(
+            now - (limits.get(playerId) ?? -Infinity) >= 1500,
+            'Aguarde um instante antes de sinalizar novamente.',
+          );
+          const ping = createMapPing(room.game, playerId, msg.provinceId, msg.note, now);
+          limits.set(playerId, now);
+          lastPings.set(room, limits);
+          for (const recipient of pingRecipients(room.game, playerId)) {
+            const socket = room.sessions.get(recipient)?.socket;
+            if (socket) send(socket, { type: 'map_ping', ping });
+          }
+          return;
+        }
         const command = readCommand(msg);
         const previous = room.game;
         const previousTouched = room.touched;

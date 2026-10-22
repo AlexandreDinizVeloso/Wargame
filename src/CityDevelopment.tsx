@@ -52,47 +52,49 @@ export default function CityDevelopment({
         Níveis compartilham o slot. Administração: custo de construção ×
         {imperialInflation(game, playerId).toFixed(2)}.
       </p>
-      {(Object.keys(BUILDINGS) as BuildingType[]).map((b) => {
-        const data = BUILDINGS[b],
-          level = buildingLevel(province, b),
-          order = { type: 'BUILD_BUILDING' as const, provinceId: province.id, building: b },
-          cost = orderCost(order, province, me, game);
-        return (
-          <article className="building-card" key={b}>
-            <header>
-              <strong>{data.name}</strong>
-              <small>
-                Nível {level}/{buildingLimit(b, me)}
-              </small>
-            </header>
-            <p>{data.description}</p>
-            <div className="button-pair">
-              <button
-                disabled={
-                  !active || !canBuild(province, b, me) || me.gold - reserved.gold < cost.gold
-                }
-                onClick={() => command({ type: 'SUBMIT_ORDER', order })}
-              >
-                {level ? 'Melhorar' : 'Construir'} {data.name.split(' / ')[0]} ·{' '}
-                {cost.gold.toFixed(0)} ouro
-              </button>
-              {level > 0 && (
+      <div className="building-grid">
+        {(Object.keys(BUILDINGS) as BuildingType[]).map((b) => {
+          const data = BUILDINGS[b],
+            level = buildingLevel(province, b),
+            order = { type: 'BUILD_BUILDING' as const, provinceId: province.id, building: b },
+            cost = orderCost(order, province, me, game);
+          return (
+            <article className="building-card" key={b}>
+              <header>
+                <strong>{data.name}</strong>
+                <small>
+                  Nível {level}/{buildingLimit(b, me)}
+                </small>
+              </header>
+              <p>{data.description}</p>
+              <div className="button-pair">
                 <button
-                  disabled={!active}
-                  onClick={() =>
-                    command({
-                      type: 'SUBMIT_ORDER',
-                      order: { type: 'DEMOLISH_BUILDING', provinceId: province.id, building: b },
-                    })
+                  disabled={
+                    !active || !canBuild(province, b, me) || me.gold - reserved.gold < cost.gold
                   }
+                  onClick={() => command({ type: 'SUBMIT_ORDER', order })}
                 >
-                  Demolir {data.name.split(' / ')[0]}
+                  {level ? 'Melhorar' : 'Construir'} {data.name.split(' / ')[0]} ·{' '}
+                  {cost.gold.toFixed(0)} ouro
                 </button>
-              )}
-            </div>
-          </article>
-        );
-      })}
+                {level > 0 && (
+                  <button
+                    disabled={!active}
+                    onClick={() =>
+                      command({
+                        type: 'SUBMIT_ORDER',
+                        order: { type: 'DEMOLISH_BUILDING', provinceId: province.id, building: b },
+                      })
+                    }
+                  >
+                    Demolir {data.name.split(' / ')[0]}
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }

@@ -501,10 +501,12 @@ export function ProvinceStructuresVisual({
   province: p,
   scale,
   expanded,
+  isTurnReplayPlaying = false,
 }: {
   province: Province;
   scale: number;
   expanded: boolean;
+  isTurnReplayPlaying?: boolean;
 }) {
   const buildings = [
     ['FORT', p.fortLevel],
@@ -545,26 +547,36 @@ export function ProvinceStructuresVisual({
             strokeDasharray={`${Math.min(100, (p.siege.progress / p.siege.required) * 100)} 100`}
             transform="rotate(-90)"
           />
-          {[-9, 0, 9].map((x, i) => (
-            <g key={x} transform={`translate(${x} -8)`}>
-              <path
-                className="siege-flame"
-                style={{ animationDelay: `${i * 0.3}s` }}
-                d="M-4 5Q-8-3-2-8Q-3-2 1-4L3-12Q10 0 4 5Z"
-                fill="url(#miniature-fire)"
-              />
-              <path
-                className="siege-smoke"
-                style={{ animationDelay: `${i * 0.7}s` }}
-                d="M0-8Q-7-15 0-19Q7-23 0-28"
-                stroke="#b4b7ae"
-                strokeWidth="4"
-                fill="none"
-                strokeLinecap="round"
-                opacity=".5"
-              />
-            </g>
-          ))}
+          <text
+            className="siege-progress-label"
+            textAnchor="middle"
+            y="34"
+            fontSize="10"
+            fill="#ffe0a3"
+          >
+            Cerco {p.siege.progress}/{p.siege.required}
+          </text>
+          {isTurnReplayPlaying &&
+            [-9, 0, 9].map((x, i) => (
+              <g key={x} transform={`translate(${x} -8)`}>
+                <path
+                  className="siege-flame"
+                  style={{ animationDelay: `${i * 0.3}s` }}
+                  d="M-4 5Q-8-3-2-8Q-3-2 1-4L3-12Q10 0 4 5Z"
+                  fill="url(#miniature-fire)"
+                />
+                <path
+                  className="siege-smoke"
+                  style={{ animationDelay: `${i * 0.7}s` }}
+                  d="M0-8Q-7-15 0-19Q7-23 0-28"
+                  stroke="#b4b7ae"
+                  strokeWidth="4"
+                  fill="none"
+                  strokeLinecap="round"
+                  opacity=".5"
+                />
+              </g>
+            ))}
         </g>
       )}
     </g>

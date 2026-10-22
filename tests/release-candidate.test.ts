@@ -80,7 +80,7 @@ test('galeão e rosa dos ventos são silhuetas detalhadas, com carga e receita',
   assert.match(compass, /\+6 ouro/);
   assert.ok((compass.match(/<path/g) ?? []).length >= 30);
 });
-test('seis prédios têm miniaturas e cerco apresenta fogo, fumaça e progresso', () => {
+test('seis prédios têm miniaturas e cerco mantém fogo apenas durante replay', () => {
   const { g } = setup(),
     p = g.provinces.find((p) => p.id === 'portugal')!;
   p.fortLevel = p.portLevel = p.barracksLevel = p.marketLevel = p.foundryLevel = p.templeLevel = 1;
@@ -95,8 +95,16 @@ test('seis prédios têm miniaturas e cerco apresenta fogo, fumaça e progresso'
   const html = markup(ProvinceStructuresVisual, { province: p, scale: 1, expanded: true });
   for (const kind of ['FORT', 'PORT', 'BARRACKS', 'MARKET', 'FOUNDRY', 'TEMPLE'])
     assert.match(html, new RegExp(`data-structure="${kind}"`));
-  assert.match(html, /siege-flame/);
-  assert.match(html, /siege-smoke/);
+  assert.doesNotMatch(html, /siege-flame|siege-smoke/);
+  assert.match(html, /Cerco 2\/4/);
+  const playing = markup(ProvinceStructuresVisual, {
+    province: p,
+    scale: 1,
+    expanded: true,
+    isTurnReplayPlaying: true,
+  });
+  assert.match(playing, /siege-flame/);
+  assert.match(playing, /siege-smoke/);
   assert.match(html, /stroke-dasharray="50 100"/);
   assert.doesNotMatch(html, /<rect/);
 });

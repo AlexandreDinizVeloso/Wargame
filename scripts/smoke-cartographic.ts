@@ -1,3 +1,4 @@
+import { mapPoint, rightClickProvince } from './map-interactions';
 import assert from 'node:assert/strict';
 import { fork, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -64,6 +65,26 @@ try {
       reducedMotion: 'reduce',
     });
     await context.addInitScript(() => localStorage.setItem('concordia-music-volume', '0'));
+    await context.addInitScript(() => {
+      const stats = { buffers: 0, oscillatorTypes: [] as string[] };
+      (window as unknown as { foleyStats: typeof stats }).foleyStats = stats;
+      const buffer = AudioContext.prototype.createBufferSource;
+      AudioContext.prototype.createBufferSource = function () {
+        stats.buffers++;
+        return buffer.call(this);
+      };
+      const oscillator = AudioContext.prototype.createOscillator;
+      AudioContext.prototype.createOscillator = function () {
+        const node = oscillator.call(this),
+          start = node.start.bind(node);
+        node.start = function (when?: number) {
+          stats.oscillatorTypes.push(node.type);
+          return start(when);
+        };
+        return node;
+      };
+    });
+
     if (session)
       await context.addInitScript(
         (s) => sessionStorage.setItem('concordia-session', JSON.stringify(s)),
@@ -115,18 +136,61 @@ try {
   await page.locator('.province-shape[data-province="portugal"]').press('Enter');
   const card = page.getByRole('region', { name: 'Inspeção de Província', exact: true });
   await card.waitFor();
+  assert.equal(
+    await card.locator('.region-heading .province-overview, span > form.province-ping').count(),
+    0,
+  );
+  assert.equal(await card.locator('.province-overview > div').count(), 5);
   const box = (await card.boundingBox())!;
-  assert.ok(box.width * box.height <= 1440 * 960 * 0.2);
-  const covered = await page.locator('[data-hud-surface]').evaluateAll((elements) =>
-    elements.reduce((n, e) => {
-      const b = e.getBoundingClientRect();
-      return n + b.width * b.height;
-    }, 0),
-  );
+  assert.equal(box.width, 480);
+  assert.equal(box.height, 540);
+  assert.equal(await card.evaluate((e) => e.scrollWidth > e.clientWidth), false);
+  assert.equal(await page.locator('.first-ready-banner').count(), 1);
+  const header = card.locator('.window-title');
+  let headerBox = (await header.boundingBox())!;
+  await page.mouse.move(headerBox.x + 80, headerBox.y + 18);
+  await page.mouse.down();
+  await page.mouse.move(headerBox.x + 140, headerBox.y - 42, { steps: 6 });
+  await page.mouse.up();
+  const moved = (await card.boundingBox())!;
+  assert.ok(moved.x > box.x + 40 && moved.y < box.y - 40);
+  for (const [kind, dx, dy] of [
+    ['largura', 70, 0],
+    ['altura', 0, 30],
+    ['canto', 20, -15],
+  ] as const) {
+    const handle = await card
+      .getByRole('button', { name: `Redimensionar Inspeção de Província: ${kind}`, exact: true })
+      .boundingBox();
+    assert.ok(handle);
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 + dx, handle.y + handle.height / 2 + dy, {
+      steps: 5,
+    });
+    await page.mouse.up();
+  }
+  const resized = (await card.boundingBox())!;
+  assert.ok(resized.width > moved.width + 70 && resized.height > moved.height);
+  await page.reload();
+  await page.locator('[data-interface="cartographic"]').waitFor();
+  await page.locator('.province-shape[data-province="portugal"]').press('Enter');
+  const persisted = (await card.boundingBox())!;
   assert.ok(
-    covered <= 1440 * 960 * 0.2,
-    `HUD e dock cobrem ${((covered / (1440 * 960)) * 100).toFixed(1)}%, alvo ≤20%.`,
+    Math.abs(persisted.width - resized.width) <= 1 && Math.abs(persisted.x - resized.x) <= 1,
   );
+  await card
+    .getByRole('button', {
+      name: 'Restaurar tamanho e posição de Inspeção de Província',
+      exact: true,
+    })
+    .click();
+  assert.equal((await card.boundingBox())!.width, 480);
+  assert.equal((await card.boundingBox())!.height, 540);
+  await card.getByRole('button', { name: 'Minimizar Inspeção de Província', exact: true }).click();
+  assert.equal((await card.boundingBox())!.height, 42);
+  await card.getByRole('button', { name: 'Restaurar Inspeção de Província', exact: true }).click();
+
   await card.getByRole('tab', { name: '🏛️ Cidade & Economia', exact: true }).click();
   await card.getByRole('button', { name: /Construir Quartel/ }).click();
   const planned = await until((g) =>
@@ -148,8 +212,79 @@ try {
   assert.equal(await card.count(), 0);
   await page.getByRole('tab', { name: '🎖️ Líder', exact: true }).click();
   await page.getByLabel('Líder atribuído (instantâneo)', { exact: true }).waitFor();
+  const ordersBeforeSelection = JSON.stringify(get().plannedOrders);
+  const neutralPoint = await mapPoint(page, 'maghreb');
+  await page.mouse.move(neutralPoint.x, neutralPoint.y);
+  await page.getByRole('tooltip', { name: 'Prévia de combate' }).waitFor();
+  await page.screenshot({ path: '.local/screenshots/v095-battle-preview.png' });
+  await page.mouse.click(neutralPoint.x, neutralPoint.y);
+  await card.waitFor();
+  await card
+    .getByRole('heading', {
+      name: get().provinces.find((p) => p.id === 'maghreb')!.name,
+      exact: true,
+    })
+    .waitFor();
+  assert.equal(JSON.stringify(get().plannedOrders), ordersBeforeSelection);
+  await page.locator(`[data-battalion="${main.id}"]`).press('Enter');
+  const panStart = await page.locator('.map-stage').getAttribute('data-camera-x');
+  const panPoint = await mapPoint(page, 'maghreb');
+  await page.mouse.move(panPoint.x, panPoint.y);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(panPoint.x + 12, panPoint.y, { steps: 3 });
+  await page.mouse.up({ button: 'right' });
+  assert.notEqual(await page.locator('.map-stage').getAttribute('data-camera-x'), panStart);
+  assert.equal(JSON.stringify(get().plannedOrders), ordersBeforeSelection);
+  const buffersBefore = await page.evaluate(
+    () => (window as unknown as { foleyStats: { buffers: number } }).foleyStats.buffers,
+  );
+  await rightClickProvince(page, 'maghreb');
+  await until((g) =>
+    g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION' && o.battalionId === main.id),
+  );
+  assert.ok(
+    await page.evaluate(
+      (before) =>
+        (window as unknown as { foleyStats: { buffers: number } }).foleyStats.buffers >= before + 3,
+      buffersBefore,
+    ),
+    'Travessia pelo estreito deve usar ruídos de navegação.',
+  );
+  await page.getByRole('button', { name: '❌ Cancelar Ordem Atual', exact: true }).click();
+  await until((g) => !g.plannedOrders.some((o) => 'battalionId' in o && o.battalionId === main.id));
+  const pingPoint = await mapPoint(page, 'maghreb');
+  await page.keyboard.down('Alt');
+  await page.mouse.click(pingPoint.x, pingPoint.y);
+  await page.keyboard.up('Alt');
+  await page.locator('[data-map-ping]').waitFor();
+  assert.equal(await page.locator('[data-window="battalion"]').count(), 1);
+  assert.equal(JSON.stringify(get().plannedOrders), ordersBeforeSelection);
+  await page.waitForFunction(
+    () => document.querySelectorAll('[data-map-ping]').length === 0,
+    null,
+    { timeout: 8000 },
+  );
+  await page.locator('.province-shape[data-province="portugal"]').press('Enter');
+  await card.getByLabel('Nota do sinal para aliados', { exact: true }).fill('Defender o porto');
+  await card.getByRole('button', { name: '📍 Sinalizar no Mapa', exact: true }).click();
+  await page.locator('[data-map-ping]').filter({ hasText: 'Defender o porto' }).waitFor();
+  assert.equal(JSON.stringify(get().plannedOrders), ordersBeforeSelection);
+  await page.screenshot({ path: '.local/screenshots/v095-province-ping.png' });
+
+  const fleet = get().battalions.find((a) => a.ownerId === main.ownerId && a.isFleet)!;
+  const beforeSail = await page.evaluate(
+    () => (window as unknown as { foleyStats: { buffers: number } }).foleyStats.buffers,
+  );
+  await page.locator(`[data-battalion="${fleet.id}"]`).press('Enter');
+  assert.ok(
+    await page.evaluate(
+      (before) =>
+        (window as unknown as { foleyStats: { buffers: number } }).foleyStats.buffers >= before + 3,
+      beforeSail,
+    ),
+  );
   await page.getByRole('button', { name: 'Crises & Coalizões', exact: true }).click();
-  const center = page.getByRole('dialog', { name: 'Conselho Estratégico', exact: true });
+  const center = page.locator('[data-window="strategy-center"]');
   await center.waitFor();
   assert.equal(await page.locator('[data-context-panel]').count(), 0);
   await center.getByRole('heading', { name: 'Ameaça e contenção' }).waitFor();
@@ -160,7 +295,13 @@ try {
     'Objetivos',
     'Estatísticas',
   ]) {
-    await center.getByRole('tab', { name, exact: true }).click();
+    await page
+      .getByRole('button', {
+        name: name === 'Estatísticas' ? 'Estatísticas da campanha' : name,
+        exact: true,
+      })
+      .click();
+    assert.equal(await center.locator('.strategy-tabs').count(), 0);
     assert.equal(await page.getByRole('dialog').count(), 1);
   }
   await center.getByRole('region', { name: 'Estatísticas da campanha', exact: true }).waitFor();
@@ -168,15 +309,21 @@ try {
   assert.ok(await center.evaluate((e) => e.contains(document.activeElement)));
   await page.keyboard.press('Escape');
   await center.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Crônica', exact: true }).click();
+  const news = page.getByRole('region', { name: '🗺️ Crônica', exact: true });
+  await news.waitFor();
+  assert.equal(await news.locator('.panel-tabs,.first-ready-banner').count(), 0);
+  assert.equal(await page.locator('.first-ready-banner').count(), 1);
+  await news.getByRole('button', { name: 'Marcar todos como lidos', exact: true }).click();
   await page.getByRole('button', { name: 'Comércio & Mares', exact: true }).click();
   await center.waitFor();
-  await page.locator('[data-modal-backdrop]').click({ position: { x: 4, y: 200 } });
+  await page.locator('.map-stage').click({ position: { x: 12, y: 300 } });
   await center.waitFor({ state: 'detached' });
   await page.getByRole('button', { name: 'Como jogar', exact: true }).click();
   await page.getByRole('dialog', { name: 'Manual de campanha' }).waitFor();
   await page.keyboard.press('Escape');
   await page.locator(`[data-battalion="${main.id}"]`).press('Enter');
-  await page.locator('.province-shape[data-province="brazil"]').press('Enter');
+  await rightClickProvince(page, 'brazil');
   await until((g) => g.plannedOrders.some((o) => o.type === 'AUTO_TRANSPORT' && !o.fleetId));
   const treasury = get().players[0].gold;
   await page.screenshot({ path: '.local/screenshots/rc-map-desktop.png' });
@@ -194,6 +341,21 @@ try {
     for (const peer of peers) peer.socket.close();
   }
   await page.locator('[data-turn-announcement]').waitFor();
+  await page.locator('.turn-replay').waitFor();
+  await page.waitForFunction(
+    () => !document.querySelector('.turn-replay,.siege-flame,.siege-smoke'),
+    null,
+    { timeout: 5500 },
+  );
+  assert.equal(await page.locator('.turn-replay,.siege-flame,.siege-smoke').count(), 0);
+  await page.getByRole('button', { name: 'Rever Animação do Turno', exact: true }).click();
+  await page.locator('.turn-replay').waitFor();
+  await page.waitForFunction(
+    () => !document.querySelector('.turn-replay,.siege-flame,.siege-smoke'),
+    null,
+    { timeout: 5500 },
+  );
+
   const replay = page.getByRole('button', { name: 'Encerrar animação', exact: true });
   if (await replay.isVisible()) await replay.click();
   const critical = page.getByRole('complementary', { name: 'Alertas pessoais críticos' });
@@ -235,7 +397,8 @@ try {
   await page.screenshot({ path: '.local/screenshots/rc-map-mobile.png' });
   const visuals = await open(fixtures.visual[0]);
   await visuals.page.locator('[data-winter-frost]').first().waitFor();
-  assert.ok((await visuals.page.locator('.siege-flame').count()) > 0);
+  assert.equal(await visuals.page.locator('.siege-flame').count(), 0);
+  assert.ok((await visuals.page.locator('.siege-progress-label').count()) > 0);
   for (const kind of ['FORT', 'BARRACKS', 'MARKET', 'PORT', 'FOUNDRY', 'TEMPLE'])
     assert.ok((await visuals.page.locator(`[data-structure="${kind}"]`).count()) > 0);
   assert.ok((await visuals.page.locator('[data-composition="artillery"]').count()) > 0);
@@ -256,7 +419,7 @@ try {
   const learner = lesson.get().players[0],
     army = lesson.get().battalions.find((a) => a.ownerId === learner.id && !a.isFleet)!;
   await lesson.page.locator(`[data-battalion="${army.id}"]`).press('Enter');
-  await lesson.page.locator('.province-shape[data-province="maghreb"]').press('Enter');
+  await rightClickProvince(lesson.page, 'maghreb');
   await step(2);
   for (
     let i = 0;
@@ -288,7 +451,16 @@ try {
   await step(5);
   for (const label of ['Diplomacia', 'Comércio & Mares', 'Objetivos']) {
     await lesson.page.getByRole('button', { name: label, exact: true }).click();
-    await lesson.page.getByRole('dialog', { name: 'Conselho Estratégico' }).waitFor();
+    await lesson.page
+      .getByRole('dialog', {
+        name:
+          label === 'Diplomacia'
+            ? '👑 Diplomacia & Tratados'
+            : label === 'Comércio & Mares'
+              ? '⚓ Comércio & Mares'
+              : '🎯 Objetivos',
+      })
+      .waitFor();
     await lesson.page.keyboard.press('Escape');
   }
   await lesson.page.getByRole('button', { name: 'Concluir tutorial', exact: true }).click();
@@ -303,9 +475,20 @@ try {
   assert.equal(await stats.locator('[data-medal]').count(), 4);
   await lesson.page.screenshot({ path: '.local/screenshots/rc-analytics.png' });
   await viewport(lesson.page);
+  const soundStats = await lesson.page.evaluate(
+    () =>
+      (window as unknown as { foleyStats: { buffers: number; oscillatorTypes: string[] } })
+        .foleyStats,
+  );
+  assert.ok(soundStats.buffers >= 20, 'Marcha e combate devem usar camadas de buffers de ruído.');
+  assert.ok(
+    soundStats.oscillatorTypes.every((type) => type === 'sine'),
+    'Efeitos sem osciladores sawtooth/square. Música desativada no smoke.',
+  );
+
   assert.deepEqual(errors, []);
   console.log(
-    'RC cartográfico passou: SVG sem caixas, seis construções, neve/cerco, HUD ≤20%, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas.',
+    'v0.95 cartográfico passou: SVG sem caixas, seis construções, neve/cerco, inspeção 480×540, seleção/movimento/pan, janelas persistentes, sinais efêmeros, replay limitado a 4s, áudio Foley, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas.',
   );
 } catch (error) {
   await debugPage?.screenshot({ path: '.local/screenshots/rc-failure.png' }).catch(() => {});

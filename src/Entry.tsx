@@ -104,7 +104,7 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          RELEASE CANDIDATE <i /> 0.9
+          PRÉVIA <i /> 0.95
         </span>
         <button className="quiet-button" onClick={onHelp}>
           Como jogar <ArrowRight size={14} />

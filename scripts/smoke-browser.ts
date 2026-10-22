@@ -1,3 +1,4 @@
+import { rightClickProvince } from './map-interactions';
 import { seedBrowserFixtures, fixturePeer, type FixtureSession } from './browser-fixtures';
 import { chromium, type Page } from 'playwright-core';
 import assert from 'node:assert/strict';
@@ -168,7 +169,7 @@ try {
   await page.getByRole('button', { name: 'Mapa Economia', exact: true }).click();
   assert.ok((await page.locator('.resource-badge.emphasized').count()) > 0);
   await page.getByRole('button', { name: 'Objetivos', exact: true }).click();
-  const secret = page.getByRole('dialog', { name: 'Conselho Estratégico' });
+  const secret = page.getByRole('dialog', { name: '🎯 Objetivos' });
   await secret.getByRole('button', { name: 'Escolher esta carta' }).first().click();
   await states[0].until((g) => g.players[0].selectedObjectiveId !== null);
   await closeWindows(page);
@@ -189,7 +190,7 @@ try {
   g = states[0].get();
   const target = g.players[1];
   await page.getByRole('button', { name: 'Diplomacia', exact: true }).click();
-  const dip = page.getByRole('dialog', { name: 'Conselho Estratégico' });
+  const dip = page.getByRole('dialog', { name: '👑 Diplomacia & Tratados' });
   await dip
     .getByRole('button', { name: `⚔️ Declarar Guerra a ${target.nation}`, exact: true })
     .click();
@@ -336,7 +337,7 @@ try {
     },
     { x: neighbor.x, y: neighbor.y },
   );
-  await page.mouse.click(neighborPoint.x, neighborPoint.y);
+  await page.mouse.click(neighborPoint.x, neighborPoint.y, { button: 'right' });
   await states[0].until((g) =>
     g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION' || o.type === 'EMBARK_BATTALION'),
   );
@@ -357,7 +358,7 @@ try {
   await page.getByRole('button', { name: 'Fechar Comando de Batalhão', exact: true }).click();
   await page.getByRole('button', { name: 'Crises & Coalizões', exact: true }).click();
   await page
-    .getByRole('dialog', { name: 'Conselho Estratégico', exact: true })
+    .getByRole('dialog', { name: '🌍 Crises & Coalizões', exact: true })
     .getByRole('heading', { name: 'Ameaça e contenção' })
     .waitFor();
   await closeWindows(page);
@@ -381,7 +382,7 @@ try {
   assert.equal(neutral.ownerId, null);
   await page.locator(`[data-battalion="${own.id}"]`).press('Enter');
   await closeWindows(page);
-  await selectProvince(page, neutral.id);
+  await rightClickProvince(page, neutral.id);
   await states[0].until((g) => g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION'));
   // Every client sends its ready command through the actual interface.
   for (const p of pages) {
@@ -542,9 +543,13 @@ try {
     await alerts.state.until((g) => !g.wars.some((w) => w.active));
     peer.socket.close();
     await alerts.page.getByRole('button', { name: /🔔 Minha Nação/ }).click();
-    await alerts.page.getByRole('button', { name: /🔔 Comunique-se \/ Minha Nação/ }).waitFor();
+    await alerts.page.getByRole('region', { name: '🔔 Minha Nação', exact: true }).waitFor();
+    assert.equal(
+      await alerts.page.locator('.turn-panel .first-ready-banner, .turn-panel .panel-tabs').count(),
+      0,
+    );
     await alerts.page.getByRole('button', { name: 'Marcar todos como lidos', exact: true }).click();
-    await alerts.page.getByRole('button', { name: /🌍 Jornal do Mundo/ }).click();
+    await alerts.page.getByRole('button', { name: 'Crônica', exact: true }).click();
     await alerts.page.getByRole('heading', { name: '🌍 Jornal do Mundo' }).waitFor();
     await alerts.page.screenshot({ path: '.local/screenshots/rc-multiplayer-notificacoes.png' });
     const sandbox = await openFixture(fixtures.sandbox[0]);
@@ -565,12 +570,12 @@ try {
     assert.ok((await ferry.page.locator('.strait-link').count()) > 0);
     await ferry.page.locator(`[data-battalion="${main.id}"]`).press('Enter');
     await closeWindows(ferry.page);
-    await selectProvince(ferry.page, 'maghreb');
+    await rightClickProvince(ferry.page, 'maghreb');
     await ferry.state.until((g) =>
       g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION' && o.path?.[0] === 'maghreb'),
     );
     await ferry.page.getByRole('button', { name: '❌ Cancelar Ordem Atual', exact: true }).click();
-    await selectProvince(ferry.page, 'brazil');
+    await rightClickProvince(ferry.page, 'brazil');
     await ferry.state.until((g) =>
       g.plannedOrders.some((o) => o.type === 'AUTO_TRANSPORT' && !o.fleetId),
     );
@@ -598,7 +603,7 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Smoke RC 0.9 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
+    'Smoke v0.95 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
 } finally {
   await browser.close();

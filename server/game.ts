@@ -150,7 +150,7 @@ export function createGame(
       mapId: mode === 'quick' ? `natural-earth-${theater}` : 'natural-earth-world',
       maxTurns,
       turnSeconds,
-      createdVersion: '0.9.0-rc.1',
+      createdVersion: '0.95.0',
       allowBotSecretVictory: false,
       enableSecretObjectives: true,
     },
@@ -2216,30 +2216,36 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
       else
         declareWar(g, actorId, command.targetRealmId, command.casusBelli, command.offensiveAllyIds);
       assert(
-        provinceOf(g, command.targetProvinceId).ownerId === command.targetRealmId,
+        controller(provinceOf(g, command.targetProvinceId)) === command.targetRealmId,
         'Destino não pertence ao alvo.',
       );
       submitOrder(
         g,
         actorId,
-        command.autoTransport
+        battalionOf(g, command.battalionId).embarkedOnId
           ? {
-              type: 'AUTO_TRANSPORT',
+              type: 'EMBARK_BATTALION',
               battalionId: command.battalionId,
-              targetProvinceId: command.targetProvinceId,
+              disembarkProvinceId: command.targetProvinceId,
             }
-          : command.bridgeFleetId
+          : command.autoTransport
             ? {
-                type: 'NAVAL_BRIDGE',
+                type: 'AUTO_TRANSPORT',
                 battalionId: command.battalionId,
-                fleetId: command.bridgeFleetId,
                 targetProvinceId: command.targetProvinceId,
               }
-            : {
-                type: 'MOVE_BATTALION',
-                battalionId: command.battalionId,
-                targetProvinceId: command.targetProvinceId,
-              },
+            : command.bridgeFleetId
+              ? {
+                  type: 'NAVAL_BRIDGE',
+                  battalionId: command.battalionId,
+                  fleetId: command.bridgeFleetId,
+                  targetProvinceId: command.targetProvinceId,
+                }
+              : {
+                  type: 'MOVE_BATTALION',
+                  battalionId: command.battalionId,
+                  targetProvinceId: command.targetProvinceId,
+                },
       );
       break;
   }

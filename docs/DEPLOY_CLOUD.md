@@ -1,4 +1,4 @@
-# Concórdia na nuvem · 0.9 Release Candidate
+# Concórdia na nuvem · v0.95
 
 Um processo Node atende o site, `/api/health` e `/ws` na mesma porta. Amigos acessam um link HTTPS; não precisam de Radmin, Node instalado ou IP público em casa. A imagem usa **Node 20 Alpine**, com versão mínima 20.19 para Vite, build em estágio separado, dependências de produção e usuário sem privilégios.
 
@@ -39,7 +39,7 @@ Uma VPS Linux com Docker Compose, aproximadamente **1 vCPU e 1 GB de RAM**, serv
 4. Clone a branch e execute:
 
 ```sh
-git clone --branch feat/v0.8-v0.9-release-candidate \
+git clone --branch feat/v0.95-ui-audio-polish \
   https://github.com/AlexandreDinizVeloso/Wargame.git
 cd Wargame
 export GAME_DOMAIN=play.seu-dominio.com
@@ -65,7 +65,7 @@ Confira o painel de saúde e a reconexão após a atualização. Não use múlti
 
 Em um provedor que ofereça **web service gratuito com Docker e WebSocket**, por exemplo o plano gratuito do Render quando disponível:
 
-1. Conecte o repositório e selecione a branch RC.
+1. Conecte o repositório e selecione a branch v0.95.
 2. Crie um serviço web com runtime Docker e o `Dockerfile` da raiz.
 3. Defina `HOST=0.0.0.0` e `ROOMS_STATE_FILE=/app/.local/rooms-state.json`. Use a porta indicada pelo provedor; o servidor lê `PORT`.
 4. Configure a verificação de saúde em `/api/health` e abra o domínio HTTPS fornecido pelo serviço.
@@ -88,7 +88,7 @@ Guarde essa cópia fora da VPS. Ela contém credenciais de reconexão na forma d
 
 ## Conferência da publicação
 
-- `/api/health` responde com `status:ok`, versão `0.9.0-rc.1` e protocolo 7.
+- `/api/health` responde com `status:ok`, versão `0.95.0` e protocolo 7.
 - Duas abas conseguem criar/entrar na mesma sala e trocar mensagens em tempo real.
 - O site é HTTPS e a conexão WebSocket usa WSS.
 - Após reiniciar o contêiner com o mesmo volume, a sala reaparece e a aba original recupera seu jogador.

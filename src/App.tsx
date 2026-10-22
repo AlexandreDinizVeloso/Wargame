@@ -1,8 +1,8 @@
 const PostGameAnalytics = lazy(() => import('./PostGameAnalytics'));
 import TutorialOverlay from './TutorialOverlay';
-import { TopBarModal, type CenterTab } from './TopBarModal';
+import { TopBarModal } from './TopBarModal';
 import { MaritimeOverview } from './MaritimePanel';
-import CommanderPanel from './CommanderPanel';
+const CommanderPanel = lazy(() => import('./CommanderPanel'));
 import { AudioControls } from './AudioControls';
 import CampaignPanel from './CampaignPanel';
 import PlayerNameForm from './PlayerNameForm';
@@ -107,8 +107,9 @@ function Manual({ close }: { close: () => void; active?: boolean; onActivate?: (
         <h3>Cidades constroem. Batalhões se movem.</h3>
         <p>
           Clique no território para administrar a província. Clique em uma ficha para comandar a
-          formação; ela pode marchar enquanto a cidade constrói. Clique direito em qualquer região
-          para preparar o menor caminho legal. Uma ligação é percorrida por rodada.
+          formação; ela pode marchar enquanto a cidade constrói. Clique Esquerdo: Selecionar |
+          Clique Direito: Mover / Atacar. Clique direito em qualquer região para preparar o menor
+          caminho legal. Uma ligação é percorrida por rodada.
         </p>
         <h3>Declare antes de invadir</h3>
         <p>
@@ -143,9 +144,10 @@ function Manual({ close }: { close: () => void; active?: boolean; onActivate?: (
         </p>
         <h3>Seu conselho, sua mesa</h3>
         <p>
-          O dock reúne as ações da cidade ou formação selecionada; as abas do conselho abrem uma
-          consulta por vez. Use Esc ou clique fora para voltar ao mapa. A Crônica mostra gráficos da
-          campanha; o Conselho da nação permite baixar JSON e TXT.
+          O dock reúne as ações da cidade ou formação selecionada; os botões do conselho abrem uma
+          consulta por vez. Arraste o título para mover e as bordas para redimensionar. Use Esc para
+          fechar. A Crônica mostra gráficos da campanha; o Conselho da nação permite baixar JSON e
+          TXT.
         </p>
         <div className="keyboard-guide">
           <span>
@@ -181,9 +183,24 @@ type Panel =
   | 'report'
   | 'maritime'
   | 'analytics';
+const STRATEGY_TITLES: Partial<Record<Panel, string>> = {
+  diplomacy: '👑 Diplomacia & Tratados',
+  skills: '🎖️ Árvore Militar',
+  maritime: '⚓ Comércio & Mares',
+  world: '🌍 Crises & Coalizões',
+  secret: '🎯 Objetivos',
+  analytics: '📊 Estatísticas da campanha',
+};
+const REPORT_TITLES: Record<ReportTab, string> = {
+  world: '🗺️ Crônica',
+  personal: '🔔 Minha Nação',
+  orders: '📜 Ordens',
+  reports: '⚔️ Relatórios',
+  chat: '💬 Conselho',
+};
 const GLOBAL_PANELS: Panel[] = ['diplomacy', 'skills', 'maritime', 'world', 'secret', 'analytics'];
 export default function App() {
-  const { game, playerId, status, error, setError, send, command, leave } = useGame();
+  const { game, playerId, status, error, setError, send, command, leave, pings } = useGame();
   const camera = useRef<CameraHandle>(null);
   const [cartographic, setCartographic] = useState(() => {
     try {
@@ -326,16 +343,23 @@ export default function App() {
       roomName: 'Academia de Concórdia',
     });
   };
+  const pingSound = useRef('');
+  useEffect(() => {
+    const latest = pings.at(-1);
+    if (latest && latest.id !== pingSound.current) {
+      pingSound.current = latest.id;
+      audio.play('ping');
+    }
+  }, [pings]);
   const firstReadySound = useRef('');
   useEffect(() => {
     const key = game?.firstReadyPlayerName ? `${game.code}:${game.turn}` : '';
     if (key && firstReadySound.current !== key) {
       firstReadySound.current = key;
-      audio.play('war');
+      audio.play('alert');
     }
   }, [game?.code, game?.turn, game?.firstReadyPlayerName]);
-  const seenReport = useRef(''),
-    seenWars = useRef(new Set<string>()),
+  const seenWars = useRef(new Set<string>()),
     seenWinner = useRef('');
   const open = (panel: Panel) => {
     setFocusedWindow(panel);
@@ -395,9 +419,11 @@ export default function App() {
   useEffect(() => {
     if (!replay) return;
     const started = performance.now();
-    audio.play(replay.report.movements.length ? 'march' : 'click');
+    if (replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
+    if (replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
+    const finish = setTimeout(() => setReplay(null), 4000);
     const cannon = setTimeout(() => {
-        if (replay.report.battles.length) audio.play('cannon');
+        if (replay.report.battles.length) audio.playCombatSound();
       }, 1450),
       peace = setTimeout(() => {
         if (replay.report.diplomaticChanges.some((c) => c.action === 'PEACE')) audio.play('peace');
@@ -415,17 +441,19 @@ export default function App() {
     frame = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frame);
+      clearTimeout(finish);
       clearTimeout(cannon);
       clearTimeout(peace);
     };
   }, [replay?.nonce]);
+  const replayTurn = useRef<{ code: string; turn: number } | null>(null);
   useEffect(() => {
-    if (!game?.lastReport) return;
-    const key = `${game.code}:${game.lastReport.turn}`;
-    if (seenReport.current === key) return;
-    seenReport.current = key;
-    playReplay(game.lastReport);
-  }, [game?.code, game?.lastReport?.turn, playReplay]);
+    if (!game) return;
+    const previous = replayTurn.current;
+    replayTurn.current = { code: game.code, turn: game.turn };
+    if (previous?.code === game.code && game.turn > previous.turn && game.lastReport)
+      playReplay(game.lastReport);
+  }, [game?.code, game?.turn, playReplay]);
   useEffect(() => {
     if (!game) return;
     for (const w of game.wars.filter((w) => w.active)) {
@@ -525,7 +553,9 @@ export default function App() {
     const p = game.provinces.find((p) => p.id === id);
     if (p) camera.current?.focus(p);
   };
+  const signal = (p: Province, note = '') => send({ type: 'map_ping', provinceId: p.id, note });
   const selectArmy = (a: Battalion) => {
+    if (a.isFleet) audio.playSailSound();
     setUnitTab('command');
     setArmy(a.id);
     setProvince(a.provinceId);
@@ -542,35 +572,12 @@ export default function App() {
       setError('Selecione uma ficha de batalhão ou frota antes de preparar a rota.');
       return;
     }
-    const host = controller(p);
-    if (selectedArmy.embarkedOnId) {
-      command({
-        type: 'SUBMIT_ORDER',
-        order: {
-          type: 'EMBARK_BATTALION',
-          battalionId: selectedArmy.id,
-          disembarkProvinceId: p.id,
-        },
-      });
+    if (game.phase !== 'planning' || me.ready) {
+      setError('Reabra as ordens antes de preparar movimento.');
       return;
     }
-    if (!selectedArmy.isFleet && p.kind === 'SEA_ZONE') {
-      const fleet = game.battalions.find(
-        (a) =>
-          a.ownerId === playerId &&
-          a.isFleet &&
-          !a.embarkedArmyId &&
-          a.provinceId === p.id &&
-          a.transports * 4 >= unitCount(selectedArmy),
-      );
-      if (fleet) {
-        command({
-          type: 'SUBMIT_ORDER',
-          order: { type: 'EMBARK_BATTALION', battalionId: selectedArmy.id, fleetId: fleet.id },
-        });
-        return;
-      }
-    }
+    audio.unlock();
+    const host = controller(p);
     if (
       host &&
       host !== playerId &&
@@ -587,6 +594,36 @@ export default function App() {
       });
       return;
     }
+    if (selectedArmy.embarkedOnId) {
+      command({
+        type: 'SUBMIT_ORDER',
+        order: {
+          type: 'EMBARK_BATTALION',
+          battalionId: selectedArmy.id,
+          disembarkProvinceId: p.id,
+        },
+      });
+      audio.playSailSound();
+      return;
+    }
+    if (!selectedArmy.isFleet && p.kind === 'SEA_ZONE') {
+      const fleet = game.battalions.find(
+        (a) =>
+          a.ownerId === playerId &&
+          a.isFleet &&
+          !a.embarkedArmyId &&
+          a.provinceId === p.id &&
+          a.transports * 4 >= unitCount(selectedArmy),
+      );
+      if (fleet) {
+        command({
+          type: 'SUBMIT_ORDER',
+          order: { type: 'EMBARK_BATTALION', battalionId: selectedArmy.id, fleetId: fleet.id },
+        });
+        audio.playSailSound();
+        return;
+      }
+    }
     const from = game.provinces.find((q) => q.id === selectedArmy.provinceId)!;
     if (
       !from.neighbors.includes(p.id) &&
@@ -596,6 +633,7 @@ export default function App() {
         type: 'SUBMIT_ORDER',
         order: { type: 'AUTO_TRANSPORT', battalionId: selectedArmy.id, targetProvinceId: p.id },
       });
+      audio.playSailSound();
       return;
     }
     const path = unitPath(game, selectedArmy, p.id);
@@ -607,6 +645,8 @@ export default function App() {
       type: 'SUBMIT_ORDER',
       order: { type: 'MOVE_BATTALION', battalionId: selectedArmy.id, path },
     });
+    if (selectedArmy.isFleet || from.straitNeighbors.includes(p.id)) audio.playSailSound();
+    else audio.playMarchSound();
   };
   const showReport = (tab: ReportTab) => {
     setReportTab(tab);
@@ -637,6 +677,8 @@ export default function App() {
         onDeselect={() => setArmy('')}
         viewerId={playerId}
         replay={replay}
+        pings={pings}
+        onPing={signal}
       />
       <header className="top-bar framed-panel" data-hud-surface>
         <button className="nation-heading" onClick={openMenu} title="Conselho da nação">
@@ -832,6 +874,14 @@ export default function App() {
           <Flag size={15} />
           <span>Objetivos</span>
         </button>
+        <button
+          onClick={() => open('analytics')}
+          aria-label="Estatísticas da campanha"
+          title="📊 Estatísticas"
+        >
+          <ScrollText size={15} />
+          <span>Estatísticas</span>
+        </button>
       </nav>
       <div className="telemetry-tools">
         <button
@@ -890,20 +940,8 @@ export default function App() {
       {panels.some((p) => GLOBAL_PANELS.includes(p)) && (
         <TopBarModal
           id="strategy-center"
-          title="Conselho Estratégico"
+          title={STRATEGY_TITLES[panels[0]] ?? 'Conselho Estratégico'}
           onClose={() => setPanels([])}
-          tab={panels[0]}
-          tabs={
-            [
-              { id: 'diplomacy', label: 'Diplomacia', icon: <Handshake size={15} /> },
-              { id: 'skills', label: 'Árvore Militar', icon: <Swords size={15} /> },
-              { id: 'maritime', label: 'Comércio & Mares', icon: <Anchor size={15} /> },
-              { id: 'world', label: 'Crises & Coalizões', icon: <Crown size={15} /> },
-              { id: 'secret', label: 'Objetivos', icon: <Flag size={15} /> },
-              { id: 'analytics', label: 'Estatísticas', icon: <ScrollText size={15} /> },
-            ] satisfies CenterTab[]
-          }
-          onTabChange={(id) => open(id as Panel)}
         >
           {panels[0] === 'diplomacy' && (
             <DiplomacyDrawer
@@ -965,6 +1003,7 @@ export default function App() {
             command={command}
             onSelectArmy={selectArmy}
             onFocus={() => focus(selected.id)}
+            onPing={(note) => signal(selected, note)}
             onDiplomacy={(id) => {
               setDiplomacyTarget(id);
               open('diplomacy');
@@ -1085,7 +1124,28 @@ export default function App() {
           id="report"
           active={focusedWindow === 'report'}
           onActivate={() => open('report')}
-          title="Relatório do Turno"
+          title={REPORT_TITLES[reportTab]}
+          headerActions={
+            (reportTab === 'personal' || reportTab === 'world') && (
+              <button
+                className="mark-read"
+                onClick={() =>
+                  command({
+                    type: 'READ_NOTIFICATIONS',
+                    notificationIds: game.notifications
+                      .filter((n) =>
+                        reportTab === 'world'
+                          ? n.type === 'WORLD'
+                          : n.type !== 'WORLD' && n.involvesPlayerIds.includes(playerId),
+                      )
+                      .map((n) => n.id),
+                  })
+                }
+              >
+                Marcar todos como lidos
+              </button>
+            )
+          }
           icon={<ScrollText size={15} />}
           anchor="bottom"
           width={640}
@@ -1097,7 +1157,6 @@ export default function App() {
             playerId={playerId}
             command={command}
             tab={reportTab}
-            setTab={setReportTab}
             onReplay={playReplay}
             onFocus={focus}
           />
@@ -1105,8 +1164,8 @@ export default function App() {
       )}
       <footer className="hud-footer" data-hud-surface>
         <div className="footer-tabs">
-          <button onClick={() => open('analytics')} aria-label="Estatísticas da campanha">
-            📊 Crônica
+          <button onClick={() => showReport('world')} aria-label="Crônica">
+            🗺️ Crônica
           </button>
           <button onClick={() => showReport('personal')}>
             🔔 Minha Nação (
@@ -1204,9 +1263,12 @@ export default function App() {
       )}
       <div className="map-hint">
         {selectedArmy?.ownerId === playerId
-          ? `${selectedArmy.name} · clique em um destino iluminado`
+          ? `${selectedArmy.name} · botão direito no destino para mover / atacar`
           : 'Selecione uma cidade ou uma ficha de batalhão'}
-        <span>Espaço + arraste · scroll para zoom</span>
+        <span>
+          Clique Esquerdo: Selecionar | Clique Direito: Mover / Atacar · arraste direito/meio:
+          câmera · scroll: zoom
+        </span>
       </div>
       {menu && (
         <TopBarModal id="council-menu" title="Conselho da nação" onClose={closeMenu}>

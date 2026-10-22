@@ -5317,3 +5317,386 @@ legend {
     padding: 6px 8px;
   }
 }
+
+/* v0.95: movable campaign windows and clear mouse controls. */
+.floating-window.inspector-dock,
+.floating-window.strategy-modal {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  max-width: none;
+  max-height: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: auto;
+  transform: none;
+  margin: 0;
+  padding: 0;
+}
+.floating-window > .window-title {
+  min-height: 42px;
+  flex: 0 0 42px;
+  padding: 4px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+.window-heading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.floating-window > .window-title strong {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.window-controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 2px;
+}
+.floating-window .window-controls button {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+}
+.floating-window .window-controls .mark-read {
+  width: auto;
+  max-width: 140px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+.floating-window > .window-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+  overscroll-behavior: contain;
+}
+.floating-window .window-body * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.floating-window .window-body input,
+.floating-window .window-body select,
+.floating-window .window-body textarea {
+  max-width: 100%;
+}
+.floating-window .window-body .table-scroll {
+  overflow-x: hidden;
+}
+.floating-window table {
+  width: 100%;
+  table-layout: fixed;
+}
+.floating-window .window-resize-handle {
+  position: absolute;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  touch-action: none;
+  z-index: 3;
+}
+.floating-window .resize-right {
+  right: 0;
+  top: 42px;
+  bottom: 16px;
+  width: 7px;
+  cursor: ew-resize;
+}
+.floating-window .resize-bottom {
+  bottom: 0;
+  left: 0;
+  right: 16px;
+  height: 7px;
+  cursor: ns-resize;
+}
+.floating-window .resize-corner {
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 45%,
+    #c9b57c 46%,
+    transparent 52%,
+    transparent 65%,
+    #c9b57c 66%,
+    transparent 72%
+  );
+}
+.floating-window .window-resize-handle:focus-visible {
+  background-color: #d3b46c66;
+  outline-offset: -3px;
+}
+.strategy-backdrop {
+  pointer-events: none;
+  background: transparent;
+  padding: 0;
+  display: block;
+  z-index: 70;
+}
+.inspector-dock .region-heading h2 {
+  font-size: 26px;
+}
+.inspector-dock .region-heading span {
+  font-size: 11px;
+}
+.inspector-dock .context-tabs {
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 12px 0;
+}
+.inspector-dock .context-tabs button {
+  flex: 1 1 120px;
+  font-size: 11px;
+  padding: 9px 6px;
+}
+.inspector-dock .building-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.inspector-dock .building-card {
+  padding: 10px;
+}
+.inspector-dock .building-card p,
+.inspector-dock p,
+.inspector-dock label {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.inspector-dock .ledger-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.inspector-dock .ledger-grid strong {
+  font-size: 19px;
+}
+.inspector-dock .ledger-grid small {
+  font-size: 9px;
+}
+.inspector-dock .tactical-composition {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.inspector-dock .tactical-composition > * {
+  padding: 10px;
+  border: 1px solid #bbad7544;
+  border-radius: 7px;
+  background: #d1bb7710;
+  font-size: 12px;
+}
+.inspector-dock .tactical-composition b {
+  font-size: 21px;
+}
+.inspector-dock .tactical-composition small {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  margin-top: 4px;
+}
+.inspector-dock .tactical-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  overflow: visible;
+}
+.inspector-dock .tactical-actions button {
+  min-height: 38px;
+  white-space: normal;
+  font-size: 11px;
+  padding: 7px;
+}
+.inspector-dock .tactical-hud > header > strong {
+  font-size: 19px;
+}
+.inspector-dock .tactical-hud > header > span {
+  font-size: 11px;
+}
+.province-ping {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+.province-ping input {
+  flex: 1 1 150px;
+}
+.province-ping button {
+  font-size: 11px;
+}
+.game-viewport.release-candidate-interface > .first-ready-banner {
+  position: fixed;
+  top: 113px;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translateX(-50%);
+  max-width: min(460px, 65vw);
+  padding: 6px 12px;
+  z-index: 51;
+  font-size: 10px;
+  border-radius: 24px;
+  text-align: center;
+  pointer-events: none;
+}
+.map-hint {
+  max-width: min(640px, 65vw);
+  pointer-events: none;
+}
+.battle-preview-tooltip {
+  position: fixed;
+  width: 290px;
+  padding: 12px;
+  border: 1px solid #c5af76;
+  border-radius: 10px;
+  background: #122c37f5;
+  box-shadow: 0 8px 24px #001c;
+  z-index: 69;
+  font-size: 12px;
+  pointer-events: none;
+}
+.battle-preview-tooltip > strong,
+.battle-preview-tooltip > b {
+  display: block;
+  margin-bottom: 7px;
+}
+.battle-preview-tooltip ul {
+  margin: 8px 0;
+  padding-left: 16px;
+}
+.battle-preview-tooltip small {
+  display: block;
+  margin-top: 8px;
+  color: #bed0ce;
+  font-size: 10px;
+}
+.ping-wave {
+  fill: none;
+  stroke: #fbd67f;
+  stroke-width: 2;
+  animation: ally-ping 1.5s ease-out infinite;
+}
+.ping-wave.delayed {
+  animation-delay: 0.65s;
+}
+@keyframes ally-ping {
+  from {
+    r: 10;
+    opacity: 1;
+  }
+  to {
+    r: 42;
+    opacity: 0;
+  }
+}
+@media (max-width: 700px) {
+  .game-viewport.release-candidate-interface > .first-ready-banner {
+    top: 99px;
+    max-width: 85vw;
+    font-size: 9px;
+    padding: 4px 8px;
+  }
+  .floating-window > .window-title {
+    padding: 4px 6px;
+  }
+  .floating-window > .window-title strong {
+    font-size: 11px;
+  }
+  .floating-window .window-controls .mark-read {
+    max-width: 85px;
+    font-size: 8px;
+  }
+  .floating-window > .window-body {
+    padding: 12px;
+  }
+  .inspector-dock .tactical-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .inspector-dock .context-tabs button {
+    flex-basis: 90px;
+    font-size: 10px;
+  }
+  .map-hint {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ping-wave {
+    animation: none;
+    r: 24;
+    opacity: 0.6;
+  }
+}
+
+.inspector-dock .tactical-hud {
+  max-height: none;
+  overflow: visible;
+}
+.inspector-dock .tactical-composition > span {
+  font-size: 12px;
+}
+.inspector-dock .tactical-supply,
+.inspector-dock .transport-hint {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.inspector-dock .meter small {
+  font-size: 10px;
+}
+.province-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+.province-overview > div {
+  border: 1px solid #b9a67333;
+  border-radius: 6px;
+  padding: 7px;
+  background: #d1bb7710;
+}
+.province-overview small {
+  display: block;
+  color: #b3c6c9;
+  font-size: 9px;
+  letter-spacing: 0.3px;
+}
+.province-overview strong {
+  display: block;
+  color: #efddb2;
+  font-size: 16px;
+  margin-top: 3px;
+}
+@media (max-width: 700px) {
+  .game-viewport.release-candidate-interface > .first-ready-banner {
+    top: 155px;
+    width: max-content;
+    max-width: calc(100vw - 24px);
+    font-size: 8px;
+  }
+  .inspector-dock .building-grid {
+    grid-template-columns: 1fr;
+  }
+}

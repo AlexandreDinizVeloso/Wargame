@@ -1,4 +1,5 @@
-export type Sound = 'click' | 'coins' | 'march' | 'cannon' | 'war' | 'peace' | 'victory' | 'alert';
+export type Sound =
+  'click' | 'coins' | 'march' | 'sail' | 'ping' | 'cannon' | 'war' | 'peace' | 'victory' | 'alert';
 type Ambience = 'peace' | 'war' | 'off';
 const saved = (key: string, fallback: number) => {
   try {
@@ -14,6 +15,9 @@ class Synthesizer {
   private music: GainNode | null = null;
   private musicTimer: ReturnType<typeof setInterval> | null = null;
   private musicNodes = new Set<OscillatorNode>();
+  private noiseBuffers = new Map<string, AudioBuffer>();
+  private effectNodes = new Set<AudioScheduledSourceNode>();
+  private reverb: GainNode | null = null;
   private ambience: Ambience = 'off';
   private chord = 0;
   private mutedValue = false;
@@ -24,7 +28,10 @@ class Synthesizer {
       this.mutedValue = localStorage.getItem('concordia-v3-muted') === 'true';
     } catch {}
     if (typeof document !== 'undefined')
-      document.addEventListener('visibilitychange', () => this.syncAmbience());
+      document.addEventListener('visibilitychange', () => {
+        this.syncAmbience();
+        if (document.hidden) this.stopEffects();
+      });
   }
   get muted() {
     return this.mutedValue;
@@ -44,6 +51,7 @@ class Synthesizer {
     this.mutedValue = value;
     this.save('concordia-v3-muted', String(value));
     this.applyVolumes();
+    if (value) this.stopEffects();
   }
   setMusicVolume(value: number) {
     this.musicValue = Math.max(0, Math.min(1, value));
@@ -53,6 +61,7 @@ class Synthesizer {
   }
   setEffectsVolume(value: number) {
     this.effectsValue = Math.max(0, Math.min(1, value));
+    if (this.effectsValue === 0) this.stopEffects();
     this.save('concordia-effects-volume', String(this.effectsValue));
     this.applyVolumes();
   }
@@ -78,7 +87,29 @@ class Synthesizer {
         this.context = new AudioContext();
         this.effects = this.context.createGain();
         this.music = this.context.createGain();
-        this.effects.connect(this.context.destination);
+        const limiter = this.context.createDynamicsCompressor();
+        limiter.threshold.value = -12;
+        limiter.ratio.value = 5;
+        limiter.attack.value = 0.003;
+        limiter.release.value = 0.18;
+        this.effects.connect(limiter);
+        limiter.connect(this.context.destination);
+        const convolver = this.context.createConvolver();
+        const impulse = this.context.createBuffer(
+          2,
+          Math.floor(this.context.sampleRate * 0.38),
+          this.context.sampleRate,
+        );
+        for (let c = 0; c < 2; c++) {
+          const d = impulse.getChannelData(c);
+          for (let i = 0; i < d.length; i++)
+            d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3) * 0.5;
+        }
+        convolver.buffer = impulse;
+        this.reverb = this.context.createGain();
+        this.reverb.gain.value = 0.18;
+        this.reverb.connect(convolver);
+        convolver.connect(this.effects);
         this.music.connect(this.context.destination);
         this.applyVolumes();
       }
@@ -172,49 +203,168 @@ class Synthesizer {
     phrase();
     this.musicTimer = setInterval(phrase, 6000);
   }
-  play(sound: Sound) {
-    if (this.mutedValue || this.effectsValue === 0) return;
-    this.unlock();
-    const ctx = this.context;
-    if (!ctx || ctx.state !== 'running') return;
-    const tone = this.tone.bind(this);
-    if (sound === 'alert')
-      [880, 660, 880].forEach((hz, i) => tone(hz, i * 0.18, 0.16, 'triangle', 0.085));
-    if (sound === 'click') tone(760, 0, 0.06, 'triangle', 0.035);
-    if (sound === 'coins')
-      [1046, 1568, 2093].forEach((hz, i) => tone(hz, i * 0.055, 0.18, 'sine', 0.045));
-    if (sound === 'march') [0, 0.15, 0.3, 0.45].forEach((t) => tone(90, t, 0.1, 'triangle', 0.07));
-    if (sound === 'cannon') {
-      tone(55, 0, 0.65, 'sawtooth', 0.12);
-      const length = Math.floor(ctx.sampleRate * 0.5),
-        buffer = ctx.createBuffer(1, length, ctx.sampleRate),
-        data = buffer.getChannelData(0);
-      for (let i = 0; i < length; i++)
-        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (length * 0.2));
-      const noise = ctx.createBufferSource(),
-        filter = ctx.createBiquadFilter(),
-        gain = ctx.createGain();
-      noise.buffer = buffer;
-      filter.type = 'lowpass';
-      filter.frequency.value = 900;
-      gain.gain.value = 0.12;
-      noise.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.effects!);
-      noise.onended = () => {
-        noise.disconnect();
-        filter.disconnect();
-        gain.disconnect();
-      };
-      noise.start();
+  private stopEffects() {
+    for (const source of this.effectNodes) {
+      try {
+        source.stop();
+      } catch {}
     }
-    if (sound === 'war')
-      [196, 246.94, 293.66, 392].forEach((hz, i) => tone(hz, i * 0.16, 0.35, 'sawtooth', 0.055));
-    if (sound === 'peace' || sound === 'victory')
-      (sound === 'victory'
-        ? [261.63, 329.63, 392, 523.25, 659.25]
-        : [293.66, 369.99, 440, 587.33]
-      ).forEach((hz, i) => tone(hz, i * 0.15, 0.5, 'triangle', 0.07));
+    this.effectNodes.clear();
+  }
+  private ready() {
+    if (this.mutedValue || this.effectsValue === 0 || document.hidden) return false;
+    this.unlock();
+    return this.context?.state === 'running';
+  }
+  private noise(color: 'white' | 'brown' | 'pink') {
+    const ctx = this.context!;
+    const cached = this.noiseBuffers.get(color);
+    if (cached) return cached;
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate),
+      data = buffer.getChannelData(0);
+    let brown = 0,
+      p0 = 0,
+      p1 = 0,
+      p2 = 0;
+    for (let i = 0; i < data.length; i++) {
+      const white = Math.random() * 2 - 1;
+      brown = (brown + 0.02 * white) / 1.02;
+      p0 = 0.99765 * p0 + white * 0.099046;
+      p1 = 0.963 * p1 + white * 0.2965164;
+      p2 = 0.57 * p2 + white * 1.0526913;
+      data[i] =
+        color === 'white'
+          ? white
+          : color === 'brown'
+            ? brown * 3.5
+            : (p0 + p1 + p2 + white * 0.1848) * 0.18;
+    }
+    this.noiseBuffers.set(color, buffer);
+    return buffer;
+  }
+  private burst(
+    color: 'white' | 'brown' | 'pink',
+    at: number,
+    duration: number,
+    type: BiquadFilterType,
+    hz: number,
+    volume: number,
+    q = 0.7,
+    sweep?: number,
+    wet = false,
+  ) {
+    const ctx = this.context!,
+      source = ctx.createBufferSource(),
+      filter = ctx.createBiquadFilter(),
+      envelope = ctx.createGain(),
+      start = ctx.currentTime + at;
+    source.buffer = this.noise(color);
+    filter.type = type;
+    filter.Q.value = q;
+    filter.frequency.setValueAtTime(hz, start);
+    if (sweep) {
+      filter.frequency.exponentialRampToValueAtTime(sweep, start + duration * 0.5);
+      filter.frequency.exponentialRampToValueAtTime(hz, start + duration);
+    }
+    envelope.gain.setValueAtTime(0.0001, start);
+    envelope.gain.exponentialRampToValueAtTime(volume, start + Math.min(0.018, duration * 0.12));
+    envelope.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    source.connect(filter);
+    filter.connect(envelope);
+    envelope.connect(this.effects!);
+    if (wet && this.reverb) envelope.connect(this.reverb);
+    this.effectNodes.add(source);
+    source.onended = () => {
+      source.disconnect();
+      filter.disconnect();
+      envelope.disconnect();
+      this.effectNodes.delete(source);
+    };
+    source.start(start, Math.random() * 0.5);
+    source.stop(start + duration + 0.01);
+  }
+  private resonance(hz: number, endHz: number, at: number, duration: number, volume: number) {
+    const ctx = this.context!,
+      source = ctx.createOscillator(),
+      envelope = ctx.createGain(),
+      start = ctx.currentTime + at;
+    source.type = 'sine';
+    source.frequency.setValueAtTime(hz, start);
+    source.frequency.exponentialRampToValueAtTime(endHz, start + duration);
+    envelope.gain.setValueAtTime(0.0001, start);
+    envelope.gain.exponentialRampToValueAtTime(volume, start + 0.006);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    source.connect(envelope);
+    envelope.connect(this.effects!);
+    this.effectNodes.add(source);
+    source.onended = () => {
+      source.disconnect();
+      envelope.disconnect();
+      this.effectNodes.delete(source);
+    };
+    source.start(start);
+    source.stop(start + duration + 0.01);
+  }
+  playCombatSound() {
+    if (!this.ready()) return;
+    this.resonance(110, 28, 0, 0.45, 0.24);
+    this.burst('brown', 0, 0.65, 'lowpass', 220, 0.9, 0.7, undefined, true);
+    this.burst('white', 0.015, 0.13, 'lowpass', 800, 0.17, 0.7, undefined, true);
+    [0.08, 0.14, 0.215, 0.27].forEach((at) =>
+      this.burst('white', at, 0.04, 'bandpass', 1200, 0.22, 1.1),
+    );
+    [3200, 4800].forEach((hz, i) =>
+      this.burst('white', 0.18 + i * 0.06, 0.16, 'bandpass', hz, 0.09, 16),
+    );
+  }
+  playMarchSound() {
+    if (!this.ready()) return;
+    const step = 60 / 115 / 3;
+    [0, step, step * 2, step * 3].forEach((at, i) => {
+      this.burst('brown', at, 0.15, 'lowpass', i % 2 ? 220 : 180, 0.6);
+      this.burst('white', at + 0.012, 0.085, 'bandpass', 650, 0.1, 1.2);
+      this.burst('white', at + 0.04, 0.04, 'bandpass', 2400, 0.025, 8);
+    });
+  }
+  playSailSound() {
+    if (!this.ready()) return;
+    this.burst('pink', 0, 0.7, 'lowpass', 300, 0.3, 0.7, 900);
+    this.burst('brown', 0.09, 0.28, 'bandpass', 400, 0.16, 1.2);
+    this.burst('brown', 0.25, 0.35, 'bandpass', 180, 0.12, 10, 270);
+    [1260, 1739, 2851].forEach((hz, i) =>
+      this.resonance(hz, hz * 0.998, 0.32, 0.5 - i * 0.07, 0.012 / (i + 1)),
+    );
+  }
+  play(sound: Sound) {
+    if (sound === 'cannon' || sound === 'war') {
+      this.playCombatSound();
+      return;
+    }
+    if (sound === 'march') {
+      this.playMarchSound();
+      return;
+    }
+    if (sound === 'sail') {
+      this.playSailSound();
+      return;
+    }
+    if (!this.ready()) return;
+    if (sound === 'click') this.burst('brown', 0, 0.04, 'bandpass', 850, 0.1, 1);
+    if (sound === 'coins')
+      [2300, 3181, 4769].forEach((hz, i) => this.resonance(hz, hz * 0.998, i * 0.035, 0.16, 0.025));
+    if (sound === 'alert' || sound === 'ping')
+      [1046, 1442, 2358].forEach((hz, i) => this.resonance(hz, hz, 0, 0.5, 0.035 / (i + 1)));
+    if (sound === 'peace' || sound === 'victory') {
+      const notes =
+        sound === 'victory' ? [261.63, 329.63, 392, 523.25, 659.25] : [293.66, 369.99, 440, 587.33];
+      notes.forEach((hz, i) => {
+        this.resonance(hz, hz * 0.999, i * 0.15, 0.7, 0.045);
+        this.resonance(hz * 2.01, hz * 2, i * 0.15, 0.3, 0.01);
+      });
+    }
   }
 }
 export const audio = new Synthesizer();
+export const playCombatSound = () => audio.playCombatSound();
+export const playMarchSound = () => audio.playMarchSound();
+export const playSailSound = () => audio.playSailSound();

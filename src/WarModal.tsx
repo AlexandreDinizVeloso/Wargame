@@ -1,3 +1,4 @@
+import { audio } from './audio';
 import { useState } from 'react';
 import type { CasusBelli, GameView } from '../shared/types';
 import { getRelation } from '../shared/rules';
@@ -116,6 +117,18 @@ export default function WarModal({
                       offensiveAllyIds: allies,
                     },
               );
+              if (armyId && provinceId) {
+                const unit = game.battalions.find((a) => a.id === armyId),
+                  from = game.provinces.find((p) => p.id === unit?.provinceId);
+                if (
+                  unit?.isFleet ||
+                  autoTransport ||
+                  bridgeFleetId ||
+                  from?.straitNeighbors.includes(provinceId)
+                )
+                  audio.playSailSound();
+                else audio.playMarchSound();
+              }
               close();
             }}
           >
