@@ -27,7 +27,7 @@
     "lucide-react": "^0.468.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "tsx": "^4.20.5",
+    "tsx": "4.20.5",
     "ws": "^8.18.3"
   },
   "devDependencies": {

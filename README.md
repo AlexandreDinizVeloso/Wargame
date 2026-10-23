@@ -114,6 +114,15 @@ npm.cmd start
 
 Se aparecer `'tsx' is not recognized`, a instalação das dependências não foi concluída nessa pasta. O `tsx` é uma dependência de produção local; não precisa instalar globalmente.
 
+O projeto fixa `tsx` em **4.20.5**, usando o resolvedor anterior aos hooks síncronos adotados em versões posteriores. Se uma cópia anterior apresentar `ERR_MODULE_NOT_FOUND` para `shared/risk` no Node 24, confira se `shared/risk.ts` existe e atualize a dependência:
+
+```powershell
+npm.cmd install --save-exact tsx@4.20.5
+npm.cmd run dev
+```
+
+Novos downloads do projeto já incluem essa versão no `package-lock.json`; `npm ci --include=dev` respeita a versão fixada.
+
 Motor sem interface, Vite ou dependência de `dist/`:
 
 ```sh
