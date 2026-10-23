@@ -1,5 +1,6 @@
 import type { Page } from 'playwright-core';
 export async function mapPoint(page: Page, provinceId: string) {
+  await page.locator('[data-season-transition]').waitFor({ state: 'detached' });
   const shape = page.locator(`.province-shape[data-province="${provinceId}"]`);
   const locate = () =>
     shape.evaluate((el) => {
@@ -29,6 +30,43 @@ export async function mapPoint(page: Page, provinceId: string) {
       `Província ${provinceId} sem área exposta; mova/minimize a janela para interagir.`,
     );
   return point;
+}
+export async function rightClickBattalion(page: Page, battalionId: string) {
+  await page.locator('[data-season-transition]').waitFor({ state: 'detached' });
+  const marker = page.locator(`.army-token[data-battalion="${battalionId}"]`).first();
+  const locate = () =>
+    marker.evaluate((element) => {
+      const graphic = element as SVGGraphicsElement,
+        box = graphic.getBBox(),
+        matrix = graphic.getScreenCTM();
+      if (!matrix) return null;
+      for (let row = 1; row < 12; row++)
+        for (let col = 1; col < 12; col++) {
+          const point = new DOMPoint(
+            box.x + (box.width * col) / 12,
+            box.y + (box.height * row) / 12,
+          ).matrixTransform(matrix);
+          const hit = document.elementFromPoint(point.x, point.y);
+          if (hit === element || element.contains(hit)) return { x: point.x, y: point.y };
+        }
+      return null;
+    });
+  let point = await locate();
+  const inspector = page.locator('[data-context-panel]:not(.minimized)');
+  let minimized = false;
+  if (!point && (await inspector.count())) {
+    await inspector.getByRole('button', { name: /^Minimizar / }).click();
+    minimized = true;
+    point = await locate();
+  }
+  if (!point) throw new Error(`Estandarte ${battalionId} sem área exposta para clique direito.`);
+  await page.mouse.click(point.x, point.y, { button: 'right' });
+  if (minimized) {
+    const restore = page
+      .locator('[data-context-panel].minimized')
+      .getByRole('button', { name: /^Restaurar (?!tamanho)/ });
+    if (await restore.count()) await restore.click();
+  }
 }
 export async function rightClickProvince(page: Page, provinceId: string) {
   let point: { x: number; y: number };

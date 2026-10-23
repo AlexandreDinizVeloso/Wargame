@@ -1,6 +1,23 @@
-# Concórdia — Atlas de Impérios · v1.01
+# Concórdia — Atlas de Impérios · v1.1
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
+
+## v1.1 · Godot 4 3D War-Table & Long Seasons
+
+- **Cliente nativo Godot 4.3+** em [godot-client](godot-client/README_GODOT.md): mesa 3D, territórios extrudados, miniaturas de tropas, navios e construções; partidas compartilhadas com o navegador.
+- **Três rodadas por estação:** recrutamento na primavera, campanhas no verão, comércio e obras no outono, congelamento e manutenção no inverno.
+- **40 Ouro permitem dois Mercados de 20** na primeira rodada. A HUD mostra o saldo disponível após as ordens reservadas.
+- Movimentos de batalhões independentes, clique direito através das decorações e mares sem polígonos preenchidos.
+- Transições sazonais de 2,5 segundos, anúncio cinematográfico de guerra e efeitos sonoros mais discretos.
+
+```sh
+npm install
+npm run dev
+# Em outro terminal, com Godot instalado:
+npm run godot
+```
+
+Também é possível abrir `godot-client/project.godot` e apertar **F5**. O servidor padrão é `http://localhost:3000`; amigos usam o endereço do anfitrião na rede Radmin, LAN ou IPv6. Veja [regras e validação v1.1](docs/V1_1.md), [cliente Godot](godot-client/README_GODOT.md) e [rede](docs/REDE.md).
 
 ## v1.01 · Risk-Paced Edition & Audio/UI Fix
 

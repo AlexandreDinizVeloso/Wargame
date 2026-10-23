@@ -58,3 +58,32 @@ test('v101: nomes do mapa são posicionados fora das miniaturas e de outros nome
     boxes.push(box);
   }
 });
+
+test('v110: áreas interativas das formações preservam os marcadores de batalha em todos os zooms', () => {
+  const map = makeMap('campaign');
+  const province = map.find((p) => p.id === 'castile')!;
+  const troops = Array.from(
+    { length: 12 },
+    (_, i) => ({ id: `battle-army-${i}`, provinceId: province.id }) as Battalion,
+  );
+  for (const scale of [0.45, 1, 2.8]) {
+    const reserved = [
+      {
+        x: province.x + 22 / scale,
+        y: province.y - 24 / scale,
+        width: 24 / scale,
+        height: 24 / scale,
+      },
+    ];
+    const markers = layoutArmyMarkers(troops, map, scale, reserved);
+    assert.equal(markers.size, troops.length);
+    assert.deepEqual(markers, layoutArmyMarkers([...troops].reverse(), map, scale, reserved));
+    for (const marker of markers.values())
+      for (const battle of reserved)
+        assert.ok(
+          Math.abs(marker.x - battle.x) * 2 >= marker.width + battle.width ||
+            Math.abs(marker.y - battle.y) * 2 >= marker.height + battle.height,
+          `Formação invade o marcador histórico no zoom ${scale}.`,
+        );
+  }
+});

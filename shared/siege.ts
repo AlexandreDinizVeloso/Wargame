@@ -2,6 +2,7 @@ import { goldRules, hasFoundry } from './factions';
 import type { Battalion, GameState, GameView, Province } from './types';
 import { atWar, getRelation, sameWarSide } from './rules';
 import { commanderFor, hasSkill } from './military';
+import { seasonRulesAt } from './world';
 /** Progress after the arrival round, before any assault orders. */
 export function siegeProgressPerTurn(
   g: GameState | GameView,
@@ -28,6 +29,7 @@ export function siegeProgressPerTurn(
     );
   return (
     1 +
+    seasonRulesAt(g.turn).siegeProgressBonus +
     (goldRules(g) && g.turn >= 21 ? 1 : 0) +
     (goldRules(g) &&
     g.players.find((p) => p.id === ownerId)?.nationId === 'kaldor' &&

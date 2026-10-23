@@ -60,7 +60,8 @@ import {
   zeroComposition,
 } from '../shared/rules';
 import { SCENARIOS } from '../shared/scenarios';
-import { effectiveSupply, isCamouflaged, seasonAt, winterActive } from '../shared/strategy';
+import { effectiveSupply, isCamouflaged, seasonAt } from '../shared/strategy';
+import { seasonRulesAt } from '../shared/world';
 import type {
   BotArchetype,
   GameCommand,
@@ -92,7 +93,7 @@ import {
 import { desertForMaintenance, recordGoldReparations } from './economy';
 import { emergencyLevy } from './emergency';
 import { eraTransition } from './goldWorld';
-import { applyEncirclement } from './logistics';
+import { applyEncirclement, applyWinterAttrition } from './logistics';
 import { resolveBombardments } from './maritime';
 import { canSeeNotification, notify } from './notifications';
 import { applyScenario } from './scenarios';
@@ -162,7 +163,7 @@ export function createGame(
       mapId: mode === 'quick' ? `natural-earth-v101-${theater}` : 'natural-earth-v101-world',
       maxTurns,
       turnSeconds,
-      createdVersion: '1.0.1',
+      createdVersion: '1.1.0',
       allowBotSecretVictory: false,
       enableSecretObjectives: true,
     },
@@ -1100,14 +1101,7 @@ function moveBattalions(g: GameState, report: TurnResolutionReport, moved: Set<s
     a.movementPoints = movementAllowance(g, a);
     a.movementCredit = Math.min(
       Math.max(2, a.movementPoints),
-      (a.movementCredit ?? 0) +
-        (a.isFleet &&
-        winterActive(g) &&
-        !immune &&
-        a.blitzUntilTurn !== g.turn &&
-        !hasSkill(g, a.ownerId, 'NAV_T3')
-          ? 0.75
-          : a.movementPoints),
+      (a.movementCredit ?? 0) + a.movementPoints,
     );
     for (
       let step = 0;
@@ -1123,7 +1117,7 @@ function moveBattalions(g: GameState, report: TurnResolutionReport, moved: Set<s
         );
         break;
       }
-      const cost =
+      const terrainCost =
         target.terrain === 'forest' &&
         !from.straitNeighbors.includes(target.id) &&
         !a.isFleet &&
@@ -1132,12 +1126,16 @@ function moveBattalions(g: GameState, report: TurnResolutionReport, moved: Set<s
         commanderFor(g, a)?.trait !== 'BLITZ_VANGUARD'
           ? 1.5
           : 1;
+      // A legal first march always fits the formation's base reach. Previously a
+      // one-point guard in Siberia needed 1.5 points and silently stayed behind.
+      const cost = step === 0 ? Math.min(terrainCost, a.movementPoints) : terrainCost;
       if (a.movementCredit < cost) break;
       if (
         step > 0 &&
         !a.isFleet &&
         !hasSkill(g, a.ownerId, 'CAV_T3') &&
         a.blitzUntilTurn !== g.turn &&
+        seasonRulesAt(g.turn).landMovementBonus === 0 &&
         (!['plains', 'coastal'].includes(from.terrain) ||
           !['plains', 'coastal'].includes(target.terrain) ||
           a.movementPoints < 2)
@@ -1249,12 +1247,9 @@ function applySupply(g: GameState, report: TurnResolutionReport) {
         effectiveSupply(g, id, p) +
         (own.some((a) => commanderFor(g, a)?.trait === 'QUARTERMASTER') ? 6 : 0);
       if (total <= limit || !count) continue;
-      const immune = g.players.find((p) => p.id === id)?.nationId === 'ferro_norte',
-        hostile = !!p.ownerId && p.ownerId !== id && atWar(g, id, p.ownerId);
       const losses = Math.min(
         count,
         Math.ceil((attritionLoss(total, limit) * count) / Math.max(1, total)) *
-          (winterActive(g) && !immune && hostile ? 2 : 1) *
           invasionAttrition(g, p.id, id),
       );
       const shares = group.map((a) => Math.floor((losses * unitCount(a)) / count));
@@ -1500,6 +1495,7 @@ export function resolveTurn(g: GameState, _now = 0) {
   syncWars(g);
   const economies = new Map(g.players.map((p) => [p.id, realmEconomy(g, p.id)]));
   if (goldRules(g)) recordGoldReparations(g, report);
+  const beforeLogistics = new Map(g.battalions.map((army) => [army.id, unitCount(army)]));
   const starving = applySupply(g, report);
   for (const f of g.battalions.filter((a) => a.isFleet && a.embarkedArmyId)) {
     const cargo = g.battalions.find((a) => a.id === f.embarkedArmyId);
@@ -1573,6 +1569,18 @@ export function resolveTurn(g: GameState, _now = 0) {
     });
   }
   applyEncirclement(g, report);
+  applyWinterAttrition(g, report, beforeLogistics);
+  // Naval freezing can reduce transport capacity after the regular supply step.
+  for (const fleet of g.battalions.filter((army) => army.isFleet && army.embarkedArmyId)) {
+    const cargo = g.battalions.find((army) => army.id === fleet.embarkedArmyId);
+    if (!cargo) continue;
+    const excess = unitCount(cargo) - fleet.transports * BALANCE.transportCapacity;
+    if (excess > 0) {
+      removeUnits(cargo, excess);
+      report.events.push(`${excess} tropas perderam transporte após as perdas navais de inverno.`);
+      if (!unitCount(cargo)) destroyBattalion(g, cargo);
+    }
+  }
   for (const r of g.reparations.filter((r) => !goldRules(g) && r.untilTurn >= g.turn)) {
     const payer = playerOf(g, r.payerId),
       recipient = playerOf(g, r.recipientId),

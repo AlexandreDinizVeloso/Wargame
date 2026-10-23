@@ -1,4 +1,5 @@
 import { ECONOMY_BALANCE } from './balance';
+import { seasonRulesAt } from './world';
 import { councilModifiers } from './councilEffects';
 import { continentBonuses } from './risk';
 import { isImpassableCrossing } from './map';
@@ -93,10 +94,10 @@ export const NATIONS: NationDefinition[] = [
     religion: 'ANCESTRAL',
     homeProvinceId: 'scandinavia',
     style: 'Saqueadores',
-    mechanic: '+2 ouro por baixa inimiga; saque recupera moral; imune a inverno e floresta',
+    mechanic: '+2 ouro por baixa inimiga; saque recupera moral; floresta não encarece a marcha',
     ideas: [
       'Saqueadores',
-      '+2 ouro por baixa inimiga; saque recupera moral; imune a inverno e floresta',
+      '+2 ouro por baixa inimiga; saque recupera moral; floresta não encarece a marcha',
     ],
     modifiers: {},
     initial: {
@@ -552,7 +553,6 @@ export function realmEconomy(
   const modifier = (p: Province, owner: Player) =>
     (owner.faith === 'MERCHANT' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.25 : 1) *
     (owner.nationId === 'vespera' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.3 : 1) *
-    (g.season === 'AUTUMN' && p.strategicResource === 'GRAIN' ? 1.15 : 1) *
     (g.globalEvent?.id === 'GOLD_RUSH' && p.strategicResource === 'GOLD_MINE' ? 1.5 : 1);
   const raiders = (p: Province) => [
     ...new Set(
@@ -575,7 +575,11 @@ export function realmEconomy(
       effectiveTax(p, owner.faith, isBlockaded(g, p), owner.religiousPolicy) *
       modifier(p, owner) *
       councilModifiers(owner, g.turn).incomeMultiplier,
-    trade: tradeIncomeOf(p) * modifier(p, owner) * councilModifiers(owner, g.turn).incomeMultiplier,
+    trade:
+      tradeIncomeOf(p) *
+      modifier(p, owner) *
+      councilModifiers(owner, g.turn).incomeMultiplier *
+      seasonRulesAt(g.turn).tradeMultiplier,
   });
   const rawTaxes = owned.reduce(
       (n, p) => n + revenue(p, actor).tax * (raiders(p).length ? 0.65 : 1),
@@ -588,7 +592,10 @@ export function realmEconomy(
   for (const r of g.relations.filter((r) => r.a === id || r.b === id))
     for (const issuer of r.embargoes) embargo *= issuer === id ? 0.95 : 0.85;
   const maritimeTrade = active
-    ? maritimeIncome(g, id) * ECONOMY_BALANCE.maritimeIncomeMultiplier * policy.incomeMultiplier
+    ? maritimeIncome(g, id) *
+      ECONOMY_BALANCE.maritimeIncomeMultiplier *
+      policy.incomeMultiplier *
+      seasonRulesAt(g.turn).tradeMultiplier
     : 0;
   const trade =
     maritimeTrade +
@@ -674,6 +681,9 @@ export function realmEconomy(
         n +
         maintenanceOf(a, goldRules(g) ? actor.nationId : undefined) *
           logisticsPosture(g, a).multiplier *
+          (!a.isFleet && logisticsPosture(g, a).id === 'CAMPAIGN'
+            ? seasonRulesAt(g.turn).campaignUpkeepMultiplier
+            : 1) *
           policy.upkeepMultiplier *
           capMultiplier *
           (a.isMercenary ? 2.2 : 1) *
@@ -782,19 +792,26 @@ export function orderCost(
     o.type === 'BUILD_PORT' ||
     o.type === 'BUILD_MARKET'
   ) {
-    const building = constructionType(o)!;
+    const building = constructionType(o)!,
+      level = p ? buildingLevel(p, building) : 0,
+      fixedFirstLevel = level === 0 && ['MARKET', 'BARRACKS', 'FORT', 'PORT'].includes(building);
     gold =
       BUILDINGS[building].baseCost *
-      ((p ? buildingLevel(p, building) : 0) + 1) *
-      (actor && g?.provinces ? imperialInflation({ provinces: g.provinces }, actor.id) : 1);
-    if (building === 'FORT')
+      (level + 1) *
+      (!fixedFirstLevel && actor && g?.provinces
+        ? imperialInflation({ provinces: g.provinces }, actor.id)
+        : 1);
+    if (!fixedFirstLevel && building === 'FORT')
       gold *= (actor?.faith === 'REFORMED' ? 0.75 : 1) * (actor?.nationId === 'kaldor' ? 0.7 : 1);
     if (
+      !fixedFirstLevel &&
       goldRules(g) &&
       actor?.nationId === 'sapiencia' &&
       ['MARKET', 'BARRACKS', 'FORT', 'FOUNDRY'].includes(building)
     )
       gold *= 0.85;
+    if (building === 'MARKET' || building === 'PORT')
+      gold *= seasonRulesAt(g?.turn ?? 1).marketPortCostMultiplier;
   } else if (o.type === 'AUTO_TRANSPORT')
     gold = o.fleetId ? 0 : goldRules(g) && actor?.nationId === 'vespera' ? 7.5 : 15;
   else if (o.type === 'PACIFY') gold = ECONOMY_BALANCE.pacifyGold;

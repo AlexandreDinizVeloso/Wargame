@@ -1,5 +1,7 @@
 import { councilModifiers } from './councilEffects';
 import { goldRules } from './factions';
+import { SEASON_RULES, seasonAt } from './world';
+export { seasonAt } from './world';
 import type {
   Battalion,
   GameState,
@@ -7,20 +9,10 @@ import type {
   GlobalEventId,
   Player,
   SecretObjective,
-  Season,
   StrategicResource,
 } from './types';
 import { atWar, controller, getRelation, unitCount } from './rules';
-export const SEASONS: Record<Season, { icon: string; name: string; effect: string }> = {
-  SPRING: { icon: '🌱', name: 'Primavera', effect: '+10% recuperação de moral' },
-  SUMMER: { icon: '☀️', name: 'Verão', effect: 'Campanhas sem penalidade sazonal' },
-  AUTUMN: { icon: '🍂', name: 'Outono', effect: '+15% receita nas terras com trigo' },
-  WINTER: {
-    icon: '❄️',
-    name: 'Inverno',
-    effect: 'Atrito hostil dobrado; −25% suprimento e navegação',
-  },
-};
+export const SEASONS = SEASON_RULES;
 export const EVENTS: Record<GlobalEventId, { name: string; effect: string }> = {
   GOLD_RUSH: { name: 'Corrida do Ouro', effect: '+50% renda nas Minas de Ouro' },
   HARSH_WINTER: { name: 'Inverno Rigoroso', effect: 'Efeitos de inverno durante duas rodadas' },
@@ -58,10 +50,8 @@ export const RESOURCES: Record<
   GOLD_MINE: { icon: '🪙', name: 'Mina de Ouro', effect: '+5 imposto base' },
   RELIC: { icon: '🏛️', name: 'Relíquia', effect: '+3 ouro e +10% recuperação nacional de moral' },
 };
-export const seasonAt = (turn: number): Season =>
-  (['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'] as const)[(turn - 1) % 4];
 export const winterActive = (g: Pick<GameState, 'season' | 'globalEvent' | 'turn'>) =>
-  g.season === 'WINTER' ||
+  seasonAt(g.turn) === 'WINTER' ||
   (g.globalEvent?.id === 'HARSH_WINTER' && g.globalEvent.endsTurn >= g.turn);
 export const resourceCount = (
   g: Pick<GameState, 'provinces'>,
@@ -225,13 +215,12 @@ export function effectiveSupply(
     (ironNorth && p.terrain === 'forest' ? Math.max(0, 18 - p.baseSupplyLimit) : 0);
   return Math.max(
     0,
-    (local +
+    local +
       globalSupplyBonus(g, id) +
       councilModifiers(
         g.players.find((player) => player.id === id),
         g.turn,
         p.id,
-      ).supplyBonus) *
-      (winterActive(g) && !ironNorth ? 0.75 : 1),
+      ).supplyBonus,
   );
 }

@@ -8,10 +8,15 @@ export interface MapMarkerPosition {
 const overlaps = (a: MapMarkerPosition, b: MapMarkerPosition) =>
   Math.abs(a.x - b.x) * 2 < a.width + b.width && Math.abs(a.y - b.y) * 2 < a.height + b.height;
 /** Keep symbols apart in screen space while retaining a leader back to their province. */
-export function layoutArmyMarkers(armies: Battalion[], provinces: Province[], scale: number) {
+export function layoutArmyMarkers(
+  armies: Battalion[],
+  provinces: Province[],
+  scale: number,
+  reservedMarkers: MapMarkerPosition[] = [],
+) {
   const zoom = Math.max(0.01, scale),
     positions = new Map<string, MapMarkerPosition>(),
-    placed: MapMarkerPosition[] = [];
+    placed: MapMarkerPosition[] = [...reservedMarkers];
   for (const army of [...armies].sort(
     (a, b) => a.provinceId.localeCompare(b.provinceId) || a.id.localeCompare(b.id),
   )) {

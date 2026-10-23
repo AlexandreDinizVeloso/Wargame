@@ -2,3 +2,7 @@ node_modules
 dist
 .local
 package-lock.json
+godot-client/.godot
+godot-client/build
+godot-client/data/bootstrap.json
+godot-client/data/manifest.json

@@ -6,6 +6,7 @@ import type { Battalion, Province, GameState, GameView } from './types';
 import { commanderFor, hasSkill } from './military';
 import { hasReligiousWar, isCamouflaged, resourceCount } from './strategy';
 import { clamp, controller, getRelation, isBlockaded, nationOf } from './rules';
+import { seasonRulesAt } from './world';
 const coalitionMorale = (g: Pick<GameState, 'wars'>, id: string) =>
   g.wars.some((w) => w.active && w.casusBelli === 'COALITION' && w.attackerIds.includes(id))
     ? 1.2
@@ -129,6 +130,7 @@ export function compositionPower(
   return (
     value *
     councilBonus *
+    (defending ? 1 : seasonRulesAt(g.turn).landAttackMultiplier) *
     (defending ? policy.defenseMultiplier : policy.attackMultiplier) *
     (goldRules(g) && actor?.nationId === 'veridia' && ['forest', 'mountains'].includes(p.terrain)
       ? 1.2
@@ -194,7 +196,10 @@ export function combatPowers(
     );
   const baseAttack = attackers.reduce((n, a) => n + compositionPower(g, a, p, false, defenders), 0);
   const crossedAttack = attackers.reduce(
-    (n, a) => n + compositionPower(g, a, p, false, defenders) * (crossing(a) ? 0.85 : 1),
+    (n, a) =>
+      n +
+      compositionPower(g, a, p, false, defenders) *
+        (crossing(a) ? seasonRulesAt(g.turn).riverAttackMultiplier : 1),
     0,
   );
   const riverCrossingModifier = baseAttack > 0 ? crossedAttack / baseAttack : 1;

@@ -2,7 +2,7 @@ import { goldNumber, manpowerNumber } from './resourceNumbers';
 import { authorityIncome, getNationAuthority } from '../shared/economy';
 import { FACTION_TRAITS, goldRules } from '../shared/factions';
 import { verticalRules } from '../shared/fogOfWar';
-import { ERAS, campaignEra } from '../shared/world';
+import { ERAS, campaignEra, seasonAt, seasonProgress, SEASON_RULES } from '../shared/world';
 import CampaignSaveControls from './CampaignSaveControls';
 import { CONTINENT_BONUSES } from '../shared/risk';
 import SupremeCommandButtons from './SupremeCommandButtons';
@@ -15,6 +15,10 @@ import OutlinerDock from './OutlinerDock';
 import TacticalBattleModal from './TacticalBattleModal';
 import { TopBarModal } from './TopBarModal';
 import TurnResolutionSequencer, { CINEMATIC_DURATION } from './TurnResolutionSequencer';
+import SeasonTransitionBanner from './SeasonTransitionBanner';
+import WarCutsceneModal from './WarCutsceneModal';
+import { useCampaignCinematics } from './useCampaignCinematics';
+import { queuedGoldCost } from './orders';
 import TutorialOverlay from './TutorialOverlay';
 import { useStrategistProfile } from './useStrategistProfile';
 const StrategistProfileModal = lazy(() => import('./StrategistProfileModal'));
@@ -231,6 +235,7 @@ const GLOBAL_PANELS: Panel[] = ['diplomacy', 'skills', 'maritime', 'world', 'sec
 export default function App() {
   const { game, playerId, status, error, setError, send, command, leave, pings, seatInvites } =
     useGame();
+  const { cinematic, complete: completeCinematic } = useCampaignCinematics(game, playerId);
   const { profile, setProfile, toast: achievementToast } = useStrategistProfile(game, playerId);
   const [profileOpen, setProfileOpen] = useState(false);
   const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
@@ -364,7 +369,7 @@ export default function App() {
     const wins = battles.filter((b) => b.winnerId === playerId).length;
     setTurnAnnouncement({
       turn: game.turn,
-      season: SEASONS[game.season].name,
+      season: SEASONS[seasonAt(game.turn)].name,
       summary: battles.length
         ? `${battles.length} batalha(s) · ${wins} vitória(s) para sua nação`
         : 'Suas fronteiras atravessaram uma rodada sem batalhas.',
@@ -423,8 +428,7 @@ export default function App() {
     }
   }, [game?.code, game?.turn, game?.firstReadyPlayerName]);
   useEffect(() => audio.subscribe(() => setMuted(audio.muted)), []);
-  const seenWars = useRef(new Set<string>()),
-    seenWinner = useRef('');
+  const seenWinner = useRef('');
   const open = (panel: Panel) => {
     setProfileOpen(false);
     setFocusedWindow(panel);
@@ -496,26 +500,26 @@ export default function App() {
     setReplay({ report, progress: 0, nonce: performance.now() });
   }, []);
   useEffect(() => {
-    if (!replay) return;
+    if (!replay || cinematic) return;
     const started = performance.now(),
-      cinematic = verticalRules(game),
-      duration = cinematic ? CINEMATIC_DURATION : 4000;
-    if (cinematic) audio.play('horn');
-    if (!cinematic && replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
-    if (!cinematic && replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
+      cinematicReplay = verticalRules(game),
+      duration = cinematicReplay ? CINEMATIC_DURATION : 4000;
+    if (cinematicReplay) audio.play('horn');
+    if (!cinematicReplay && replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
+    if (!cinematicReplay && replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
     const finish = setTimeout(() => {
       setReplay(null);
-      if (cinematic) setTacticalBattle(null);
+      if (cinematicReplay) setTacticalBattle(null);
     }, duration);
     const marching = setTimeout(() => {
-      if (cinematic) {
+      if (cinematicReplay) {
         if (replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
         if (replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
       }
     }, 1500);
     const cannon = setTimeout(
         () => {
-          if (cinematic) {
+          if (cinematicReplay) {
             const battles = [...replay.report.battles].sort(
               (a, b) => b.attackerTroops + b.defenderTroops - (a.attackerTroops + a.defenderTroops),
             );
@@ -525,7 +529,7 @@ export default function App() {
             if (chosen) setTacticalBattle(chosen);
           } else if (replay.report.battles.length) audio.playCombatSound();
         },
-        cinematic ? 3500 : 1450,
+        cinematicReplay ? 3500 : 1450,
       ),
       peace = setTimeout(() => {
         if (replay.report.diplomaticChanges.some((c) => c.action === 'PEACE')) audio.play('peace');
@@ -535,7 +539,7 @@ export default function App() {
       const progress = Math.min(1, (t - started) / duration);
       if (progress === 1) {
         setReplay(null);
-        if (cinematic) setTacticalBattle(null);
+        if (cinematicReplay) setTacticalBattle(null);
         return;
       }
       setReplay((r) => (r ? { ...r, progress } : null));
@@ -549,7 +553,7 @@ export default function App() {
       clearTimeout(marching);
       clearTimeout(peace);
     };
-  }, [replay?.nonce]);
+  }, [replay?.nonce, cinematic?.id]);
   const closeTacticalBattle = useCallback(() => setTacticalBattle(null), []);
   const replayTurn = useRef<{ code: string; turn: number } | null>(null);
   useEffect(() => {
@@ -561,13 +565,6 @@ export default function App() {
   }, [game?.code, game?.turn, playReplay]);
   useEffect(() => {
     if (!game) return;
-    for (const w of game.wars.filter((w) => w.active)) {
-      const key = `${game.code}:${w.id}`;
-      if (!seenWars.current.has(key)) {
-        seenWars.current.add(key);
-        audio.play('war');
-      }
-    }
     if (game.phase === 'finished' && seenWinner.current !== game.code) {
       seenWinner.current = game.code;
       setEndOpen(true);
@@ -580,6 +577,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
+      if (cinematic) return;
       if (e.key === 'Escape') {
         if (focusedWindow === 'quick-actions' && quickActionsOpen) {
           setQuickActionsOpen(false);
@@ -606,7 +604,7 @@ export default function App() {
     };
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
-  }, [manual, menu, endOpen, warRequest, panels, focusedWindow, quickActionsOpen]);
+  }, [manual, menu, endOpen, warRequest, panels, focusedWindow, quickActionsOpen, cinematic?.id]);
   const currentCode = game?.code;
   useEffect(() => {
     setPanels([]);
@@ -667,6 +665,9 @@ export default function App() {
   const selected = game.provinces.find((p) => p.id === provinceId),
     selectedArmy = game.battalions.find((a) => a.id === armyId),
     eco = realmEconomy(game, playerId),
+    queuedGold = queuedGoldCost(game, playerId),
+    availableGold = Math.max(0, me.gold - queuedGold),
+    currentSeason = seasonProgress(game.turn),
     authorityGain = authorityIncome(game, playerId),
     alive = livingPlayers(game),
     land = landProvinces(game),
@@ -801,7 +802,22 @@ export default function App() {
       onClickCapture={rootClick}
       data-interface={cartographic ? 'cartographic' : 'classic'}
       data-audio-muted={muted}
+      data-season={currentSeason.season}
     >
+      {cinematic?.type === 'season' && (
+        <SeasonTransitionBanner
+          season={cinematic.season}
+          turn={cinematic.turn}
+          onComplete={completeCinematic}
+        />
+      )}
+      {cinematic?.type === 'war' &&
+        (() => {
+          const war = game.wars.find((entry) => entry.id === cinematic.warId);
+          return war ? (
+            <WarCutsceneModal game={game} war={war} onComplete={completeCinematic} />
+          ) : null;
+        })()}
       {achievementToast.length > 0 && (
         <aside className="achievement-toast" role="status">
           🏅 Conquista desbloqueada: {achievementToast.join(' · ')}
@@ -901,13 +917,17 @@ export default function App() {
         <div className="top-resources">
           <div
             className="hud-stat"
-            title={`Impostos ${number(eco.taxes, 1)}, comércio ${number(eco.trade, 1)}, dízimos ${number(eco.tithes, 1)}, nós marítimos ${number(eco.maritimeTrade, 1)} (incluídos no comércio); continentes ${goldNumber(eco.continentGold)}; compromissos do Conselho ${goldNumber(eco.councilCashflow)}; manutenção ${number(eco.upkeep, 1)}.`}
+            data-testid="available-gold"
+            data-queued-gold={queuedGold}
+            title={`Tesouro ${goldNumber(me.gold)}; reservado em ordens ${goldNumber(queuedGold)}; disponível ${goldNumber(availableGold)} Ouro. Impostos ${number(eco.taxes, 1)}, comércio ${number(eco.trade, 1)}, dízimos ${number(eco.tithes, 1)}, nós marítimos ${number(eco.maritimeTrade, 1)} (incluídos no comércio); continentes ${goldNumber(eco.continentGold)}; compromissos do Conselho ${goldNumber(eco.councilCashflow)}; manutenção ${number(eco.upkeep, 1)}.`}
           >
             <Coins size={16} />
             <span>
-              <strong data-testid="treasury">{goldNumber(me.gold)}</strong>
+              <strong data-testid="treasury" data-gold-available={availableGold}>
+                {goldNumber(availableGold)}
+              </strong>
               <small>
-                OURO{' '}
+                OURO DISPONÍVEL{' '}
                 <b className={eco.net >= 0 ? 'positive' : 'danger'}>
                   {eco.net >= 0 ? '+' : ''}
                   {goldNumber(eco.net)}/rod.
@@ -952,35 +972,46 @@ export default function App() {
           </div>
         </div>
         <div className="turn-status">
-          {goldRules(game) && (
-            <span
-              className="era-pill"
-              title={ERAS[campaignEra(game.turn)].description}
-              data-campaign-era={campaignEra(game.turn)}
-            >
-              {ERAS[campaignEra(game.turn)].icon} {ERAS[campaignEra(game.turn)].act} ·{' '}
-              {ERAS[campaignEra(game.turn)].name}
-            </span>
-          )}
-          <strong>
-            Rodada {String(game.turn).padStart(2, '0')} <small>∞</small>
-          </strong>
-          <span>
-            {(game.matchConfig.scenarioId === 'WORLD_GRAND_CAMPAIGN' ||
-            game.matchConfig.scenarioId === 'AGE_OF_SAIL'
-              ? 1500
-              : 1550) + Math.floor((game.turn - 1) / 4)}{' '}
-            · {SEASONS[game.season].icon} {SEASONS[game.season].name}
-          </span>
-          <small>
-            {game.phase === 'finished'
-              ? 'Campanha encerrada'
-              : game.paused
-                ? 'Campanha pausada'
-                : remaining === null
-                  ? 'Planejamento livre'
-                  : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')} para resolver`}
-          </small>
+          <div
+            className="season-widget"
+            data-testid="season-widget"
+            data-season={currentSeason.season}
+            data-season-index={currentSeason.index}
+            title={`${SEASON_RULES[currentSeason.season].effect} · Ano ${(game.matchConfig.scenarioId === 'WORLD_GRAND_CAMPAIGN' || game.matchConfig.scenarioId === 'AGE_OF_SAIL' ? 1500 : 1550) + Math.floor((game.turn - 1) / 12)}`}
+          >
+            <strong>
+              {SEASON_RULES[currentSeason.season].icon}{' '}
+              {SEASON_RULES[currentSeason.season].name.toUpperCase()}{' '}
+              <span>Rodada {currentSeason.index}/3</span>
+            </strong>
+            <small>
+              Próxima estação: {SEASON_RULES[currentSeason.nextSeason].icon}{' '}
+              {SEASON_RULES[currentSeason.nextSeason].name}{' '}
+              {currentSeason.remaining
+                ? `em ${currentSeason.remaining} rodada${currentSeason.remaining === 1 ? '' : 's'}`
+                : 'após esta rodada'}
+            </small>
+            <div className="season-time-row">
+              {goldRules(game) && (
+                <span
+                  title={`${ERAS[campaignEra(game.turn)].name}: ${ERAS[campaignEra(game.turn)].description}`}
+                  data-campaign-era={campaignEra(game.turn)}
+                >
+                  {ERAS[campaignEra(game.turn)].icon} {ERAS[campaignEra(game.turn)].act}
+                </span>
+              )}
+              <span>Rodada {String(game.turn).padStart(2, '0')} ∞</span>
+              <span>
+                {game.phase === 'finished'
+                  ? 'Encerrada'
+                  : game.paused
+                    ? 'Pausada'
+                    : remaining === null
+                      ? 'Livre'
+                      : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}`}
+              </span>
+            </div>
+          </div>
         </div>
         <button
           className={`ready-button ${me.ready ? 'confirmed' : ''}`}

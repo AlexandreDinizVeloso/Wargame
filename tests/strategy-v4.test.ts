@@ -207,7 +207,7 @@ test('Ferro-Norte recebe dois ouro por baixa inimiga e recupera moral no saque',
   assert.equal(target.occupierId, a.id);
   assert.ok(unit.morale > afterBattle);
 });
-test('Ferro-Norte atravessa floresta em uma rodada e é imune ao inverno', () => {
+test('Ferro-Norte atravessa floresta em uma rodada durante o inverno', () => {
   const {
     g,
     players: [a],
@@ -216,7 +216,7 @@ test('Ferro-Norte atravessa floresta em uma rodada e é imune ao inverno', () =>
   const target = g.provinces.find((p) => p.id === 'france')!;
   target.ownerId = a.id;
   target.terrain = 'forest';
-  g.turn = 4;
+  g.turn = 10;
   g.season = 'WINTER';
   const unit = army(g, a.id, 'castile', { infantry: 5 });
   submitOrder(g, a.id, {
@@ -406,15 +406,15 @@ test('ameaça cresce em guerra sem causa justa e cai oito em paz', () => {
   resolveTurn(g);
   assert.equal(a.aggressiveExpansion, 12);
 });
-test('estações ciclam e crises têm efeitos por exatamente duas rodadas', () => {
+test('estações duram três rodadas e crises têm efeitos por exatamente duas rodadas', () => {
   const { g } = setup();
   assert.equal(g.season, 'SPRING');
   resolveTurn(g);
-  assert.equal(g.season, 'SUMMER');
+  assert.equal(g.season, 'SPRING');
   g.turn = 4;
   const r = emptyTurnReport(4, g.diet);
   advanceWorld(g, r);
-  assert.equal(g.season, 'WINTER');
+  assert.equal(g.season, 'SUMMER');
   assert.equal(g.globalEvent?.endsTurn, 5);
   assert.ok(r.events.length > 0);
   g.turn = 5;
@@ -576,7 +576,7 @@ test('suprimento nacional de trigo reduz atrito e dividir pilhas não aumenta pe
   assert.equal(make(true, false), 2);
   assert.equal(make(false, true), make(false, false));
 });
-test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas penalidades', () => {
+test('inverno impõe perda mínima de vinte por cento fora do território próprio a todas as facções', () => {
   const run = (winter: boolean, immune: boolean) => {
     const {
       g,
@@ -592,7 +592,7 @@ test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas pe
     p.unrest = 0;
     p.religion = a.faith;
     const u = army(g, a.id, p.id, { infantry: 24 });
-    g.turn = winter ? 4 : 2;
+    g.turn = winter ? 10 : 4;
     for (const nation of g.players) {
       nation.activeDilemma = null;
       nation.lastDilemmaTurn = g.turn;
@@ -604,10 +604,10 @@ test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas pe
     return before - unitCount(u);
   };
   assert.equal(run(false, false), 1);
-  assert.equal(run(true, false), 6);
-  assert.equal(run(true, true), 1);
+  assert.equal(run(true, false), 5);
+  assert.equal(run(true, true), 5);
 });
-test('moral própria recupera rapidamente; outono amplia receitas de trigo', () => {
+test('moral própria recupera rapidamente; outono dobra comércio e conserva impostos', () => {
   const {
     g,
     players: [a],
@@ -619,12 +619,14 @@ test('moral própria recupera rapidamente; outono amplia receitas de trigo', () 
   resolveTurn(g);
   close(u.morale, 85);
   p.strategicResource = 'GRAIN';
+  g.turn = 4;
   g.season = 'SUMMER';
   const summer = realmEconomy(g, a.id);
+  g.turn = 7;
   g.season = 'AUTUMN';
   const autumn = realmEconomy(g, a.id);
-  close(autumn.taxes / summer.taxes, 1.15);
-  close(autumn.trade / summer.trade, 1.15);
+  close(autumn.taxes / summer.taxes, 1);
+  close(autumn.trade / summer.trade, 2);
 });
 
 test('divisão rápida mantém 50/50 com composições ímpares e a telemetria inclui tributo de vassalagem', () => {

@@ -9,6 +9,7 @@ import { declareWar, offerPeace } from '../server/diplomacy';
 import { resolveBattle } from '../server/combat';
 import { writeSnapshot } from '../server/storage';
 import { emptyTurnReport, type GameState, type GameView } from '../shared/types';
+import { seasonAt } from '../shared/world';
 export interface FixtureSession {
   code: string;
   playerId: string;
@@ -21,6 +22,7 @@ export function seedBrowserFixtures(filename: string) {
     startGame(g);
     g.isPublic = false;
     g.turn = 3;
+    g.season = seasonAt(g.turn);
     return g;
   };
   const alerts = make('ALERT6'),
@@ -71,13 +73,13 @@ export function seedBrowserFixtures(filename: string) {
   lobby.isPublic = false;
   const visual = structuredClone(alerts);
   visual.code = 'VISRC9';
-  visual.turn = 4;
-  visual.season = 'WINTER';
+  visual.turn = 12;
+  visual.season = seasonAt(visual.turn);
   visual.players[0].influence = 30;
   syncNationAuthority(visual.players[0]);
   visual.players[0].activeDilemma = {
     id: 'military-council',
-    turn: 4,
+    turn: visual.turn,
     targetProvinceId: 'castile',
   };
   const councilPolicy = make('POL101'),
@@ -87,10 +89,12 @@ export function seedBrowserFixtures(filename: string) {
     [councilCrisis, 'mint'],
   ] as const) {
     game.turn = 4;
+    game.season = seasonAt(game.turn);
     game.players[0].activeDilemma = { id: card, turn: 4, targetProvinceId: 'castile' };
   }
   const recruitment = make('MASS01');
   recruitment.turn = 1;
+  recruitment.season = seasonAt(recruitment.turn);
   recruitment.players[0].gold = 100;
   recruitment.players[0].manpower = 10;
   const recruitmentOwner = recruitment.players[0];
@@ -113,6 +117,46 @@ export function seedBrowserFixtures(filename: string) {
     );
   }
   recruitment.orders[recruitmentOwner.id] = [{ type: 'BUILD_MARKET', provinceId: 'castile' }];
+  const construction = make('BUILD1');
+  construction.turn = 1;
+  construction.season = seasonAt(construction.turn);
+  construction.players[0].gold = 40;
+  construction.players[0].ready = false;
+  for (const id of ['castile', 'france']) {
+    const city = construction.provinces.find((p) => p.id === id)!;
+    Object.assign(city, {
+      ownerId: construction.players[0].id,
+      occupierId: null,
+      siege: null,
+      marketLevel: 0,
+      maxBuildingSlots: 6,
+      pacification: 100,
+      unrest: 0,
+    });
+  }
+  const movement = createGame('MOVE11', 'campaign', false, 110);
+  for (const nation of ['turan', 'vespera', 'aurelia'] as const)
+    addPlayer(movement, nation, false, nation);
+  startGame(movement);
+  movement.isPublic = false;
+  movement.graceUntilTurn = 0;
+  movement.turn = 3;
+  movement.season = seasonAt(movement.turn);
+  movement.players[0].gold = 200;
+  const movementOwner = movement.players[0];
+  for (const id of ['mongolia', 'siberia', 'ural']) {
+    const city = movement.provinces.find((p) => p.id === id)!;
+    Object.assign(city, {
+      ownerId: movementOwner.id,
+      occupierId: null,
+      siege: null,
+      pacification: 100,
+      unrest: 0,
+    });
+    movement.battalions = movement.battalions.filter(
+      (a) => a.ownerId === movementOwner.id || a.provinceId !== id,
+    );
+  }
   const structures = [
     'fortLevel',
     'barracksLevel',
@@ -231,6 +275,8 @@ export function seedBrowserFixtures(filename: string) {
     councilPolicy,
     councilCrisis,
     recruitment,
+    construction,
+    movement,
   ].map((game: GameState) => {
     const auth = game.players.map((p) => ({
       code: game.code,
@@ -254,6 +300,8 @@ export function seedBrowserFixtures(filename: string) {
     councilPolicy: sessions.get('POL101')!,
     councilCrisis: sessions.get('CRS101')!,
     recruitment: sessions.get('MASS01')!,
+    construction: sessions.get('BUILD1')!,
+    movement: sessions.get('MOVE11')!,
     gold: sessions.get('GOLD98')!,
     visual: sessions.get('VISRC9')!,
     lobby: sessions.get('LOBBY6')!,

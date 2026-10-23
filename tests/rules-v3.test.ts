@@ -539,7 +539,7 @@ test('dissolução encerra guerras sem lado vivo e permite a paz mundial', () =>
     g.battalions.some((a) => a.ownerId === b.id),
     false,
   );
-  assert.equal(g.season, 'SUMMER');
+  assert.equal(g.season, 'SPRING');
 });
 test('ocupação completa do líder causa capitulação real e permite impor submissão', () => {
   const {

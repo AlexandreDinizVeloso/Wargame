@@ -1,4 +1,5 @@
 import { DILEMMAS } from '../shared/dilemmas';
+import { seasonAt } from '../shared/world';
 import { ECONOMY_BALANCE } from '../shared/balance';
 import { neutralCouncilModifiers } from '../shared/councilEffects';
 import { siegeResistance } from '../shared/siege';
@@ -455,9 +456,12 @@ function decode(value: unknown): SavedRoom[] {
                 ? migrateV6(room.game)
                 : room.game,
   }));
-  for (const room of rooms)
+  for (const room of rooms) {
+    if (Number.isInteger(room.game.turn) && room.game.turn >= 1)
+      room.game.season = seasonAt(room.game.turn);
     for (const p of room.game.provinces)
       p.neighbors = p.neighbors.filter((id) => !isLegacySeaShortcut(p.id, id));
+  }
   for (const room of rooms) {
     if (
       !validGame(room.game) ||

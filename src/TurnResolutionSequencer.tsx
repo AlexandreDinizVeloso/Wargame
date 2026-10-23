@@ -1,5 +1,6 @@
 import type { TurnResolutionReport } from '../shared/types';
 import { CINEMATIC_DURATION, resolutionPhase } from '../shared/cinematics';
+import { seasonAt, SEASON_RULES } from '../shared/world';
 export { CINEMATIC_DURATION } from '../shared/cinematics';
 export default function TurnResolutionSequencer({
   report,
@@ -13,6 +14,7 @@ export default function TurnResolutionSequencer({
   onReplay: () => void;
 }) {
   const phase = resolutionPhase(progress * CINEMATIC_DURATION);
+  const season = SEASON_RULES[seasonAt(report.turn)];
   const decree =
     report.diplomaticChanges.find((c) => /WAR|PEACE|ALLIANCE/.test(c.action))?.text ??
     report.events.find((e) => /ATO |Era d|Hegemonia/.test(e));
@@ -29,7 +31,9 @@ export default function TurnResolutionSequencer({
       aria-label={`Resolução da rodada ${report.turn}`}
       data-cinematic-phase={phase}
     >
-      <small>CRÔNICA IMPERIAL · RODADA {report.turn}</small>
+      <small>
+        CRÔNICA IMPERIAL · RODADA {report.turn} · {season.icon} {season.name}
+      </small>
       <h2>
         {phase === 'decrees' ? '⚜' : phase === 'march' ? '⚑' : '⚔'} {title}
       </h2>

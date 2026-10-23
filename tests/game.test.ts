@@ -55,7 +55,7 @@ test('cidade e batalhão têm filas independentes; substituição e cancelamento
   submitOrder(g, a.id, { type: 'TRAIN_BATTALION', battalionId: unit.id });
   submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'castile' });
   assert.equal(g.orders[a.id].length, 2);
-  assert.equal(reservedResources(g, a.id).gold, 30);
+  assert.equal(reservedResources(g, a.id).gold, 26);
   submitOrder(g, a.id, { type: 'PACIFY', provinceId: 'castile' });
   assert.equal(reservedResources(g, a.id).gold, 14);
   cancelOrder(g, a.id, 'city:castile');
@@ -88,7 +88,15 @@ test('mercenários imediatos respeitam ouro reservado, reserva humana e desconto
     players: [a],
   } = setup();
   const province = g.provinces.find((p) => p.id === 'castile')!;
-  a.gold = orderCost({ type: 'BUILD_MARKET', provinceId: province.id }, province, a, g).gold + 2;
+  a.gold = Math.max(
+    orderCost({ type: 'BUILD_MARKET', provinceId: province.id }, province, a, g).gold + 2,
+    orderCost(
+      { type: 'RECRUIT_BATTALION', provinceId: province.id, infantry: 2, isMercenary: true },
+      province,
+      a,
+      g,
+    ).gold,
+  );
   submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'castile' });
   assert.throws(() =>
     submitOrder(g, a.id, {

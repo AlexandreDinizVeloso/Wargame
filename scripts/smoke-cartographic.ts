@@ -2,7 +2,7 @@ import { getNationAuthority } from '../shared/economy';
 import { COUNCIL_CATEGORIES, dilemmaDefinition } from '../shared/dilemmas';
 import { councilModifiers } from '../shared/councilEffects';
 import { planMassRecruitment } from '../shared/massRecruitment';
-import { mapPoint, rightClickProvince } from './map-interactions';
+import { mapPoint, rightClickProvince, rightClickBattalion } from './map-interactions';
 import assert from 'node:assert/strict';
 import { fork, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -147,6 +147,17 @@ try {
     assert.equal((await wav.body()).toString('ascii', 0, 4), 'RIFF');
   }
   assert.equal(await page.locator('[data-miniature="compass"]').count(), 10);
+  assert.equal(
+    await page.locator('svg path').evaluateAll(
+      (paths, seaPaths) =>
+        paths.filter((element) => seaPaths.includes(element.getAttribute('d') ?? '')).length,
+      get()
+        .provinces.filter((p) => p.kind === 'SEA_ZONE')
+        .map((p) => p.path),
+    ),
+    0,
+    'Nenhuma camada desenha o polígono retangular de zonas marítimas.',
+  );
   assert.ok((await page.locator('[data-miniature="army"]').count()) > 0);
   assert.ok((await page.locator('[data-miniature="fleet"]').count()) > 0);
   assert.equal(await page.locator('[data-miniature] rect').count(), 0);
@@ -601,6 +612,99 @@ try {
   assert.equal(recruited.provinces.find((province) => province.id === 'castile')!.marketLevel, 1);
   for (const peer of massPeers) peer.socket.close();
   await mass.context.close();
+
+  const building = await open(fixtures.construction[0]);
+  const freeGold = building.page.locator('[data-testid="treasury"]');
+  await building.page.locator('[data-season-transition]').waitFor({ state: 'detached' });
+  assert.equal(await freeGold.textContent(), '40');
+  for (const [id, expected] of [
+    ['castile', '20'],
+    ['france', '0'],
+  ] as const) {
+    await building.page.locator(`.province-shape[data-province="${id}"]`).press('Enter');
+    const city = building.page.getByRole('region', { name: 'Inspeção de Província', exact: true });
+    await city.getByRole('tab', { name: '🏛️ Cidade & Economia', exact: true }).click();
+    await city.getByRole('button', { name: /Construir Mercado/ }).click();
+    await building.until((state) =>
+      state.plannedOrders.some(
+        (o) =>
+          (o.type === 'BUILD_MARKET' || (o.type === 'BUILD_BUILDING' && o.building === 'MARKET')) &&
+          'provinceId' in o &&
+          o.provinceId === id,
+      ),
+    );
+    await building.page.waitForFunction(
+      (value) => document.querySelector('[data-testid="treasury"]')?.textContent === value,
+      expected,
+    );
+    assert.equal(await freeGold.textContent(), expected);
+    assert.equal(building.get().players[0].gold, 40, 'Agendar reserva sem gastar duas vezes.');
+  }
+  const builders = await Promise.all(
+    fixtures.construction.slice(1).map((s) => fixturePeer(base, s)),
+  );
+  await building.page.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
+  for (const peer of builders) peer.send({ type: 'READY', ready: true });
+  const built = await building.until((state) => state.turn === 2);
+  assert.equal(built.provinces.find((p) => p.id === 'castile')!.marketLevel, 1);
+  assert.equal(built.provinces.find((p) => p.id === 'france')!.marketLevel, 1);
+  for (const peer of builders) peer.socket.close();
+  await building.context.close();
+
+  const moving = await open(fixtures.movement[0]);
+  await moving.page.locator('[data-season-transition]').waitFor({ state: 'detached' });
+  const infantry = moving
+      .get()
+      .battalions.filter((a) => a.ownerId === moving.get().players[0].id && !a.isFleet),
+    mongolia = infantry.find((a) => a.provinceId === 'mongolia')!,
+    siberia = infantry.find((a) => a.provinceId === 'siberia')!;
+  assert.ok(mongolia && siberia);
+  const seasonWidget = moving.page.locator('[data-testid="season-widget"]');
+  assert.equal(await seasonWidget.getAttribute('data-season'), 'SPRING');
+  assert.equal(await seasonWidget.getAttribute('data-season-index'), '3');
+  await moving.page.locator(`[data-battalion="${mongolia.id}"]`).press('Enter');
+  await rightClickBattalion(moving.page, siberia.id);
+  await moving.until((state) =>
+    state.plannedOrders.some((o) => o.type === 'MOVE_BATTALION' && o.battalionId === mongolia.id),
+  );
+  await moving.page.locator(`[data-battalion="${siberia.id}"]`).press('Enter');
+  await rightClickProvince(moving.page, 'ural');
+  await moving.until(
+    (state) => state.plannedOrders.filter((o) => o.type === 'MOVE_BATTALION').length === 2,
+  );
+  await moving.page
+    .locator('.footer-tabs')
+    .getByRole('button', { name: /^Ordens/ })
+    .click();
+  const orders = moving.page.locator('[data-window="report"]');
+  await orders
+    .getByRole('button', { name: `Cancelar Marchar / navegar em ${mongolia.name}`, exact: true })
+    .click();
+  const oneOrder = await moving.until(
+    (state) => state.plannedOrders.filter((o) => o.type === 'MOVE_BATTALION').length === 1,
+  );
+  assert.equal(
+    oneOrder.plannedOrders.find((o) => o.type === 'MOVE_BATTALION')?.battalionId,
+    siberia.id,
+  );
+  await orders.getByRole('button', { name: /^Fechar / }).click();
+  await moving.page.locator(`[data-battalion="${mongolia.id}"]`).press('Enter');
+  await rightClickBattalion(moving.page, siberia.id);
+  const movers = await Promise.all(fixtures.movement.slice(1).map((s) => fixturePeer(base, s)));
+  await moving.page.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
+  for (const peer of movers) peer.send({ type: 'READY', ready: true });
+  const movedArmies = await moving.until((state) => state.turn === 4);
+  assert.equal(movedArmies.battalions.find((a) => a.id === mongolia.id)!.provinceId, 'siberia');
+  assert.equal(movedArmies.battalions.find((a) => a.id === siberia.id)!.provinceId, 'ural');
+  await moving.page.locator('[data-season-transition="SUMMER"]').waitFor();
+  const transitionStart = Date.now();
+  await moving.page.locator('[data-season-transition]').waitFor({ state: 'detached' });
+  assert.ok(Date.now() - transitionStart >= 1800, 'A transição de estação permanece legível.');
+  assert.equal(await seasonWidget.getAttribute('data-season'), 'SUMMER');
+  assert.equal(await seasonWidget.getAttribute('data-season-index'), '1');
+  await moving.page.screenshot({ path: '.local/screenshots/v110-summer-multiple-movement.png' });
+  for (const peer of movers) peer.socket.close();
+  await moving.context.close();
   const lesson = await open();
   await lesson.page
     .getByRole('button', { name: '🎓 Tutorial Rápido (5 Passos)', exact: true })
@@ -695,6 +799,7 @@ try {
 
   const gold = await open(fixtures.gold[0]);
   await gold.page.locator('[data-campaign-era="ERA_EMPIRES"]').waitFor();
+  await gold.page.locator('[data-season-transition]').waitFor({ state: 'detached' });
   for (const [key, id] of [
     ['F1', 'POLITICAL'],
     ['F2', 'ECONOMIC'],
@@ -891,7 +996,7 @@ try {
   await shader.context.close();
   assert.deepEqual(errors, []);
   console.log(
-    'v1.01 cartográfico passou: 42 terras, dez mares, onze rios, quatro barreiras; Conselho com crises/táticas/políticas pagas e temporárias, recrutamento em massa parcial em várias cidades; seis canais PCM persistidos; inspetor e Crônica simultâneos, foco real entre janelas, navegação e fretamento multiplayer; tutorial completo, doutrinas com custo, tratados Gold, time-lapse, perfil, save portátil, Friend-Pass e celular.',
+    'v1.1 cartográfico passou: 42 terras, dez mares sem polígonos, onze rios, quatro barreiras; 40 Ouro constrói dois Mercados; dois batalhões movem e cancelam ordens independentes; estações de três rodadas e transição de verão; Conselho com crises/táticas/políticas pagas e temporárias, recrutamento em massa parcial em várias cidades; seis canais PCM persistidos; inspetor e Crônica simultâneos, foco real entre janelas, navegação e fretamento multiplayer; tutorial completo, doutrinas com custo, tratados Gold, time-lapse, perfil, save portátil, Friend-Pass e celular.',
   );
 } catch (error) {
   await debugPage?.screenshot({ path: '.local/screenshots/rc-failure.png' }).catch(() => {});

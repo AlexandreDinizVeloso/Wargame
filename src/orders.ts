@@ -1,5 +1,17 @@
 import { goldRules } from '../shared/factions';
+import { orderKey, reservedResources } from '../shared/rules';
 import type { GameView, PlayerOrder } from '../shared/types';
+/** Immutable city/formation queues: changing one formation never removes another's order. */
+export function replacePlannedOrder(previous: PlayerOrder[], order: PlayerOrder): PlayerOrder[] {
+  const key = orderKey(order);
+  return [...previous.filter((existing) => orderKey(existing) !== key), order];
+}
+export function removePlannedOrder(previous: PlayerOrder[], key: string): PlayerOrder[] {
+  return previous.filter((order) => orderKey(order) !== key);
+}
+export function queuedGoldCost(game: GameView, playerId: string): number {
+  return reservedResources({ ...game, orders: { [playerId]: game.plannedOrders } }, playerId).gold;
+}
 export function orderName(o: PlayerOrder, game?: GameView, playerId?: string) {
   switch (o.type) {
     case 'RECRUIT_BATTALION':

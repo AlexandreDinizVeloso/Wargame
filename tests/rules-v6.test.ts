@@ -310,10 +310,10 @@ test('armyCap e manpower seguem fórmulas e regeneração cai com desgaste', () 
   let l = realmLimits(g, a.id);
   assert.equal(l.armyCap, 23);
   assert.equal(l.manpowerCap, 20.5);
-  assert.equal(l.manpowerGain, 1.5);
+  assert.equal(l.manpowerGain, 3);
   a.warExhaustion = 25;
   l = realmLimits(g, a.id);
-  near(l.manpowerGain, 1.05);
+  near(l.manpowerGain, 2.1);
   q.pacification = 79;
   assert.equal(realmLimits(g, a.id).manpowerCap, 20);
   a.manpower = 100;

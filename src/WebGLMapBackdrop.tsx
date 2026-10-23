@@ -7,14 +7,16 @@ precision highp float;
 #else
 precision mediump float;
 #endif
-varying vec2 uv; uniform vec2 resolution; uniform vec2 camera; uniform float scale; uniform float time; uniform float winter; uniform float summer; uniform sampler2D land; uniform vec4 extent;
+varying vec2 uv; uniform vec2 resolution; uniform vec2 camera; uniform float scale; uniform float time; uniform float winter; uniform float summer; uniform float spring; uniform float autumn; uniform sampler2D land; uniform vec4 extent;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float coast(vec2 p){return texture2D(land,clamp((p-extent.xy)/extent.zw,0.,1.)).r;}
 void main(){vec2 p=camera+(vec2(uv.x,1.-uv.y)-.5)*resolution/scale;
 float nearLand=0.;for(int x=-2;x<=2;x++){for(int y=-2;y<=2;y++){nearLand+=coast(p+vec2(float(x),float(y))*3.5);}}nearLand/=25.;
 float depth=1.-nearLand;float wave=sin(p.x*.08+p.y*.035+time*.36)+sin(p.y*.11-time*.24);float swell=noise(p*.025+time*.008);
-vec3 color=mix(vec3(.12,.30,.32),vec3(.025,.09,.14),depth*.86);color+=wave*.005+swell*.016;
+vec3 coastColor=vec3(.12,.30,.32)+vec3(.03,.13,.06)*spring+vec3(.02,.23,.23)*summer+vec3(.13,.055,-.035)*autumn+vec3(.25,.30,.33)*winter;
+vec3 deepColor=vec3(.025,.09,.14)+vec3(.005,.025,.005)*spring+vec3(.005,.07,.08)*summer+vec3(.045,.018,-.02)*autumn+vec3(.08,.15,.20)*winter;
+vec3 color=mix(coastColor,deepColor,depth*.86);color+=wave*.005+swell*.016;
 float foam=nearLand*(1.-coast(p))*smoothstep(-.7,.9,sin(p.x*.13+p.y*.09+time*.7));color+=vec3(.37,.52,.46)*foam*.6;
 float sun=pow(max(0.,sin(p.x*.018+p.y*.026+time*.13)),22.)*.035;color+=vec3(1.,.80,.38)*sun;
 color+=vec3(.10,.07,.015)*summer*.17;float latitude=1.-smoothstep(extent.y,extent.y+extent.w*.65,p.y);color=mix(color,vec3(.30,.43,.48),winter*latitude*.22);
@@ -124,6 +126,8 @@ export default function WebGLMapBackdrop({
           'time',
           'winter',
           'summer',
+          'spring',
+          'autumn',
           'extent',
           'land',
         ])
@@ -201,6 +205,8 @@ export default function WebGLMapBackdrop({
         gl.uniform1f(uniforms.get('time')!, t);
         gl.uniform1f(uniforms.get('winter')!, v.season === 'WINTER' ? 1 : 0);
         gl.uniform1f(uniforms.get('summer')!, v.season === 'SUMMER' ? 1 : 0);
+        gl.uniform1f(uniforms.get('spring')!, v.season === 'SPRING' ? 1 : 0);
+        gl.uniform1f(uniforms.get('autumn')!, v.season === 'AUTUMN' ? 1 : 0);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       } else if (ctx) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -214,7 +220,15 @@ export default function WebGLMapBackdrop({
         );
         gradient.addColorStop(
           0,
-          v.season === 'WINTER' ? '#21414b' : v.season === 'SUMMER' ? '#244246' : '#1a3c44',
+          v.season === 'WINTER'
+            ? '#668fa3'
+            : v.season === 'SUMMER'
+              ? '#247883'
+              : v.season === 'AUTUMN'
+                ? '#6b513b'
+                : v.season === 'SPRING'
+                  ? '#286757'
+                  : '#1a3c44',
         );
         gradient.addColorStop(1, '#081923');
         ctx.fillStyle = gradient;

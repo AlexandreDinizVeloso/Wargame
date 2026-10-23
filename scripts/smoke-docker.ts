@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-const image = process.env.CONCORDIA_IMAGE ?? 'concordia:1.0.1';
+const image = process.env.CONCORDIA_IMAGE ?? 'concordia:1.1.0';
 const suffix = `${Date.now()}-${process.pid}`,
   name = `concordia-rc-check-${suffix}`,
   volume = `concordia-rc-data-${suffix}`;
@@ -19,7 +19,7 @@ import {once} from 'node:events';
 import {WebSocket} from 'ws';
 const phase=process.argv[1],filename='/app/.local/rc-test-session.json';
 const health=await fetch('http://127.0.0.1:3000/api/health').then(r=>r.json());
-assert.equal(health.version,'1.0.1');assert.equal(health.protocolVersion,7);
+assert.equal(health.version,'1.1.0');assert.equal(health.protocolVersion,7);
 assert.match(await fetch('http://127.0.0.1:3000').then(r=>r.text()),/Concórdia|Concordia|concordia/);
 const socket=new WebSocket('ws://127.0.0.1:3000/ws');await once(socket,'open');
 function wait(type,predicate=()=>true){return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{socket.off('message',listen);reject(new Error('Mensagem ausente: '+type));},10000);const listen=raw=>{const m=JSON.parse(raw.toString());if(m.type==='error'){clearTimeout(timer);socket.off('message',listen);reject(new Error(m.message));}else if(m.type===type&&predicate(m)){clearTimeout(timer);socket.off('message',listen);resolve(m);}};socket.on('message',listen);});}

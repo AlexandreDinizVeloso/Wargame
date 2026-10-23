@@ -51,7 +51,7 @@ test('v101: 42 macroterritórios e dez mares têm geometria finita e grafo simé
     ),
   );
 });
-test('v100: rio reduz exatamente 15% só das forças que atravessam e apenas na rodada da marcha', () => {
+test('v110: cheias da primavera reduzem ataque de travessia em 25% só na rodada da marcha', () => {
   const {
     g,
     players: [a, b],
@@ -63,16 +63,16 @@ test('v100: rio reduz exatamente 15% só das forças que atravessam e apenas na 
   const crossing = combatPowers(g, [u], [d], p);
   u.provinceId = p.id;
   const stationary = combatPowers(g, [u], [d], p);
-  assert.ok(Math.abs(crossing.attackPower / stationary.attackPower - 0.85) < 1e-9);
+  assert.ok(Math.abs(crossing.attackPower / stationary.attackPower - 0.75) < 1e-9);
   assert.equal(stationary.riverCrossingModifier, 1);
   u.previousProvinceId = 'france';
   u.lastMovedTurn = g.turn;
-  assert.ok(Math.abs(combatPowers(g, [u], [d], p).riverCrossingModifier - 0.85) < 1e-9);
+  assert.ok(Math.abs(combatPowers(g, [u], [d], p).riverCrossingModifier - 0.75) < 1e-9);
   g.turn++;
   assert.equal(combatPowers(g, [u], [d], p).riverCrossingModifier, 1);
   u.provinceId = 'france';
   const second = army(g, a.id, p.id, { infantry: 10 });
-  assert.ok(Math.abs(combatPowers(g, [u, second], [d], p).riverCrossingModifier - 0.925) < 1e-9);
+  assert.ok(Math.abs(combatPowers(g, [u, second], [d], p).riverCrossingModifier - 0.875) < 1e-9);
 });
 test('v100: guarnição custa metade e ordens de marcha entram na previsão de campanha', () => {
   const {

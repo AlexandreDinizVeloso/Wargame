@@ -69,12 +69,12 @@ export const ECONOMY_BALANCE = {
     transports: 14,
   } satisfies Composition,
   buildingGold: {
-    MARKET: 24,
-    BARRACKS: 26,
-    FORT: 24,
+    MARKET: 20,
+    BARRACKS: 20,
+    FORT: 20,
     FOUNDRY: 30,
     TEMPLE: 22,
-    PORT: 28,
+    PORT: 20,
   },
   continent: {
     SOUTH_AMERICA: { gold: 3, manpower: 0.5, authority: 0 },

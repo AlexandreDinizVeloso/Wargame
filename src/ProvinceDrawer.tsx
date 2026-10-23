@@ -1,4 +1,6 @@
 import SupremeCommandButtons from './SupremeCommandButtons';
+import { goldNumber } from './resourceNumbers';
+import { replacePlannedOrder } from './orders';
 import {
   buildingLevel,
   buildingLimit,
@@ -39,9 +41,9 @@ import {
   holyCityId,
   isBlockaded,
   orderCost,
-  orderKey,
   RELIGIONS,
   reservedResources,
+  MONEY_EPSILON,
   unitCount,
 } from '../shared/rules';
 import { effectiveSupply, RESOURCES } from '../shared/strategy';
@@ -59,17 +61,17 @@ export function budgetFor(game: GameView, id: string, order: PlayerOrder) {
           : ''),
   );
   const cost = orderCost(order, p, actor, game),
-    reserved = reservedResources(
-      { ...game, orders: { [id]: game.plannedOrders } },
-      id,
-      order.type === 'RECRUIT_BATTALION' && order.isMercenary ? undefined : orderKey(order),
-    );
+    projectedOrders =
+      order.type === 'RECRUIT_BATTALION' && order.isMercenary
+        ? [...game.plannedOrders, order]
+        : replacePlannedOrder(game.plannedOrders, order),
+    reserved = reservedResources({ ...game, orders: { [id]: projectedOrders } }, id);
   return {
     cost,
     affordable:
-      actor.gold - reserved.gold >= cost.gold &&
-      actor.manpower - reserved.manpower >= cost.manpower &&
-      getNationAuthority(actor) - reserved.influence >= cost.influence,
+      actor.gold + MONEY_EPSILON >= reserved.gold &&
+      actor.manpower >= reserved.manpower &&
+      getNationAuthority(actor) >= reserved.influence,
   };
 }
 export default function ProvinceDrawer({
@@ -174,7 +176,7 @@ export default function ProvinceDrawer({
           <small>{description}</small>
         </span>
         <b>
-          {number(budget.cost.gold)}
+          {goldNumber(budget.cost.gold)}
           <Coins size={11} />
         </b>
       </button>
@@ -742,7 +744,7 @@ export default function ProvinceDrawer({
                     : isMercenary
                       ? 'Contratar mercenários'
                       : 'Recrutar batalhão'}{' '}
-                  <span>{number(price.cost.gold)} ouro</span>
+                  <span>{goldNumber(price.cost.gold)} ouro</span>
                 </button>
                 <p className="fine-print">
                   {isMercenary
@@ -799,8 +801,9 @@ export function renderCityDevelopment({
         </b>
       </div>
       <p className="fine-print">
-        Níveis compartilham o slot. Administração: +
-        {Math.round((imperialInflation(game, playerId) - 1) * 100)}% no custo de construção.
+        Construções consomem somente Ouro. Os preços já incluem a estação e as melhorias.
+        Administração em níveis superiores: +
+        {Math.round((imperialInflation(game, playerId) - 1) * 100)}%.
       </p>
       <div className="building-grid">
         {(Object.keys(BUILDINGS) as BuildingType[]).map((b) => {
@@ -820,12 +823,14 @@ export function renderCityDevelopment({
               <div className="button-pair">
                 <button
                   disabled={
-                    !active || !canBuild(province, b, me) || me.gold - reserved.gold < cost.gold
+                    !active ||
+                    !canBuild(province, b, me) ||
+                    me.gold - reserved.gold + MONEY_EPSILON < cost.gold
                   }
                   onClick={() => command({ type: 'SUBMIT_ORDER', order })}
                 >
                   {level ? 'Melhorar' : 'Construir'} {data.name.split(' / ')[0]} ·{' '}
-                  {Math.round(cost.gold)} ouro
+                  {goldNumber(cost.gold)} ouro
                 </button>
                 {level > 0 && (
                   <button

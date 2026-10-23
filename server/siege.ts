@@ -6,6 +6,7 @@ import { atWar, clamp, controller, unitCount } from '../shared/rules';
 import { hasSkill } from '../shared/military';
 import { destroyBattalion, log, playerOf } from './state';
 import { commanderXP } from './armies';
+import { seasonRulesAt } from '../shared/world';
 export function beginSiege(g: GameState, a: Battalion, p: Province) {
   if (
     a.isFleet ||
@@ -29,7 +30,7 @@ export function beginSiege(g: GameState, a: Battalion, p: Province) {
     return;
   p.siege = {
     attackerOwnerId: a.ownerId,
-    progress: 1,
+    progress: 1 + seasonRulesAt(g.turn).siegeProgressBonus,
     required: siegeResistance(g, p),
     turnsUnderSiege: 1,
     startedTurn: g.turn,
@@ -38,14 +39,14 @@ export function beginSiege(g: GameState, a: Battalion, p: Province) {
   a.pathQueue = [];
   notify(g, {
     type: 'SIEGE_STARTED',
-    text: `Cerco iniciado em ${p.name} (1/${p.siege.required}).`,
+    text: `Cerco iniciado em ${p.name} (${p.siege.progress}/${p.siege.required}).`,
     involvesPlayerIds: [a.ownerId, ...(p.ownerId ? [p.ownerId] : [])],
     severity: 'CRITICAL',
     focusProvinceId: p.id,
   });
   log(
     g,
-    `${playerOf(g, a.ownerId).nation} iniciou cerco em ${p.name} (1/${p.siege.required}).`,
+    `${playerOf(g, a.ownerId).nation} iniciou cerco em ${p.name} (${p.siege.progress}/${p.siege.required}).`,
     'battle',
   );
 }

@@ -85,13 +85,28 @@ test('v101 supreme: Blitz não deixa crédito de movimento extra depois da rodad
     assert.equal(movementAllowance(g, army), 1);
     if (moveNow) assert.equal(army.provinceId, target.id);
     else {
-      submitOrder(g, actor.id, { type: 'MOVE_BATTALION', battalionId: army.id, path: [target.id] });
+      const beyond = g.provinces.find(
+        (p) =>
+          p.kind === 'LAND' &&
+          p.id !== origin.id &&
+          target.neighbors.includes(p.id) &&
+          !target.straitNeighbors.includes(p.id),
+      )!;
+      beyond.ownerId = actor.id;
+      beyond.occupierId = null;
+      g.battalions = g.battalions.filter((a) => a.provinceId !== beyond.id);
+      submitOrder(g, actor.id, {
+        type: 'MOVE_BATTALION',
+        battalionId: army.id,
+        path: [target.id, beyond.id],
+      });
       resolveTurn(g);
       assert.equal(
         army.provinceId,
-        origin.id,
-        'Marcha Forçada expirada não paga o custo da floresta na rodada seguinte.',
+        target.id,
+        'A primeira etapa é permitida, mas a Marcha expirada não paga uma segunda etapa.',
       );
+      assert.equal(army.movementCredit, 0);
     }
   }
 });
@@ -151,7 +166,12 @@ test('v101 supreme: moral temporária do Conselho cobra manutenção e expira ap
     resolveTurn(g);
   }
   assert.equal(g.turn, 7);
-  assert.ok(Math.abs(compositionPower(g, army, province) / baseline - 1) < 1e-10);
+  const withoutCouncil = structuredClone(g);
+  withoutCouncil.players.find((p) => p.id === actor.id)!.councilEffects = [];
+  assert.equal(
+    compositionPower(g, army, province),
+    compositionPower(withoutCouncil, army, province),
+  );
 });
 
 test('v101 supreme: obra gratuita sob cerco atualiza resistência e preserva o save completo', async () => {

@@ -1,4 +1,5 @@
 import { isLegacySeaShortcut, makeStaticMap } from '../shared/map';
+import { seasonAt } from '../shared/world';
 import { realmLimits } from '../shared/economy';
 import {
   buildingSlots,
@@ -352,7 +353,7 @@ export function migrateV3(value: unknown): GameState {
     allowBotSecretVictory: false,
     enableSecretObjectives: false,
   };
-  g.season = (['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'] as const)[(g.turn - 1) % 4];
+  g.season = seasonAt(g.turn);
   g.globalEvent = null;
   g.coalitions = [];
   g.visionContracts = [];

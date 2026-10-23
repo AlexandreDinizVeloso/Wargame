@@ -265,9 +265,9 @@ test('v101 acceptance: picos PCM, filtros, duração musical e seis padrões do 
     assert.ok(data.peak <= 0.25);
   }
   assert.ok(SFX_SPEC.sail.cutoff <= 450);
-  assert.equal(SFX_SPEC.sail.cutoff, 320);
-  assert.equal(SFX_SPEC.march.cutoff, 260);
-  assert.equal(SFX_SPEC.cannon.cutoff, 500);
+  assert.equal(SFX_SPEC.sail.cutoff, 220);
+  assert.equal(SFX_SPEC.march.cutoff, 180);
+  assert.equal(SFX_SPEC.cannon.cutoff, 220);
   assert.equal(MUSIC_SPEC.duration, 16);
   assert.equal(MUSIC_SPEC.targetPeak, 0.55);
   for (const name of ['bgm-peace', 'bgm-war']) {
@@ -279,10 +279,10 @@ test('v101 acceptance: picos PCM, filtros, duração musical e seis padrões do 
   assert.deepEqual(AUDIO_MIXER_DEFAULTS, {
     masterVolume: 0.8,
     musicVolume: 0.75,
-    combatVolume: 0.45,
-    marchVolume: 0.3,
-    sailVolume: 0.25,
-    uiVolume: 0.5,
+    combatVolume: 0.18,
+    marchVolume: 0.12,
+    sailVolume: 0.1,
+    uiVolume: 0.2,
   });
   assert.deepEqual(AUDIO_LIMITER, { threshold: -10, knee: 12, ratio: 8 });
 });

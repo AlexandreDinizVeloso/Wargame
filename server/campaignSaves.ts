@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { seasonAt } from '../shared/world';
 import type { CampaignSave, GameState } from '../shared/types';
 import { validGame } from './storage';
 import { assert } from './state';
@@ -77,6 +78,7 @@ export function importCampaign(value: unknown, code: string) {
     validGame(game),
     'Estado inválido ou relatório com informações omitidas. Use Exportar Save JSON para obter uma campanha completa.',
   );
+  game.season = seasonAt(game.turn);
   assert(
     game.matchConfig && ['quick', 'campaign'].includes(game.mode),
     'Configuração de campanha inválida.',

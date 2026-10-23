@@ -1,5 +1,8 @@
 import { layoutArmyMarkers, layoutProvinceLabels } from './atlasLayout';
 import WebGLMapBackdrop from './WebGLMapBackdrop';
+import { SeasonAtmosphere } from './SeasonTransitionBanner';
+import { provinceAtPoint, provinceTargetId } from './mapInput';
+import { seasonAt } from '../shared/world';
 import { computeVisibleProvinces, verticalRules } from '../shared/fogOfWar';
 import {
   MAP_LENSES,
@@ -105,11 +108,13 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   },
   ref,
 ) {
+  const mapSeason = game ? seasonAt(game.turn) : undefined;
   const root = useRef<HTMLDivElement>(null),
     [bounds, setBounds] = useState({ width: 1440, height: 900 }),
     [hoveredId, setHoveredId] = useState(''),
     [pointer, setPointer] = useState({ x: 0, y: 0 }),
     [isTurnReplayPlaying, setIsTurnReplayPlaying] = useState(false);
+  const lastTactical = useRef(0);
   useEffect(() => {
     if (!replay) {
       setIsTurnReplayPlaying(false);
@@ -303,7 +308,36 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
       a.provinceId === selectedId ||
       a.provinceId === hoveredId,
   );
-  const markerPositions = layoutArmyMarkers(displayedArmies, provinces, scale);
+  const historicalBattles = !replay
+    ? (game?.lastReport?.battles ?? []).filter((battle) => {
+        const province = provinces.find((entry) => entry.id === battle.provinceId);
+        return (
+          province &&
+          (!fogActive ||
+            visible.has(province.id) ||
+            [battle.attackerId, battle.defenderId].includes(viewerId ?? ''))
+        );
+      })
+    : [];
+  const reservedBattleMarkers = historicalBattles.flatMap((battle) => {
+    const province = provinces.find((entry) => entry.id === battle.provinceId);
+    return province
+      ? [
+          {
+            x: province.x + 22 / scale,
+            y: province.y - 24 / scale,
+            width: 24 / scale,
+            height: 24 / scale,
+          },
+        ]
+      : [];
+  });
+  const markerPositions = layoutArmyMarkers(
+    displayedArmies,
+    provinces,
+    scale,
+    reservedBattleMarkers,
+  );
   const labelPositions = layoutProvinceLabels(
     provinces.filter(
       (p) =>
@@ -313,7 +347,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           (cartographic && (p.id === selectedId || p.id === hoveredId || !!p.capitalOf)) ||
           provinces.filter((p) => p.kind === 'LAND').length <= 16),
     ),
-    markerPositions.values(),
+    [...markerPositions.values(), ...reservedBattleMarkers],
     scale,
   );
   const routes = armies
@@ -421,10 +455,19 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
       })
       .join(' ');
   };
-  const target = (event: React.PointerEvent) =>
-    event.target instanceof Element
-      ? (event.target.closest('[data-province]')?.getAttribute('data-province') ?? null)
-      : null;
+  const target = (event: { target: EventTarget | null; clientX: number; clientY: number }) => {
+    const assigned = provinceTargetId(event.target);
+    if (assigned) return assigned;
+    const rect = root.current?.getBoundingClientRect();
+    if (!rect) return null;
+    return (
+      provinceAtPoint(
+        provinces,
+        camera.x + (event.clientX - rect.left - rect.width / 2) / scale,
+        camera.y + (event.clientY - rect.top - rect.height / 2) / scale,
+      )?.id ?? null
+    );
+  };
   return (
     <div
       ref={root}
@@ -433,7 +476,17 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
       data-zoom={camera.zoom.toFixed(3)}
       data-camera-x={camera.x.toFixed(2)}
       data-camera-y={camera.y.toFixed(2)}
-      onContextMenu={(e) => e.preventDefault()}
+      data-season={mapSeason ?? 'SPRING'}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if (preview || dragged.current || Date.now() - lastTactical.current < 500) return;
+        const id = target(e),
+          province = provinces.find((entry) => entry.id === id);
+        if (province) {
+          lastTactical.current = Date.now();
+          onTactical?.(province);
+        }
+      }}
       onPointerDown={(e) => {
         dragged.current = false;
         if (preview) return;
@@ -479,8 +532,10 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           e.currentTarget.releasePointerCapture(e.pointerId);
         if (!dragged.current && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 6 && p.provinceId) {
           const province = provinces.find((q) => q.id === p.provinceId)!;
-          if (p.button === 2) onTactical?.(province);
-          else if (p.touch) {
+          if (p.button === 2) {
+            lastTactical.current = Date.now();
+            onTactical?.(province);
+          } else if (p.touch) {
             const army = p.armyId ? armies.find((a) => a.id === p.armyId) : undefined;
             if (army) pickArmy(army);
             else pick(province);
@@ -503,7 +558,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         width={bounds.width}
         height={bounds.height}
         scale={scale}
-        season={game?.season}
+        season={mapSeason}
       />
       <svg
         className="world-map"
@@ -600,6 +655,12 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                     if (e.key === 'Enter') pick(p, e.altKey);
                   }}
                 >
+                  <circle
+                    className="sea-compass-hit-area"
+                    r="38"
+                    fill="transparent"
+                    pointerEvents="all"
+                  />
                   <SeaZoneCompassNode
                     value={
                       tradeNodes.find((n) => n.seaId === p.id)?.value ?? SEA_TRADE_VALUE[p.id] ?? 3
@@ -663,7 +724,26 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   }}
                 />
               )}
-              {cartographic && <ProvinceShading province={p} winter={game?.season === 'WINTER'} />}
+              {p.kind === 'LAND' && game && (
+                <path
+                  className="province-season-tint"
+                  data-season-tint={mapSeason}
+                  d={p.path}
+                  fill={
+                    { SPRING: '#36bd78', SUMMER: '#f5d16b', AUTUMN: '#db7a28', WINTER: '#d8eeff' }[
+                      mapSeason!
+                    ]
+                  }
+                  fillOpacity={
+                    { SPRING: 0.1, SUMMER: 0.12, AUTUMN: 0.26, WINTER: 0.34 }[mapSeason!]
+                  }
+                  pointerEvents="none"
+                  fillRule="evenodd"
+                />
+              )}
+              {cartographic && (
+                <ProvinceShading province={p} season={mapSeason} winter={mapSeason === 'WINTER'} />
+              )}
               {!preview && (
                 <InfrastructureSymbols
                   province={p}
@@ -864,10 +944,10 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             </g>
           );
         })}
-        <GeographyLayers provinces={provinces} />
+        <GeographyLayers provinces={provinces} season={mapSeason} />
         {fogActive &&
           provinces
-            .filter((p) => !visible.has(p.id))
+            .filter((p) => p.kind === 'LAND' && !visible.has(p.id))
             .map((p) => (
               <path
                 key={`fog-${p.id}`}
@@ -878,76 +958,6 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                 pointerEvents="none"
               />
             ))}
-        {!replay &&
-          game?.lastReport?.battles.map((battle) => {
-            const p = provinces.find((p) => p.id === battle.provinceId);
-            return p &&
-              (!fogActive ||
-                visible.has(p.id) ||
-                [battle.attackerId, battle.defenderId].includes(viewerId ?? '')) ? (
-              <g
-                key={battle.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Rever batalha em ${p.name}`}
-                data-battle-marker={battle.id}
-                className="historical-battle-marker"
-                transform={`translate(${p.x + 22 / scale} ${p.y - 24 / scale}) scale(${1 / scale})`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onBattle?.(battle);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onBattle?.(battle);
-                }}
-              >
-                <circle r="11" fill="#1b2024" stroke="#cbb274" />
-                <text y="4" textAnchor="middle" fontSize="13">
-                  ⚔️
-                </text>
-              </g>
-            ) : null;
-          })}
-        {routes.map(({ army, path }) => {
-          const from = provinces.find((p) => p.id === army.provinceId)!,
-            to = provinces.find((p) => p.id === path[0]);
-          return (
-            <g key={army.id}>
-              <path
-                className={`planned-route ${army.id === selectedArmyId ? 'selected-route' : ''} ${army.ownerId !== viewerId ? 'intelligence-route' : ''}`}
-                d={pathFor([army.provinceId, ...path])}
-                fill="none"
-                stroke={army.ownerId !== viewerId ? '#c084fc' : '#e0c47c'}
-                strokeWidth={1.6 / scale}
-                strokeDasharray={`${5 / scale} ${4 / scale}`}
-                markerEnd="url(#march-arrow)"
-                pointerEvents="none"
-              />
-              {army.ownerId === viewerId && to && (
-                <g
-                  role="button"
-                  aria-label={`Cancelar movimento de ${army.name}`}
-                  tabIndex={0}
-                  className="route-cancel"
-                  transform={`translate(${(from.x + to.x) / 2},${(from.y + to.y) / 2})`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCancelOrder?.(army.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') onCancelOrder?.(army.id);
-                  }}
-                >
-                  <circle r={8 / scale} />
-                  <text textAnchor="middle" dy={3 / scale} fontSize={11 / scale}>
-                    ✕
-                  </text>
-                </g>
-              )}
-            </g>
-          );
-        })}
         {!preview && (
           <g className="army-leader-lines" pointerEvents="none" aria-hidden="true">
             {displayedArmies.map((a) => {
@@ -996,6 +1006,15 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   if (e.key === 'Enter') pickArmy(a);
                 }}
               >
+                <rect
+                  className="army-marker-hit-area"
+                  x="-36"
+                  y="-42"
+                  width="72"
+                  height="84"
+                  fill="transparent"
+                  pointerEvents="all"
+                />
                 {a.isFleet ? (
                   <FleetShipToken
                     army={a}
@@ -1014,6 +1033,78 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
               </g>
             );
           })}
+        {routes.map(({ army, path }) => {
+          const from = provinces.find((p) => p.id === army.provinceId)!,
+            to = provinces.find((p) => p.id === path[0]);
+          return (
+            <g key={army.id}>
+              <path
+                className={`planned-route ${army.id === selectedArmyId ? 'selected-route' : ''} ${army.ownerId !== viewerId ? 'intelligence-route' : ''}`}
+                d={pathFor([army.provinceId, ...path])}
+                fill="none"
+                stroke={army.ownerId !== viewerId ? '#c084fc' : '#e0c47c'}
+                strokeWidth={1.6 / scale}
+                strokeDasharray={`${5 / scale} ${4 / scale}`}
+                markerEnd="url(#march-arrow)"
+                pointerEvents="none"
+              />
+              {army.ownerId === viewerId && to && (
+                <g
+                  role="button"
+                  aria-label={`Cancelar movimento de ${army.name}`}
+                  tabIndex={0}
+                  className="route-cancel"
+                  transform={`translate(${(from.x + to.x) / 2},${(from.y + to.y) / 2})`}
+                  onPointerDown={(e) => {
+                    if (e.button === 0) e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCancelOrder?.(army.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') onCancelOrder?.(army.id);
+                  }}
+                >
+                  <circle r={8 / scale} />
+                  <text textAnchor="middle" dy={3 / scale} fontSize={11 / scale}>
+                    ✕
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+        {historicalBattles.map((battle) => {
+          const p = provinces.find((p) => p.id === battle.provinceId);
+          return p &&
+            (!fogActive ||
+              visible.has(p.id) ||
+              [battle.attackerId, battle.defenderId].includes(viewerId ?? '')) ? (
+            <g
+              key={battle.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Rever batalha em ${p.name}`}
+              data-battle-marker={battle.id}
+              data-province={p.id}
+              className="historical-battle-marker"
+              transform={`translate(${p.x + 22 / scale} ${p.y - 24 / scale}) scale(${1 / scale})`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (e.button === 0 && !dragged.current) onBattle?.(battle);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onBattle?.(battle);
+              }}
+            >
+              <circle r="11" fill="#1b2024" stroke="#cbb274" />
+              <text y="4" textAnchor="middle" fontSize="13">
+                ⚔️
+              </text>
+            </g>
+          ) : null;
+        })}
         {isTurnReplayPlaying && replay && (
           <g className="turn-replay" pointerEvents="none">
             {replay.report.movements.map((m, i) => {
@@ -1101,6 +1192,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           ) : null;
         })}
       </svg>
+      {!preview && <SeasonAtmosphere season={mapSeason} />}
       {!preview && game && selectedArmy && hoveredId && !grabbing && (
         <Suspense fallback={null}>
           <BattlePreviewTooltip
