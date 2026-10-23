@@ -1,6 +1,6 @@
 import { WORLD_RIVERS, impassableFeatures } from '../shared/map';
 export { ProvinceStructuresVisual as InfrastructureSymbols } from './MapMiniatures';
-import type { Province } from '../shared/types';
+import type { Province, Season } from '../shared/types';
 export function CartographicDefs() {
   return (
     <>
@@ -44,9 +44,11 @@ export function ProvinceRelief({ province: p, scale }: { province: Province; sca
 export function ProvinceShading({
   province: p,
   winter = false,
+  season,
 }: {
   province: Province;
   winter?: boolean;
+  season?: Season;
 }) {
   if (p.kind !== 'LAND') return null;
   const mountains = ['mountains', 'hills'].includes(p.terrain),
@@ -101,7 +103,23 @@ export function ProvinceShading({
                       <path d="M0 0L1 16" stroke="#2b3020" strokeWidth="2" />
                       <path
                         d="M-9 4Q-13-6-4-9Q-5-19 3-16Q13-16 10-6Q18 3 7 7Q-3 12-9 4"
-                        fill={i % 2 ? '#284d37' : '#36553c'}
+                        fill={
+                          season === 'AUTUMN'
+                            ? i % 2
+                              ? '#c17a31'
+                              : '#d99a3b'
+                            : season === 'WINTER'
+                              ? i % 2
+                                ? '#c4dae0'
+                                : '#e1eff1'
+                              : season === 'SPRING'
+                                ? i % 2
+                                  ? '#397d4b'
+                                  : '#55a260'
+                                : i % 2
+                                  ? '#284d37'
+                                  : '#36553c'
+                        }
                         stroke="#162f27"
                         strokeWidth=".8"
                       />
@@ -118,7 +136,7 @@ export function ProvinceShading({
   );
 }
 
-export function GeographyLayers({ provinces }: { provinces: Province[] }) {
+export function GeographyLayers({ provinces, season }: { provinces: Province[]; season?: Season }) {
   const ids = new Set(provinces.map((p) => p.id));
   const smooth = (points: number[][]) =>
     points
@@ -144,7 +162,7 @@ export function GeographyLayers({ provinces }: { provinces: Province[] }) {
             strokeOpacity=".85"
             strokeWidth=".9"
           />
-          <title>{`${river.name} · travessia: −15% ataque`}</title>
+          <title>{`${river.name} · travessia: −${season === 'SPRING' ? 25 : 15}% ataque${season === 'SPRING' ? ' (cheias de primavera)' : ''}`}</title>
         </g>
       ))}
       {impassableFeatures

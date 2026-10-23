@@ -504,6 +504,7 @@ test('inflação e corrupção limitam rendimento marginal sem reduzir a taxa b�
   const lands = g.provinces.filter((p) => p.kind === 'LAND'),
     p = province(g, 'castile'),
     o = { type: 'BUILD_BUILDING' as const, provinceId: p.id, building: 'MARKET' as const };
+  p.marketLevel = 1; // Nível 1 é fixo em 20; a inflação só incide nas ampliações.
   const base = orderCost(o, p, a, g).gold;
   lands.slice(0, 8).forEach((q) => {
     q.ownerId = a.id;

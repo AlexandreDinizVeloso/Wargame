@@ -38,7 +38,10 @@ test('v101 scarcity: abertura de todas as facções mantém 40 Ouro, 8 Recrutas,
             `${mode}/${theater}/${player.nationId}: ${economy.net}`,
           );
           assert.equal(authorityIncome(g, player.id), ECONOMY_BALANCE.authorityPerTurn);
-          assert.ok(economy.manpower >= 0.5 && economy.manpower <= 1);
+          assert.ok(
+            economy.manpower >= 1 && economy.manpower <= 2,
+            'Primavera dobra a regeneração.',
+          );
         }
       }
 });

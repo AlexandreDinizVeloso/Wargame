@@ -39,7 +39,7 @@ export const FACTION_TRAITS: Record<NationId, FactionTrait> = {
   ferro_norte: {
     name: 'Invasores de Fiordes',
     effects: [
-      'Imune aos penalizadores de inverno',
+      'Florestas não aumentam o custo de marcha; congelamento sazonal afeta todas as nações',
       'Travessias e desembarques sem penalidade adicional',
       'Infantaria: +15% choque no primeiro turno de guerra',
     ],

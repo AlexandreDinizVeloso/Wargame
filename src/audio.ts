@@ -1,4 +1,9 @@
-import { generateSfxPCM, normalizeAndFilterPCM, type SfxName } from '../shared/audioDSP';
+import {
+  generateSfxPCM,
+  normalizeAndFilterPCM,
+  SFX_ASSET_REVISION,
+  type SfxName,
+} from '../shared/audioDSP';
 import {
   AUDIO_LIMITER,
   AUDIO_MIXER_DEFAULTS,
@@ -197,7 +202,9 @@ export class CampaignAudio {
       ...(['cannon', 'march', 'sail', 'horn', 'coin'] as const).map(async (name) => {
         for (const extension of ['wav', 'ogg', 'mp3'])
           try {
-            const decoded = await this.decode(`/assets/sfx/${name}.${extension}`);
+            const decoded = await this.decode(
+              `/assets/sfx/${name}.${extension}?v=${SFX_ASSET_REVISION}`,
+            );
             if (decoded) {
               this.samples.set(name, decoded);
               return;
@@ -239,8 +246,8 @@ export class CampaignAudio {
       name === 'click'
         ? [200]
         : name === 'ping' || name === 'alert'
-          ? [392, 523.25]
-          : [293.6648, 369.9944, 440];
+          ? [146.8324, 196]
+          : [110, 146.8324, 220];
     for (let i = 0; i < data.length; i++) {
       const t = i / 44100,
         env = Math.min(1, t / 0.008) * Math.min(1, (duration - t) / 0.04) * Math.exp(-t * 8);
@@ -249,7 +256,7 @@ export class CampaignAudio {
         frequencies.length;
     }
     const buffer = this.bufferFromPCM(
-      normalizeAndFilterPCM(data, name === 'click' ? 0.035 : 0.12, 800),
+      normalizeAndFilterPCM(data, name === 'click' ? 0.035 : 0.12, name === 'click' ? 180 : 250),
       44100,
     );
     this.fallbackSamples.set(key, buffer);

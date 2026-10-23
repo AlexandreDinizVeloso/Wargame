@@ -10,6 +10,7 @@ import {
 } from './rules';
 import { effectiveSupply } from './strategy';
 import { supplyConsumption, supplyConnected } from './logistics';
+import { seasonRulesAt } from './world';
 export const MAP_LENSES: {
   id: MapMode;
   name: string;
@@ -60,7 +61,6 @@ export function provinceIncome(g: GameView, p: Province) {
   const mod =
     (owner?.faith === 'MERCHANT' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.25 : 1) *
     (owner?.nationId === 'vespera' && (p.portLevel > 0 || p.marketLevel > 0) ? 1.3 : 1) *
-    (g.season === 'AUTUMN' && p.strategicResource === 'GRAIN' ? 1.15 : 1) *
     (g.globalEvent?.id === 'GOLD_RUSH' && p.strategicResource === 'GOLD_MINE' ? 1.5 : 1);
   return (
     (effectiveTax(
@@ -69,7 +69,7 @@ export function provinceIncome(g: GameView, p: Province) {
       isBlockaded(g, p),
       owner?.religiousPolicy ?? 'TOLERANCE',
     ) +
-      tradeIncomeOf(p)) *
+      tradeIncomeOf(p) * seasonRulesAt(g.turn).tradeMultiplier) *
       mod +
     p.foundryLevel * 2 +
     (p.strategicResource === 'RELIC' ? 3 : 0)

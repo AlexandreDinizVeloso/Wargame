@@ -1,6 +1,18 @@
 import { goldRules } from './factions';
 import type { Battalion, GameState } from './types';
 import { atWar, controller, getRelation, sameWarSide } from './rules';
+/** Winter shelter requires legal ownership, pacification and an uncontested city. */
+export function hasWinterShelter(g: Pick<GameState, 'provinces'>, army: Battalion) {
+  const p = g.provinces.find((p) => p.id === army.provinceId);
+  return (
+    !!p &&
+    p.kind === 'LAND' &&
+    p.ownerId === army.ownerId &&
+    !p.occupierId &&
+    p.pacification >= 80 &&
+    !p.siege
+  );
+}
 export function supplyConnected(
   g: Pick<GameState, 'provinces' | 'battalions' | 'wars' | 'relations' | 'players'> &
     Partial<Pick<GameState, 'turn'>>,

@@ -130,6 +130,7 @@ export function ArmyCrestToken({
   return (
     <g
       data-miniature="army"
+      pointerEvents="none"
       data-composition={kind}
       className={`crest-miniature ${a.morale < 25 || a.disorganized ? 'low-morale' : ''}`}
       color={color}
@@ -244,7 +245,11 @@ export function FleetShipToken({
 }) {
   const id = `sails-${useId().replace(/:/g, '')}`;
   return (
-    <g data-miniature="fleet" className={`ship-miniature ${a.morale < 25 ? 'low-morale' : ''}`}>
+    <g
+      data-miniature="fleet"
+      pointerEvents="none"
+      className={`ship-miniature ${a.morale < 25 ? 'low-morale' : ''}`}
+    >
       <defs>
         <NationGradient id={id} color={color} />
       </defs>
@@ -363,7 +368,11 @@ export function SeaZoneCompassNode({
   selected?: boolean;
 }) {
   return (
-    <g data-miniature="compass" className={contested ? 'compass-node contested' : 'compass-node'}>
+    <g
+      data-miniature="compass"
+      pointerEvents="none"
+      className={contested ? 'compass-node contested' : 'compass-node'}
+    >
       <circle
         r="27"
         fill="url(#miniature-ocean)"

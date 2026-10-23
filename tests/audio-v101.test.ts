@@ -60,9 +60,10 @@ test('v101 áudio: cinco WAVs têm picos seguros, duração correta e geração 
     assert.ok(peak <= 0.25);
     assert.deepEqual(encodePCM16Wav(generateSfxPCM(name)), wav);
   }
-  assert.equal(SFX_SPEC.sail.cutoff, 320);
+  assert.equal(SFX_SPEC.sail.cutoff, 220);
   assert.ok(SFX_SPEC.sail.cutoff <= 450);
-  assert.equal(SFX_SPEC.march.cutoff, 260);
+  assert.equal(SFX_SPEC.march.cutoff, 180);
+  assert.ok(Object.values(SFX_SPEC).every((spec) => spec.cutoff <= 250));
 });
 test('v101 áudio: músicas PCM de dezesseis segundos têm pico .55 e junção de loop contínua', async () => {
   for (const name of ['peace', 'war']) {
@@ -87,10 +88,10 @@ test('v101 áudio: mixer tem seis canais persistidos, padrões exigidos e limita
   assert.deepEqual(AUDIO_MIXER_DEFAULTS, {
     masterVolume: 0.8,
     musicVolume: 0.75,
-    combatVolume: 0.45,
-    marchVolume: 0.3,
-    sailVolume: 0.25,
-    uiVolume: 0.5,
+    combatVolume: 0.18,
+    marchVolume: 0.12,
+    sailVolume: 0.1,
+    uiVolume: 0.2,
   });
   assert.deepEqual(AUDIO_LIMITER, { threshold: -10, knee: 12, ratio: 8 });
   assert.deepEqual(parseAudioMixer(null), AUDIO_MIXER_DEFAULTS);
@@ -101,7 +102,7 @@ test('v101 áudio: mixer tem seis canais persistidos, padrões exigidos e limita
   assert.equal(parsed.masterVolume, 1);
   assert.equal(parsed.musicVolume, 0);
   assert.equal(parsed.sailVolume, 0.07);
-  assert.equal(parsed.combatVolume, 0.45);
+  assert.equal(parsed.combatVolume, 0.18);
 });
 
 test('v101 áudio: grafo real do mixer tem seis ganhos, limitação comum e persistência independente', async () => {
@@ -214,7 +215,7 @@ test('v101 áudio: grafo real do mixer tem seis ganhos, limitação comum e pers
     for (let i = 1; i < gains.length; i++) assert.equal(gains[i].connections[0], gains[0]);
     audio.setMixerVolume('sailVolume', 0.08);
     assert.equal(audio.mixer.sailVolume, 0.08);
-    assert.equal(audio.mixer.marchVolume, 0.3);
+    assert.equal(audio.mixer.marchVolume, 0.12);
     assert.equal(JSON.parse(store.get(AUDIO_MIXER_STORAGE_KEY)!).sailVolume, 0.08);
     audio.playSailSound();
     assert.equal(buffers.length, 1);

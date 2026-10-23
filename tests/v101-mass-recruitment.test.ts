@@ -140,7 +140,7 @@ test('v101: atendimento parcial respeita ouro/recrutas livres e preserva ordens 
   assert.deepEqual(next.orders[me.id].slice(0, old.length), old);
   assert.deepEqual(next.orders[me.id].slice(old.length), plan.orders);
   assert.equal(new Set(next.orders[me.id].map(orderKey)).size, next.orders[me.id].length);
-  assert.equal(reservedResources(next, me.id).gold, 48);
+  assert.equal(reservedResources(next, me.id).gold, 44);
   const manpowerLimited = recruitmentFixture();
   manpowerLimited.me.manpower = 1;
   assert.deepEqual(

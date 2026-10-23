@@ -1,11 +1,12 @@
 /** Pure deterministic DSP shared by the asset generator and acceptance tests. */
 export const AUDIO_SAMPLE_RATE = 44100;
+export const SFX_ASSET_REVISION = 'v110-soft';
 export const SFX_SPEC = {
-  sail: { targetPeak: 0.12, cutoff: 320, duration: 2.2 },
-  march: { targetPeak: 0.14, cutoff: 260, duration: 0.9 },
-  cannon: { targetPeak: 0.24, cutoff: 500, duration: 1.8 },
-  horn: { targetPeak: 0.2, cutoff: 800, duration: 1.5 },
-  coin: { targetPeak: 0.2, cutoff: 800, duration: 0.9 },
+  sail: { targetPeak: 0.12, cutoff: 220, duration: 2.2 },
+  march: { targetPeak: 0.14, cutoff: 180, duration: 0.9 },
+  cannon: { targetPeak: 0.24, cutoff: 220, duration: 1.8 },
+  horn: { targetPeak: 0.2, cutoff: 250, duration: 1.5 },
+  coin: { targetPeak: 0.2, cutoff: 250, duration: 0.9 },
 } as const;
 export const MUSIC_SPEC = { duration: 16, targetPeak: 0.55, cutoff: 1800 } as const;
 export function peakAmplitude(samples: ArrayLike<number>): number {
@@ -88,7 +89,7 @@ export function generateSfxPCM(name: SfxName, rate = AUDIO_SAMPLE_RATE): Float64
       value =
         (brown * (0.34 + 0.1 * Math.sin(t * 2.4)) +
           slow * 0.6 +
-          (Math.sin(2 * Math.PI * 220 * t) + Math.sin(2 * Math.PI * 330 * t)) * 0.008) *
+          (Math.sin(2 * Math.PI * 110 * t) + Math.sin(2 * Math.PI * 165 * t)) * 0.008) *
         envelope;
     } else if (name === 'march') {
       for (const at of [0.08, 0.35, 0.62]) {
@@ -108,15 +109,14 @@ export function generateSfxPCM(name: SfxName, rate = AUDIO_SAMPLE_RATE): Float64
         tail;
     } else if (name === 'horn') {
       const envelope = Math.min(1, t / 0.12) * Math.min(1, (spec.duration - t) / 0.4);
-      for (const frequency of [146.8324, 220, 293.6648])
-        for (let h = 1; h <= 4; h++)
-          value += (Math.sin(2 * Math.PI * frequency * h * t) * envelope * 0.1) / (h * h);
+      for (const frequency of [110, 146.8324, 220])
+        value += Math.sin(2 * Math.PI * frequency * t) * envelope * 0.1;
     } else {
       for (const at of [0.02, 0.18, 0.32]) {
         const s = t - at;
         if (s >= 0)
           value +=
-            (Math.sin(2 * Math.PI * 660 * s) + 0.24 * Math.sin(2 * Math.PI * 990 * s)) *
+            (Math.sin(2 * Math.PI * 165 * s) + 0.24 * Math.sin(2 * Math.PI * 220 * s)) *
             Math.min(1, s / 0.008) *
             Math.exp(-s * 13);
       }

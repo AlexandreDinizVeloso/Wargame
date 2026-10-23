@@ -167,7 +167,7 @@ test('v098: Turan recruta cavalaria sem Quartel e maioria montada reduz consumo'
     ) < 0.001,
   );
 });
-test('v098: Ferro-Norte é imune ao inverno e ganha choque no primeiro turno de guerra', () => {
+test('v098: Ferro-Norte mantém suprimento no inverno e ganha choque no primeiro turno de guerra', () => {
   const {
     g,
     players: [a, b],
@@ -177,6 +177,7 @@ test('v098: Ferro-Norte é imune ao inverno e ganha choque no primeiro turno de 
     target = g.provinces.find((p) => p.id === 'france')!,
     u = army(g, a.id, p.id, { infantry: 5 });
   const summer = effectiveSupply(g, a.id, p);
+  g.turn = 10;
   g.season = 'WINTER';
   assert.equal(effectiveSupply(g, a.id, p), summer);
   const before = combatPowers(g, [u], [], target).attackPower;
@@ -201,6 +202,7 @@ test('v098: Sapiência mantém bônus de XP dos líderes, teto nacional e −15%
   resolveBattle(g, u, target, emptyTurnReport(g.turn, g.diet));
   assert.equal(a.militaryXP, 2);
   assert.equal(leader.xp, 27);
+  p.marketLevel = 1; // Primeira construção custa 20 para todas as nações; ampliações têm desconto.
   const cost = orderCost(
     { type: 'BUILD_BUILDING', provinceId: p.id, building: 'MARKET' },
     p,

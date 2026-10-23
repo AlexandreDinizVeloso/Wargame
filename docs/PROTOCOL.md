@@ -1,12 +1,12 @@
 # Protocolo 7 — servidor headless / Godot
 
-`shared/` e `server/` não importam `src/`, React ou APIs DOM. O cliente utiliza JSON por HTTP/WS. Execute `npm run server:headless`; nenhum renderer Godot é incluído.
+`shared/` e `server/` não importam `src/`, React ou APIs DOM. Os clientes web e [Godot 3D](../godot-client/README_GODOT.md) usam o mesmo servidor JSON por HTTP/WS. Execute `npm run server:headless` para hospedar sem interface.
 
 ## HTTP
 
 | Rota              | Retorno                                                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------- |
-| `GET /api/health` | `status: ok`, `version: 1.0.1`, `protocolVersion: 7`                                        |
+| `GET /api/health` | `status: ok`, `version: 1.1.0`, `protocolVersion: 7`                                        |
 | `GET /api/schema` | Nações, mapas, recursos, crises, crenças, ordens, `skills`, `commanderTraits` e `buildings` |
 | `GET /api/rooms`  | Array de salas públicas não encerradas, sem sessão ou cartas privadas                       |
 | `/ws`             | WebSocket de mensagens JSON                                                                 |
@@ -220,3 +220,24 @@ As regras novas de Autoridade, logística, dilemas e regência valem independent
 `lastHumanActivityAt` é persistido por sala. Listagens fazem limpeza de entradas com 900000 ms de inatividade; arquivos ficam em `archived-rooms`. `GET /api/rooms/:code/DownloadSave` funciona em salas ativas ou arquivadas com `Authorization: Bearer TOKEN` e `X-Concordia-Player: PLAYER_ID` do anfitrião. A resposta é `CONCORDIA_SAVE_098` sem hashes de sessão. Um `resume` autenticado pode reabrir sala arquivada com as credenciais originais. O código WebSocket 4004 informa arquivamento e impede reconexão automática da aba AFK.
 
 O manifesto `/api/audio-assets` inclui as músicas de 16 segundos. O mixer é local ao navegador, não participa do estado autoritativo.
+
+## Cliente nativo e HTTP v1.1
+
+O protocolo continua em 7. `/api/bootstrap` compartilha o schema, as 52 regiões, as 42 geometrias terrestres e os catálogos de regras. Não contém credenciais nem estados privados de salas.
+
+| Endpoint                            | Corpo/resultado                                                                                |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `POST /api/rooms`                   | Configuração de criação, nome e nação; devolve sessão e estado da própria vaga.                |
+| `POST /api/rooms/:code/join`        | `{name,nationId}`; devolve nova sessão e estado.                                               |
+| `POST /api/rooms/:code/resume`      | Credencial original em headers ou `{playerId,token}`; retomada explícita inclusive de arquivo. |
+| `GET /api/rooms/:code/state`        | `GameView` autenticado, previsões, reservas e preços locais.                                   |
+| `POST /api/rooms/:code/commands`    | `{command: GameCommand}`; reutiliza o mesmo `executeCommand` do WebSocket.                     |
+| `POST /api/rooms/:code/ready`       | `{ready:boolean}`; confirma/reabre e resolve com as mesmas regras simultâneas.                 |
+| `POST /api/rooms/:code/declare-war` | `{targetRealmId,casusBelli,offensiveAllyIds?}`.                                                |
+| `POST /api/rooms/:code/leave`       | Encerra a presença HTTP atual.                                                                 |
+
+Os endpoints autenticados exigem `Authorization: Bearer TOKEN` e `X-Concordia-Player: PLAYER_ID`. A entrada devolve `{code,playerId,token,state,economy,reserved,orderCosts}`; consultas e comandos devolvem `{state,economy,reserved,orderCosts}`. `state` é exclusivamente o `GameView` daquela vaga, com a mesma névoa, objetivos privados e visibilidade do navegador. `orderCosts[provinceId]` informa construções, recrutamento e pacificação nas cidades próprias, calculados por `orderCost` no servidor.
+
+O cliente serializa pedidos HTTP e consulta aproximadamente uma vez por segundo. Consultar renova apenas a presença transitória por 15 segundos; **não renova `lastHumanActivityAt`**. Uma sala arquivada retorna 410 e exige ação explícita de retomada. Credenciais inválidas retornam 401; JSON/comandos inválidos retornam 400; métodos incorretos retornam 405; corpos acima de 128 KiB retornam 413. O polling nunca é usado para reabrir automaticamente uma sala abandonada.
+
+Não há segundo motor em GDScript. Custos, efeitos sazonais, movimentos, batalhas, diplomacia e vitórias permanecem autoritativos em TypeScript. Veja [v1.1](V1_1.md) e [Godot](../godot-client/README_GODOT.md).

@@ -8,7 +8,7 @@ import type {
   SkillDefinition,
   SkillId,
 } from './types';
-import { technologyCost } from './world';
+import { seasonRulesAt, technologyCost } from './world';
 export const TRAITS: Record<CommanderTrait, { name: string; description: string }> = {
   SIEGE_MASTER: {
     name: 'Mestre de Cerco',
@@ -28,7 +28,8 @@ export const TRAITS: Record<CommanderTrait, { name: string; description: string 
   },
   QUARTERMASTER: {
     name: 'Intendente Logístico',
-    description: '−30% manutenção, +6 suprimento local e imunidade a atrito.',
+    description:
+      '−30% manutenção, +6 suprimento local e imunidade a atrito comum; não evita congelamento.',
   },
   SEA_WOLF: {
     name: 'Lobo do Mar',
@@ -79,7 +80,7 @@ export const SKILLS: SkillDefinition[] = [
   skill(
     'NAV_T3',
     'Domínio Oceânico',
-    'Duas ligações marítimas por rodada; imunidade a atrito naval.',
+    'Duas ligações marítimas por rodada; imunidade a atrito naval comum, sem proteção contra congelamento.',
   ),
 ];
 export const BRANCHES: Record<SkillBranch, string> = {
@@ -117,6 +118,7 @@ export function movementAllowance(
   return Math.max(
     blitz,
     base +
+      seasonRulesAt(g.turn ?? 1).landMovementBonus +
       (hasSkill(g, a.ownerId, 'CAV_T3') &&
       a.cavalry >= Math.ceil((a.infantry + a.cavalry + a.artillery) / 2) &&
       a.cavalry > 0

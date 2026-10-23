@@ -20,6 +20,8 @@ import { DILEMMAS } from '../shared/dilemmas';
 import { NATIONS, RELIGIONS, EMBLEMS, holyCityId } from '../shared/rules';
 import { EVENTS, RESOURCES, SEASONS } from '../shared/strategy';
 import { OBJECTIVES } from '../shared/types';
+import worldGeometry from '../shared/world-geometry.json';
+import { handleHttpGameApi } from './httpGameApi';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
@@ -36,9 +38,10 @@ const mime: Record<string, string> = {
   '.ogg': 'audio/ogg',
   '.mp3': 'audio/mpeg',
 };
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
+  if (await handleHttpGameApi(req, res, roomService)) return;
   if (req.method === 'GET' && req.url?.split('?')[0] === '/api/audio-assets') {
     const folder = path.join(root, production ? 'dist' : 'public', 'assets', 'sfx');
     const files = ['cannon', 'march', 'sail', 'horn', 'coin']
@@ -60,7 +63,7 @@ const server = http.createServer((req, res) => {
       JSON.stringify({
         status: 'ok',
         game: 'concordia',
-        version: '1.0.1',
+        version: '1.1.0',
         protocolVersion: 7,
       }),
     );
@@ -107,11 +110,14 @@ const server = http.createServer((req, res) => {
     }
     return;
   }
-  if (req.url?.split('?')[0] === '/api/schema') {
+  if (['/api/schema', '/api/bootstrap'].includes(req.url?.split('?')[0] ?? '')) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
         protocolVersion: 7,
+        version: '1.1.0',
+        geometry: worldGeometry,
+        polling: { state: '/api/rooms/:code/state', intervalMs: 1000, presenceLeaseMs: 15000 },
         nations: NATIONS.map((n) => ({ ...n, emblemPath: EMBLEMS[n.emblem] })),
         religions: RELIGIONS,
         holyCities: Object.fromEntries(

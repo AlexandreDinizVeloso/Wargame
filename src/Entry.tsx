@@ -119,7 +119,7 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          RISK-PACED EDITION <i /> 1.01
+          LONG SEASONS EDITION <i /> 1.1
         </span>
         <button className="quiet-button" onClick={onProfile}>
           🏅 Perfil do Estrategista

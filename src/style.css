@@ -7029,3 +7029,543 @@ button:hover:not(:disabled) {
   color: var(--gold-light);
   border-color: #ad945f;
 }
+
+/* v1.1: long seasons and one cinematic queue above the independent table windows. */
+.season-widget {
+  padding: 5px 9px;
+  margin-bottom: 4px;
+  border: 1px solid #c6ad685e;
+  background: #091c27c9;
+  border-radius: 4px;
+  min-width: 210px;
+  color: #e2d7b4;
+}
+.season-widget > strong {
+  display: block;
+  font-size: 10px;
+  font-family: Cinzel, Georgia, serif;
+  letter-spacing: 0.07em;
+}
+.season-widget > strong > span {
+  font-family: Inter, Arial, sans-serif;
+  font-size: 9px;
+  margin-left: 5px;
+  color: #e9d6a5;
+}
+.season-widget > small {
+  display: block;
+  font-size: 8px;
+  color: #b2beb6;
+  margin-top: 4px;
+}
+.season-widget[data-season='SPRING'] {
+  border-color: #72d69d88;
+}
+.season-widget[data-season='SUMMER'] {
+  border-color: #ffd175aa;
+}
+.season-widget[data-season='AUTUMN'] {
+  border-color: #dc8c49aa;
+}
+.season-widget[data-season='WINTER'] {
+  border-color: #b6e2f8aa;
+}
+.top-resources .hud-stat > span > small {
+  white-space: nowrap;
+}
+.province-season-tint {
+  pointer-events: none !important;
+  transition:
+    fill 1.2s,
+    fill-opacity 1.2s;
+}
+.world-map .province-shading *,
+.world-map .province-relief *,
+.world-map .geography-layer *,
+.world-map .province-structures *,
+.world-map .resource-badge *,
+.world-map .province-label,
+.world-map .sea-label,
+.world-map [data-miniature] * {
+  pointer-events: none;
+}
+.army-marker-hit-area,
+.sea-compass-hit-area {
+  pointer-events: all !important;
+}
+.season-atmosphere {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none !important;
+  z-index: 2;
+}
+.season-atmosphere > i {
+  position: absolute;
+  left: var(--particle-x);
+  top: -30px;
+  width: var(--particle-size);
+  height: var(--particle-size);
+  animation: season-particle-fall var(--particle-duration) linear infinite;
+  animation-delay: var(--particle-delay);
+  opacity: 0.55;
+  pointer-events: none !important;
+}
+.season-atmosphere.season-winter > i {
+  background: #edfaff;
+  border-radius: 50%;
+  box-shadow: 0 0 3px #e3f5ff44;
+}
+.season-atmosphere.season-autumn > i {
+  background: #eab763;
+  border-radius: 80% 0 80% 0;
+  transform: rotate(30deg);
+}
+.season-atmosphere.season-spring > i {
+  background: #f7c8df;
+  border-radius: 70% 70% 0 70%;
+  opacity: 0.38;
+}
+.season-atmosphere.season-summer > i {
+  background: #ffe5a0;
+  border-radius: 50%;
+  opacity: 0.18;
+  animation-direction: reverse;
+}
+@keyframes season-particle-fall {
+  0% {
+    transform: translate3d(0, -4vh, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(var(--particle-drift), 52vh, 0) rotate(160deg);
+  }
+  100% {
+    transform: translate3d(calc(var(--particle-drift) * 0.4), 106vh, 0) rotate(320deg);
+  }
+}
+.season-transition,
+.war-cutscene {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  color: #f4e7c4;
+  background: #07121ff5;
+}
+.season-transition {
+  --season-light: #5bba88;
+  isolation: isolate;
+  text-align: center;
+  animation: season-scene-in 0.6s both;
+}
+.season-transition.season-summer {
+  --season-light: #e8bf60;
+}
+.season-transition.season-autumn {
+  --season-light: #d68739;
+}
+.season-transition.season-winter {
+  --season-light: #a4d9f3;
+}
+.season-transition-landscape {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 50% 75%, var(--season-light), transparent 60%),
+    linear-gradient(150deg, #061623 0%, #193529 62%, #081925 100%);
+  opacity: 0.65;
+}
+.season-transition-landscape::after {
+  content: '';
+  position: absolute;
+  inset: 42% 0 0;
+  background: #06121be0;
+  clip-path: polygon(
+    0 100%,
+    0 75%,
+    12% 43%,
+    19% 58%,
+    29% 13%,
+    37% 43%,
+    48% 29%,
+    58% 54%,
+    70% 10%,
+    82% 45%,
+    91% 27%,
+    100% 60%,
+    100% 100%
+  );
+}
+.season-transition-copy {
+  width: min(800px, 88vw);
+  padding: 36px 20px;
+}
+.season-transition-copy > small {
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: #e9e3d0;
+}
+.season-transition-icon {
+  display: block;
+  margin: 18px auto 5px;
+  font-size: clamp(52px, 8vw, 82px);
+}
+.season-transition h2 {
+  font:
+    500 clamp(42px, 7vw, 90px)/1.2 Cinzel,
+    Georgia,
+    serif;
+  text-transform: uppercase;
+  color: #fff4d5;
+  margin: 0 0 9px;
+  letter-spacing: 0.12em;
+}
+.season-transition h3 {
+  font:
+    400 clamp(16px, 2.4vw, 25px) Cinzel,
+    Georgia,
+    serif;
+  margin: 0;
+  color: var(--season-light);
+}
+.season-transition p {
+  font-size: clamp(13px, 1.6vw, 17px);
+  line-height: 1.8;
+  margin: 24px auto;
+  max-width: 730px;
+}
+.season-transition-timer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--season-light);
+  transform-origin: left;
+  animation: season-timer 2.5s linear both;
+}
+@keyframes season-timer {
+  to {
+    transform: scaleX(0);
+  }
+}
+@keyframes season-scene-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.war-cutscene {
+  isolation: isolate;
+  background: radial-gradient(ellipse at 50% 95%, #6c2915 0%, #251a1c 40%, #070e17 85%);
+}
+.war-cutscene-smoke {
+  position: absolute;
+  inset: -15%;
+  z-index: -1;
+  opacity: 0.55;
+  background:
+    radial-gradient(ellipse at 22% 65%, #aa491e77, transparent 45%),
+    radial-gradient(ellipse at 72% 82%, #e5a14033, transparent 38%);
+  animation: war-smoke-drift 7s ease-in-out infinite alternate;
+}
+.war-cutscene-content {
+  width: min(1020px, 95vw);
+  text-align: center;
+  padding: 30px 16px;
+}
+.war-cutscene-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: #d1bda2;
+}
+.war-cutscene h2 {
+  color: #ffe8be;
+  font:
+    600 clamp(28px, 5vw, 64px)/1.25 Cinzel,
+    Georgia,
+    serif;
+  margin: 12px 0;
+  text-shadow: 0 2px 16px #dd5b2866;
+}
+.war-cutscene-casus {
+  color: #e2a865;
+  font:
+    400 18px Cinzel,
+    Georgia,
+    serif;
+  margin: 0 0 25px;
+}
+.war-cutscene-heraldry {
+  display: grid;
+  grid-template-columns: 1fr 70px 1fr;
+  align-items: center;
+}
+.war-cutscene-side {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+}
+.war-cutscene-side > small {
+  color: #c4b59f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.war-cutscene-side > svg {
+  margin: 10px 0;
+  width: clamp(82px, 13vw, 142px);
+  height: auto;
+}
+.war-cutscene-side.attacker > svg {
+  animation: heraldry-left-impact 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.war-cutscene-side.defender > svg {
+  animation: heraldry-right-impact 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.war-cutscene-side h3 {
+  font:
+    400 clamp(16px, 2.4vw, 26px) Cinzel,
+    Georgia,
+    serif;
+  margin: 0;
+}
+.war-cutscene-side > span {
+  color: #e1ceb3;
+  font-size: 12px;
+}
+.war-cutscene-side > strong {
+  font-size: 28px;
+  font-weight: 400;
+  margin-top: 8px;
+}
+.war-cutscene-side > strong > small {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: #c0b49f;
+}
+.war-cutscene-side p {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+.war-cutscene-impact {
+  font-size: clamp(32px, 5vw, 62px);
+  color: #e5af69;
+  animation: war-impact-burst 1s 0.25s both;
+}
+.war-cutscene-acknowledge {
+  margin: 26px auto 0;
+  min-width: 240px;
+  min-height: 52px;
+  font:
+    500 16px Cinzel,
+    Georgia,
+    serif;
+  letter-spacing: 0.08em;
+}
+@keyframes heraldry-left-impact {
+  from {
+    transform: translateX(-22vw) rotate(-10deg);
+    opacity: 0;
+  }
+  65% {
+    transform: translateX(15px) rotate(2deg);
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes heraldry-right-impact {
+  from {
+    transform: translateX(22vw) rotate(10deg);
+    opacity: 0;
+  }
+  65% {
+    transform: translateX(-15px) rotate(-2deg);
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes war-impact-burst {
+  0%,
+  20% {
+    transform: scale(0.25);
+    opacity: 0;
+  }
+  65% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes war-smoke-drift {
+  to {
+    transform: translate3d(3%, -2%, 0) scale(1.05);
+    opacity: 0.8;
+  }
+}
+@media (max-width: 1100px) {
+  .season-widget {
+    min-width: 165px;
+    padding: 4px 6px;
+  }
+  .season-widget > strong {
+    font-size: 9px;
+  }
+  .season-widget > small {
+    font-size: 7px;
+  }
+  .top-resources {
+    gap: 14px;
+  }
+  .top-resources .hud-stat > span > small {
+    font-size: 7px;
+  }
+}
+@media (max-width: 700px) {
+  .season-widget {
+    min-width: 0;
+    padding: 3px 5px;
+    margin-bottom: 2px;
+  }
+  .season-widget > strong {
+    font-size: 8px;
+    letter-spacing: 0;
+  }
+  .season-widget > strong > span {
+    font-size: 7px;
+    display: block;
+    margin: 2px 0 0;
+  }
+  .season-widget > small {
+    display: none;
+  }
+  .war-cutscene-content {
+    padding: 24px 8px;
+  }
+  .war-cutscene-heraldry {
+    grid-template-columns: 1fr 32px 1fr;
+  }
+  .war-cutscene-side {
+    padding: 7px;
+  }
+  .war-cutscene-side > small {
+    font-size: 9px;
+  }
+  .war-cutscene-side > strong {
+    font-size: 23px;
+  }
+  .war-cutscene-side p {
+    font-size: 10px;
+  }
+  .season-transition-copy > small {
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .season-atmosphere > i,
+  .season-transition,
+  .war-cutscene-smoke,
+  .war-cutscene-side > svg,
+  .war-cutscene-impact {
+    animation: none !important;
+  }
+  .province-season-tint {
+    transition: none;
+  }
+}
+.release-candidate-interface .turn-status {
+  width: 240px;
+  padding-left: 9px;
+}
+.release-candidate-interface .turn-status .season-widget {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.release-candidate-interface .turn-status .season-widget > strong {
+  font-size: 10px;
+}
+.season-time-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+  font-size: 8px;
+  color: #c3bb9e;
+}
+@media (max-width: 1200px) {
+  .release-candidate-interface .turn-status {
+    width: 195px;
+  }
+  .release-candidate-interface .turn-status .season-widget > strong {
+    font-size: 9px;
+  }
+  .season-time-row {
+    gap: 6px;
+    font-size: 7px;
+  }
+}
+@media (max-width: 700px) {
+  .release-candidate-interface .turn-status {
+    width: auto;
+    padding-left: 0;
+  }
+  .release-candidate-interface .turn-status .season-widget {
+    padding: 3px 5px;
+  }
+  .release-candidate-interface .turn-status .season-widget > strong {
+    font-size: 8px;
+    line-height: 1.1;
+  }
+  .season-time-row {
+    margin-top: 3px;
+    font-size: 6px;
+    gap: 4px;
+  }
+  .season-time-row > span:first-child:not(:last-child) {
+    display: none;
+  }
+}
+@keyframes heraldry-left-impact {
+  from {
+    transform: translateX(-22vw) rotate(-10deg);
+    opacity: 0;
+  }
+  62% {
+    transform: translateX(clamp(60px, 19vw, 220px)) rotate(7deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes heraldry-right-impact {
+  from {
+    transform: translateX(22vw) rotate(10deg);
+    opacity: 0;
+  }
+  62% {
+    transform: translateX(clamp(-220px, -19vw, -60px)) rotate(-7deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

@@ -17,7 +17,9 @@ import type {
   Theater,
   PublicRoom,
 } from '../shared/types';
-import { NATIONS } from '../shared/rules';
+import { NATIONS, orderCost, realmEconomy, reservedResources } from '../shared/rules';
+import { BUILDINGS, canBuild } from '../shared/development';
+import { seasonAt } from '../shared/strategy';
 import { parseCommand } from './commands';
 import {
   addPlayer,
@@ -41,6 +43,7 @@ import {
 interface Session {
   tokenHash: string;
   socket: WebSocket | null;
+  httpSeenAt?: number;
 }
 export interface Room {
   game: GameState;
@@ -57,6 +60,7 @@ interface Options {
 }
 export const ROOM_INACTIVITY_MS = 15 * 60 * 1000;
 export const ROOM_CLEANUP_INTERVAL_MS = 60 * 1000;
+export const HTTP_PRESENCE_MS = 15_000;
 export class RoomSaveDownloadError extends Error {
   constructor(
     public readonly status: number,
@@ -94,6 +98,7 @@ export function attachRooms(server: Server, options: Options = {}) {
   if (options.stateFile)
     for (const saved of readSnapshot(options.stateFile)) {
       saved.game.persistenceEnabled = true;
+      saved.game.season = seasonAt(saved.game.turn);
       saved.game.players.forEach((p) => {
         p.online = p.bot && !p.afkRegent;
         syncNationAuthority(p);
@@ -243,6 +248,312 @@ export function attachRooms(server: Server, options: Options = {}) {
     for (const [id, s] of room.sessions)
       if (s.socket) send(s.socket, { type: 'state', state: viewFor(room.game, id) });
   }
+  /** Both transports hand the room to the first human who is still connected. */
+  function handOffHost(room: Room) {
+    const host = room.game.players.find((player) => player.id === room.game.hostId);
+    if (!host || host.bot || !host.online)
+      room.game.hostId =
+        room.game.players.find((player) => !player.bot && player.online)?.id ?? room.game.hostId;
+  }
+  function activateSession(room: Room, id: string, token: string, socket: WebSocket | null) {
+    const old = room.sessions.get(id)?.socket;
+    room.sessions.set(id, {
+      tokenHash: hashToken(token),
+      socket,
+      ...(socket ? {} : { httpSeenAt: clock() }),
+    });
+    room.touched = clock();
+    room.lastHumanActivityAt = clock();
+    room.game.season = seasonAt(room.game.turn);
+    const resumed = room.game.players.find((p) => p.id === id)!;
+    restoreRegency(resumed);
+    syncNationAuthority(resumed);
+    resumed.online = true;
+    issueDilemmas(room.game);
+    if (!room.game.players.find((p) => p.id === room.game.hostId)?.online) room.game.hostId = id;
+    if (room.game.phase === 'planning' && room.game.paused) {
+      room.game.paused = false;
+      room.game.deadline = room.game.firstReadyPlayerName
+        ? clock() + Math.max(1000, room.remainingMs)
+        : null;
+      room.game.turnDeadlineAt = room.game.deadline;
+    }
+    if (old && old !== socket) old.close(4001, 'Sessão aberta em outra conexão.');
+    persist();
+  }
+  function authenticatedRoom(code: string, playerId: string, token: string): Room {
+    cleanupInactiveRooms();
+    const room = rooms.get(code.trim().toUpperCase());
+    if (!room)
+      throw new RoomSaveDownloadError(
+        410,
+        'Sala indisponível ou arquivada. Use Retomar com sua credencial privada.',
+      );
+    const session = room.sessions.get(playerId);
+    if (
+      !session ||
+      !hasSessionCredential(
+        { sessions: [{ playerId, tokenHash: session.tokenHash }] },
+        playerId,
+        token,
+      )
+    )
+      throw new RoomSaveDownloadError(401, 'Credencial de jogador inválida.');
+    session.httpSeenAt = clock();
+    const player = room.game.players.find((p) => p.id === playerId)!;
+    player.online = true;
+    return room;
+  }
+  function httpState(room: Room, playerId: string) {
+    refreshScores(room.game);
+    const player = room.game.players.find((p) => p.id === playerId)!;
+    const orderCosts = Object.fromEntries(
+      room.game.provinces
+        .filter((p) => p.kind === 'LAND' && p.ownerId === playerId)
+        .map((province) => [
+          province.id,
+          {
+            build: Object.fromEntries(
+              Object.keys(BUILDINGS).map((key) => {
+                const building = key as import('../shared/types').BuildingType;
+                return [
+                  building,
+                  {
+                    ...orderCost(
+                      { type: 'BUILD_BUILDING', provinceId: province.id, building },
+                      province,
+                      player,
+                      room.game,
+                    ),
+                    allowed: !province.occupierId && canBuild(province, building, player),
+                  },
+                ];
+              }),
+            ),
+            recruit: Object.fromEntries(
+              ['infantry', 'cavalry', 'artillery', 'warships', 'transports'].map((unit) => [
+                unit,
+                orderCost(
+                  {
+                    type: 'RECRUIT_BATTALION',
+                    provinceId: province.id,
+                    isFleet: ['warships', 'transports'].includes(unit),
+                    [unit]: 1,
+                  },
+                  province,
+                  player,
+                  room.game,
+                ),
+              ]),
+            ),
+            pacify: orderCost(
+              { type: 'PACIFY', provinceId: province.id },
+              province,
+              player,
+              room.game,
+            ),
+          },
+        ]),
+    );
+    return {
+      state: viewFor(room.game, playerId),
+      economy: realmEconomy(room.game, playerId),
+      reserved: reservedResources(room.game, playerId),
+      orderCosts,
+    };
+  }
+  function httpEntry(message: Record<string, unknown>) {
+    const { room, playerId, token } = enterRoom(message);
+    activateSession(room, playerId, token, null);
+    broadcast(room);
+    return { code: room.game.code, playerId, token, ...httpState(room, playerId) };
+  }
+  function enterRoom(msg: Record<string, unknown>): {
+    room: Room;
+    playerId: string;
+    token: string;
+  } {
+    if (msg.type === 'create') {
+      assert(rooms.size < 200, 'Limite de salas atingido neste servidor.');
+      let code = randomBytes(3).toString('hex').toUpperCase();
+      while (rooms.has(code) || archivedRoom(code))
+        code = randomBytes(3).toString('hex').toUpperCase();
+      assert(
+        msg.tutorial === undefined || typeof msg.tutorial === 'boolean',
+        'Opção de tutorial inválida.',
+      );
+      const tutorial = msg.tutorial === true;
+      const scenarioId = msg.scenarioId === undefined ? 'CLASSIC' : String(msg.scenarioId);
+      const scenario = SCENARIOS.find((s) => s.id === scenarioId);
+      assert(scenario, 'Cenário desconhecido.');
+      const g = createGame(
+        code,
+        tutorial ? 'campaign' : (scenario.mode ?? (msg.mode === 'campaign' ? 'campaign' : 'quick')),
+        msg.demo === true || tutorial,
+        randomBytes(4).readUInt32LE(),
+        scenario.theater ??
+          (['EUROPE', 'AMERICAS', 'ASIA'].includes(String(msg.theater))
+            ? (msg.theater as Theater)
+            : 'EUROPE'),
+      );
+      if (!tutorial) {
+        g.matchConfig.campaignId = randomBytes(16).toString('hex');
+        g.matchConfig.ruleset = 'GOLD_098';
+        g.matchConfig.scenarioId = scenario.id;
+        g.matchConfig.createdVersion = '1.1.0';
+        g.matchConfig.verticalSlice = true;
+      }
+      g.roomName =
+        typeof msg.roomName === 'string' && msg.roomName.trim()
+          ? msg.roomName.trim().slice(0, 60)
+          : `Campanha ${code}`;
+      g.isPublic = !tutorial && msg.isPublic !== false;
+      g.enableSecretObjectives = !tutorial && msg.enableSecretObjectives !== false;
+      assert(
+        msg.allowBotSecretVictory === undefined || typeof msg.allowBotSecretVictory === 'boolean',
+        'Opção de vitória de bots inválida.',
+      );
+      g.allowBotSecretVictory = msg.allowBotSecretVictory === true;
+      g.matchConfig.allowBotSecretVictory = g.allowBotSecretVictory;
+      if (msg.turnTimerSeconds !== undefined)
+        assert(
+          Number.isInteger(msg.turnTimerSeconds) &&
+            Number(msg.turnTimerSeconds) >= 15 &&
+            Number(msg.turnTimerSeconds) <= 600,
+          'Timer deve ser 15–600 segundos.',
+        );
+      g.turnSeconds = tutorial ? 600 : Number(msg.turnTimerSeconds ?? 60);
+      g.matchConfig.turnSeconds = g.turnSeconds;
+      g.matchConfig.enableSecretObjectives = g.enableSecretObjectives;
+      g.persistenceEnabled = !!options.stateFile;
+      const p = addPlayer(
+        g,
+        typeof msg.name === 'string' ? msg.name : 'Estrategista',
+        false,
+        tutorial ? 'vespera' : nationOfMessage(msg.nationId),
+      );
+      const room: Room = {
+        game: g,
+        sessions: new Map(),
+        touched: clock(),
+        lastHumanActivityAt: clock(),
+        remainingMs: g.turnSeconds * 1000,
+      };
+      rooms.set(code, room);
+      if (g.demo) {
+        if (tutorial) {
+          addPlayer(g, 'Conselho do Norte', true, 'ferro_norte', 'Diplomat');
+          addPlayer(g, 'Conselho do Sul', true, 'kaldor', 'Merchant');
+        } else for (let i = 0; i < 3; i++) addPlayer(g, `Conselho ${i + 1}`, true);
+        startGame(g, clock());
+        if (tutorial) prepareTutorial(g, p.id);
+      }
+      return { room, playerId: p.id, token: randomBytes(24).toString('hex') };
+    }
+    if (msg.type === 'join') {
+      const room = rooms.get(String(msg.code).trim().toUpperCase());
+      assert(room, 'Sala não encontrada. Confira o código e o servidor.');
+      assert(!room.game.matchConfig.tutorial, 'O tutorial é uma mesa de treino individual.');
+      const requested = nationOfMessage(msg.nationId);
+      const availableBot = room.game.players.find(
+        (p) =>
+          replaceableBot(p) && !room.sessions.has(p.id) && (!requested || p.nationId === requested),
+      );
+      let p;
+      if (room.game.phase !== 'lobby' || room.game.players.length >= 8) {
+        assert(
+          room.game.isPublic || room.game.phase === 'lobby',
+          'Somente salas públicas permitem assumir um bot em campanha.',
+        );
+        assert(availableBot, 'Não há bot disponível para assumir.');
+        p = availableBot;
+        p.bot = false;
+        p.afkRegent = false;
+        p.afkStreak = 0;
+        p.online = false;
+        p.ready = false;
+        p.name =
+          typeof msg.name === 'string' ? msg.name.trim().slice(0, 30) || 'Convidado' : 'Convidado';
+        room.game.orders[p.id] = [];
+      } else
+        p = addPlayer(
+          room.game,
+          typeof msg.name === 'string' ? msg.name : 'Estrategista',
+          false,
+          requested,
+        );
+      return { room, playerId: p.id, token: randomBytes(24).toString('hex') };
+    }
+    if (msg.type === 'resume') {
+      const resumeCode = String(msg.code).trim().toUpperCase();
+      let room = rooms.get(resumeCode);
+      const token = typeof msg.token === 'string' ? msg.token : '';
+      if (!room) {
+        const saved = archivedRoom(resumeCode);
+        if (saved && hasSessionCredential(saved, String(msg.playerId), token)) {
+          const game = structuredClone(saved.game);
+          game.paused = true;
+          game.deadline = null;
+          game.turnDeadlineAt = null;
+          for (const player of game.players) player.online = player.bot && !player.afkRegent;
+          room = {
+            game,
+            touched: clock(),
+            lastHumanActivityAt: clock(),
+            remainingMs: saved.remainingMs,
+            sessions: new Map(
+              saved.sessions.map((s) => [s.playerId, { tokenHash: s.tokenHash, socket: null }]),
+            ),
+          };
+          rooms.set(resumeCode, room);
+        }
+      }
+      const session = room?.sessions.get(String(msg.playerId));
+      const incoming = Buffer.from(hashToken(token), 'hex'),
+        expected = Buffer.from(session?.tokenHash ?? '', 'hex');
+      assert(
+        room &&
+          session &&
+          token.length > 0 &&
+          incoming.length === expected.length &&
+          timingSafeEqual(incoming, expected),
+        'Não foi possível recuperar a sessão. Confira a sala e o arquivo de campanhas do servidor.',
+      );
+      return { room, playerId: String(msg.playerId), token };
+    }
+    throw new Error('Entrada de sala inválida.');
+  }
+  function applyRoomCommand(room: Room, playerId: string, command: GameCommand) {
+    const previous = room.game;
+    const previousTouched = room.touched;
+    const previousActivity = room.lastHumanActivityAt;
+    const replacedSession =
+      command.type === 'REPLACE_WITH_BOT' ? room.sessions.get(command.playerId) : undefined;
+    const input = structuredClone(previous);
+    restoreRegency(input.players.find((p) => p.id === playerId)!);
+    if (input.paused) {
+      input.paused = false;
+      input.deadline = input.firstReadyPlayerName
+        ? clock() + Math.max(1000, room.remainingMs)
+        : null;
+      input.turnDeadlineAt = input.deadline;
+    }
+    room.game = executeCommand(input, playerId, command, clock());
+    room.touched = clock();
+    room.lastHumanActivityAt = clock();
+    if (command.type === 'REPLACE_WITH_BOT') room.sessions.delete(command.playerId);
+    try {
+      persist();
+    } catch (error) {
+      room.game = previous;
+      room.touched = previousTouched;
+      room.lastHumanActivityAt = previousActivity;
+      if (command.type === 'REPLACE_WITH_BOT' && replacedSession)
+        room.sessions.set(command.playerId, replacedSession);
+      throw error;
+    }
+    broadcast(room);
+  }
   wss.on('connection', (ws) => {
     let current: { room: Room; playerId: string } | null = null,
       windowStart = clock(),
@@ -265,9 +576,9 @@ export function attachRooms(server: Server, options: Options = {}) {
         session = room.sessions.get(playerId);
       if (session?.socket === ws) {
         session.socket = null;
-        room.game.players.find((p) => p.id === playerId)!.online = false;
-        if (room.game.hostId === playerId)
-          room.game.hostId = room.game.players.find((p) => !p.bot && p.online)?.id ?? playerId;
+        room.game.players.find((p) => p.id === playerId)!.online =
+          session.httpSeenAt !== undefined && clock() - session.httpSeenAt <= HTTP_PRESENCE_MS;
+        handOffHost(room);
         if (room.game.phase === 'planning' && !room.game.players.some((p) => !p.bot && p.online)) {
           room.remainingMs =
             room.game.deadline === null
@@ -284,26 +595,8 @@ export function attachRooms(server: Server, options: Options = {}) {
     }
     function bind(room: Room, id: string, token: string) {
       detach();
-      const old = room.sessions.get(id)?.socket;
-      room.sessions.set(id, { tokenHash: hashToken(token), socket: ws });
       current = { room, playerId: id };
-      room.touched = clock();
-      room.lastHumanActivityAt = clock();
-      const resumed = room.game.players.find((p) => p.id === id)!;
-      restoreRegency(resumed);
-      syncNationAuthority(resumed);
-      resumed.online = true;
-      issueDilemmas(room.game);
-      if (!room.game.players.find((p) => p.id === room.game.hostId)?.online) room.game.hostId = id;
-      if (room.game.phase === 'planning' && room.game.paused) {
-        room.game.paused = false;
-        room.game.deadline = room.game.firstReadyPlayerName
-          ? clock() + Math.max(1000, room.remainingMs)
-          : null;
-        room.game.turnDeadlineAt = room.game.deadline;
-      }
-      if (old && old !== ws) old.close(4001, 'Sessão aberta em outra conexão.');
-      persist();
+      activateSession(room, id, token, ws);
       send(ws, { type: 'joined', code: room.game.code, playerId: id, token });
       broadcast(room);
     }
@@ -348,162 +641,9 @@ export function attachRooms(server: Server, options: Options = {}) {
           send(ws, { type: 'seat_invites', invites });
           return;
         }
-        if (msg.type === 'create') {
-          assert(rooms.size < 200, 'Limite de salas atingido neste servidor.');
-          let code = randomBytes(3).toString('hex').toUpperCase();
-          while (rooms.has(code) || archivedRoom(code))
-            code = randomBytes(3).toString('hex').toUpperCase();
-          assert(
-            msg.tutorial === undefined || typeof msg.tutorial === 'boolean',
-            'Opção de tutorial inválida.',
-          );
-          const tutorial = msg.tutorial === true;
-          const scenarioId = msg.scenarioId === undefined ? 'CLASSIC' : String(msg.scenarioId);
-          const scenario = SCENARIOS.find((s) => s.id === scenarioId);
-          assert(scenario, 'Cenário desconhecido.');
-          const g = createGame(
-            code,
-            tutorial
-              ? 'campaign'
-              : (scenario.mode ?? (msg.mode === 'campaign' ? 'campaign' : 'quick')),
-            msg.demo === true || tutorial,
-            randomBytes(4).readUInt32LE(),
-            scenario.theater ??
-              (['EUROPE', 'AMERICAS', 'ASIA'].includes(String(msg.theater))
-                ? (msg.theater as Theater)
-                : 'EUROPE'),
-          );
-          if (!tutorial) {
-            g.matchConfig.campaignId = randomBytes(16).toString('hex');
-            g.matchConfig.ruleset = 'GOLD_098';
-            g.matchConfig.scenarioId = scenario.id;
-            g.matchConfig.createdVersion = '1.0.1';
-            g.matchConfig.verticalSlice = true;
-          }
-          g.roomName =
-            typeof msg.roomName === 'string' && msg.roomName.trim()
-              ? msg.roomName.trim().slice(0, 60)
-              : `Campanha ${code}`;
-          g.isPublic = !tutorial && msg.isPublic !== false;
-          g.enableSecretObjectives = !tutorial && msg.enableSecretObjectives !== false;
-          assert(
-            msg.allowBotSecretVictory === undefined ||
-              typeof msg.allowBotSecretVictory === 'boolean',
-            'Opção de vitória de bots inválida.',
-          );
-          g.allowBotSecretVictory = msg.allowBotSecretVictory === true;
-          g.matchConfig.allowBotSecretVictory = g.allowBotSecretVictory;
-          if (msg.turnTimerSeconds !== undefined)
-            assert(
-              Number.isInteger(msg.turnTimerSeconds) &&
-                Number(msg.turnTimerSeconds) >= 15 &&
-                Number(msg.turnTimerSeconds) <= 600,
-              'Timer deve ser 15–600 segundos.',
-            );
-          g.turnSeconds = tutorial ? 600 : Number(msg.turnTimerSeconds ?? 60);
-          g.matchConfig.turnSeconds = g.turnSeconds;
-          g.matchConfig.enableSecretObjectives = g.enableSecretObjectives;
-          g.persistenceEnabled = !!options.stateFile;
-          const p = addPlayer(
-            g,
-            typeof msg.name === 'string' ? msg.name : 'Estrategista',
-            false,
-            tutorial ? 'vespera' : nationOfMessage(msg.nationId),
-          );
-          const room: Room = {
-            game: g,
-            sessions: new Map(),
-            touched: clock(),
-            lastHumanActivityAt: clock(),
-            remainingMs: g.turnSeconds * 1000,
-          };
-          rooms.set(code, room);
-          if (g.demo) {
-            if (tutorial) {
-              addPlayer(g, 'Conselho do Norte', true, 'ferro_norte', 'Diplomat');
-              addPlayer(g, 'Conselho do Sul', true, 'kaldor', 'Merchant');
-            } else for (let i = 0; i < 3; i++) addPlayer(g, `Conselho ${i + 1}`, true);
-            startGame(g, clock());
-            if (tutorial) prepareTutorial(g, p.id);
-          }
-          bind(room, p.id, randomBytes(24).toString('hex'));
-          return;
-        }
-        if (msg.type === 'join') {
-          const room = rooms.get(String(msg.code).trim().toUpperCase());
-          assert(room, 'Sala não encontrada. Confira o código e o servidor.');
-          assert(!room.game.matchConfig.tutorial, 'O tutorial é uma mesa de treino individual.');
-          const requested = nationOfMessage(msg.nationId);
-          const availableBot = room.game.players.find(
-            (p) =>
-              replaceableBot(p) &&
-              !room.sessions.has(p.id) &&
-              (!requested || p.nationId === requested),
-          );
-          let p;
-          if (room.game.phase !== 'lobby' || room.game.players.length >= 8) {
-            assert(
-              room.game.isPublic || room.game.phase === 'lobby',
-              'Somente salas públicas permitem assumir um bot em campanha.',
-            );
-            assert(availableBot, 'Não há bot disponível para assumir.');
-            p = availableBot;
-            p.bot = false;
-            p.afkRegent = false;
-            p.afkStreak = 0;
-            p.online = false;
-            p.ready = false;
-            p.name =
-              typeof msg.name === 'string'
-                ? msg.name.trim().slice(0, 30) || 'Convidado'
-                : 'Convidado';
-            room.game.orders[p.id] = [];
-          } else
-            p = addPlayer(
-              room.game,
-              typeof msg.name === 'string' ? msg.name : 'Estrategista',
-              false,
-              requested,
-            );
-          bind(room, p.id, randomBytes(24).toString('hex'));
-          return;
-        }
-        if (msg.type === 'resume') {
-          const resumeCode = String(msg.code).trim().toUpperCase();
-          let room = rooms.get(resumeCode);
-          const token = typeof msg.token === 'string' ? msg.token : '';
-          if (!room) {
-            const saved = archivedRoom(resumeCode);
-            if (saved && hasSessionCredential(saved, String(msg.playerId), token)) {
-              const game = structuredClone(saved.game);
-              game.paused = true;
-              game.deadline = null;
-              game.turnDeadlineAt = null;
-              for (const player of game.players) player.online = player.bot && !player.afkRegent;
-              room = {
-                game,
-                touched: clock(),
-                lastHumanActivityAt: clock(),
-                remainingMs: saved.remainingMs,
-                sessions: new Map(
-                  saved.sessions.map((s) => [s.playerId, { tokenHash: s.tokenHash, socket: null }]),
-                ),
-              };
-              rooms.set(resumeCode, room);
-            }
-          }
-          const session = room?.sessions.get(String(msg.playerId));
-          const incoming = Buffer.from(hashToken(token), 'hex'),
-            expected = Buffer.from(session?.tokenHash ?? '', 'hex');
-          assert(
-            room &&
-              session &&
-              token.length > 0 &&
-              incoming.length === expected.length &&
-              timingSafeEqual(incoming, expected),
-            'Não foi possível recuperar a sessão. Confira a sala e o arquivo de campanhas do servidor.',
-          );
-          bind(room, String(msg.playerId), token);
+        if (['create', 'join', 'resume'].includes(msg.type)) {
+          const entry = enterRoom(msg);
+          bind(entry.room, entry.playerId, entry.token);
           return;
         }
         if (msg.type === 'leave') {
@@ -545,36 +685,7 @@ export function attachRooms(server: Server, options: Options = {}) {
           }
           return;
         }
-        const command = readCommand(msg);
-        const previous = room.game;
-        const previousTouched = room.touched;
-        const previousActivity = room.lastHumanActivityAt;
-        const replacedSession =
-          command.type === 'REPLACE_WITH_BOT' ? room.sessions.get(command.playerId) : undefined;
-        const input = structuredClone(previous);
-        restoreRegency(input.players.find((p) => p.id === playerId)!);
-        if (input.paused) {
-          input.paused = false;
-          input.deadline = input.firstReadyPlayerName
-            ? clock() + Math.max(1000, room.remainingMs)
-            : null;
-          input.turnDeadlineAt = input.deadline;
-        }
-        room.game = executeCommand(input, playerId, command, clock());
-        room.touched = clock();
-        room.lastHumanActivityAt = clock();
-        if (command.type === 'REPLACE_WITH_BOT') room.sessions.delete(command.playerId);
-        try {
-          persist();
-        } catch (error) {
-          room.game = previous;
-          room.touched = previousTouched;
-          room.lastHumanActivityAt = previousActivity;
-          if (command.type === 'REPLACE_WITH_BOT' && replacedSession)
-            room.sessions.set(command.playerId, replacedSession);
-          throw error;
-        }
-        broadcast(room);
+        applyRoomCommand(room, playerId, readCommand(msg));
       } catch (error) {
         send(ws, {
           type: 'error',
@@ -598,6 +709,31 @@ export function attachRooms(server: Server, options: Options = {}) {
     if (clock() - lastCleanupAt >= ROOM_CLEANUP_INTERVAL_MS) cleanupInactiveRooms();
     let changed = false;
     for (const room of rooms.values()) {
+      let expiredPresence = false;
+      for (const [id, session] of room.sessions) {
+        if (session.httpSeenAt !== undefined && clock() - session.httpSeenAt > HTTP_PRESENCE_MS) {
+          delete session.httpSeenAt;
+          const player = room.game.players.find((p) => p.id === id);
+          if (player && !session.socket) {
+            player.online = false;
+            expiredPresence = true;
+          }
+        }
+      }
+      if (expiredPresence) {
+        handOffHost(room);
+        if (!room.game.players.some((p) => !p.bot && p.online) && room.game.phase === 'planning') {
+          room.remainingMs =
+            room.game.deadline === null
+              ? room.remainingMs
+              : Math.max(0, room.game.deadline - clock());
+          room.game.paused = true;
+          room.game.deadline = null;
+          room.game.turnDeadlineAt = null;
+        }
+        persist();
+        broadcast(room);
+      }
       if (
         room.game.phase === 'planning' &&
         !room.game.paused &&
@@ -685,6 +821,40 @@ export function attachRooms(server: Server, options: Options = {}) {
           status: g.phase === 'lobby' ? 'LOBBY' : 'IN_GAME',
           turn: g.turn,
         }));
+    },
+    http: {
+      create: (message: Record<string, unknown>) => httpEntry({ ...message, type: 'create' }),
+      join: (code: string, message: Record<string, unknown>) =>
+        httpEntry({ ...message, type: 'join', code }),
+      resume: (code: string, playerId: string, token: string) =>
+        httpEntry({ type: 'resume', code, playerId, token }),
+      state: (code: string, playerId: string, token: string) =>
+        httpState(authenticatedRoom(code, playerId, token), playerId),
+      command: (code: string, playerId: string, token: string, raw: unknown) => {
+        const room = authenticatedRoom(code, playerId, token);
+        applyRoomCommand(room, playerId, parseCommand(raw));
+        tick();
+        return httpState(room, playerId);
+      },
+      leave: (code: string, playerId: string, token: string) => {
+        const room = authenticatedRoom(code, playerId, token);
+        const session = room.sessions.get(playerId)!;
+        delete session.httpSeenAt;
+        if (!session.socket) room.game.players.find((p) => p.id === playerId)!.online = false;
+        handOffHost(room);
+        if (!room.game.players.some((p) => !p.bot && p.online) && room.game.phase === 'planning') {
+          room.remainingMs =
+            room.game.deadline === null
+              ? room.remainingMs
+              : Math.max(0, room.game.deadline - clock());
+          room.game.paused = true;
+          room.game.deadline = null;
+          room.game.turnDeadlineAt = null;
+        }
+        persist();
+        broadcast(room);
+        return { left: true };
+      },
     },
     cleanupInactiveRooms,
     downloadSave,

@@ -288,6 +288,22 @@ try {
   await states[0].until(
     (g) => g.wars.some((w) => w.active) && g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION'),
   );
+  for (const involved of pages.slice(0, 2)) {
+    const declaration = involved.locator('[data-war-cutscene]');
+    await declaration.waitFor();
+    assert.ok((await declaration.locator('svg').count()) >= 2, 'Os dois brasões são exibidos.');
+    await declaration
+      .getByText(/Tropas totais/i)
+      .first()
+      .waitFor();
+    await declaration
+      .getByText(/Aliados convocados/i)
+      .first()
+      .waitFor();
+    await declaration.getByRole('button', { name: '⚔️ ÀS ARMAS!', exact: true }).click();
+    await declaration.waitFor({ state: 'detached' });
+  }
+  assert.equal(await pages[2].locator('[data-war-cutscene]').count(), 0);
   await page
     .getByRole('button', { name: `Cancelar movimento de ${own.name}`, exact: true })
     .press('Enter');
@@ -421,7 +437,11 @@ try {
   await page.getByRole('button', { name: 'Encerrar animação', exact: true }).click();
   const besieged = states[0].get().provinces.find((p) => p.id === neutral.id)!;
   assert.equal(besieged.ownerId, null);
-  assert.equal(besieged.siege?.progress, 1);
+  assert.equal(
+    besieged.siege?.progress,
+    2,
+    'A chegada no verão recebe o ponto adicional de cerco.',
+  );
   assert.ok((await page.locator('.siege-miniature').count()) > 0);
   await page.screenshot({ path: '.local/screenshots/rc-multiplayer-cerco.png' });
   await page.getByRole('button', { name: 'Fechar Comando de Batalhão', exact: true }).click();
@@ -635,11 +655,11 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Smoke v1.01 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
+    'Smoke v1.1 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, cutscene para atacante e defensor, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
 } catch (error) {
   await debugPage
-    ?.screenshot({ path: '.local/screenshots/browser-v101-failure.png' })
+    ?.screenshot({ path: '.local/screenshots/browser-v110-failure.png' })
     .catch(() => {});
   if (errors.length) console.error('Erros de navegador:', errors);
   throw error;

@@ -3,6 +3,7 @@ import { councilModifiers } from './councilEffects';
 import { continentBonuses } from './risk';
 export { continentBonuses } from './risk';
 import { goldRules } from './factions';
+import { seasonRulesAt } from './world';
 import type { Battalion, Composition, GameState, Province, RecruitBattalionOrder } from './types';
 export const UNIT_UPKEEP: Composition = {
   infantry: 0.75,
@@ -43,15 +44,16 @@ export function realmLimits(
       ECONOMY_BALANCE.manpowerCapacityBase +
       pacified * ECONOMY_BALANCE.manpowerCapacityPerPacified +
       barracks * ECONOMY_BALANCE.manpowerCapacityPerBarracks,
-    manpowerGain: Math.max(
-      0,
-      (ECONOMY_BALANCE.manpowerBase +
-        Math.floor(pacified * 0.25) * ECONOMY_BALANCE.manpowerPerFourPacified +
-        barracks * ECONOMY_BALANCE.manpowerPerBarracks) *
-        ((g.players.find((p) => p.id === id)?.warExhaustion ?? 0) >= 25 ? 0.7 : 1) +
-        continentBonuses(g, id).manpower +
-        policy.manpowerGain,
-    ),
+    manpowerGain:
+      Math.max(
+        0,
+        (ECONOMY_BALANCE.manpowerBase +
+          Math.floor(pacified * 0.25) * ECONOMY_BALANCE.manpowerPerFourPacified +
+          barracks * ECONOMY_BALANCE.manpowerPerBarracks) *
+          ((g.players.find((p) => p.id === id)?.warExhaustion ?? 0) >= 25 ? 0.7 : 1) +
+          continentBonuses(g, id).manpower +
+          policy.manpowerGain,
+      ) * seasonRulesAt(g.turn ?? 1).manpowerMultiplier,
   };
 }
 export const provinceRecruitLimit = (

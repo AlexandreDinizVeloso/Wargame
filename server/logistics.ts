@@ -2,9 +2,46 @@ import { markDisorganized } from '../shared/morale';
 import type { GameState, TurnResolutionReport } from '../shared/types';
 import { atWar, clamp, unitCount, supplyLimit } from '../shared/rules';
 import { commanderFor } from '../shared/military';
-import { supplyConnected, invasionAttrition } from '../shared/logistics';
+import { supplyConnected, invasionAttrition, hasWinterShelter } from '../shared/logistics';
+import { winterActive } from '../shared/strategy';
+import { SEASON_RULES } from '../shared/world';
 import { destroyBattalion, removeUnits } from './state';
 import { notify } from './notifications';
+export function applyWinterAttrition(
+  g: GameState,
+  report: TurnResolutionReport,
+  beforeLogistics: ReadonlyMap<string, number>,
+) {
+  if (!winterActive(g)) return;
+  const cold = SEASON_RULES.WINTER;
+  for (const army of [...g.battalions]) {
+    if (army.ownerId === 'NEUTRAL' || !g.battalions.includes(army) || hasWinterShelter(g, army))
+      continue;
+    const baseline = beforeLogistics.get(army.id) ?? unitCount(army),
+      priorLosses = report.attritionLosses
+        .filter((loss) => loss.armyId === army.id)
+        .reduce((sum, loss) => sum + loss.losses, 0),
+      extra = Math.max(0, Math.ceil(baseline * cold.winterAttritionRate) - priorLosses),
+      before = unitCount(army);
+    removeUnits(army, extra);
+    army.morale = clamp(army.morale - cold.winterMoraleLoss);
+    markDisorganized(army);
+    const losses = before - unitCount(army);
+    if (losses)
+      report.attritionLosses.push({
+        armyId: army.id,
+        ownerId: army.ownerId,
+        provinceId: army.provinceId,
+        troopsBefore: before,
+        supplyLimit: supplyLimit(g.provinces.find((p) => p.id === army.provinceId)!),
+        losses,
+      });
+    report.events.push(
+      `${army.name}: geada de inverno, ${losses} baixa(s) adicionais para o mínimo de 20% de atrito e −15 moral; procure território próprio pacificado.`,
+    );
+    if (!unitCount(army)) destroyBattalion(g, army);
+  }
+}
 export function applyEncirclement(g: GameState, report: TurnResolutionReport) {
   for (const a of [...g.battalions]) {
     a.encircled = a.supplySabotagedUntilTurn === g.turn;

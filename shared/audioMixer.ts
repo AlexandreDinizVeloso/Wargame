@@ -2,10 +2,10 @@ export const AUDIO_MIXER_STORAGE_KEY = 'concordia.audioMixer.v1';
 export const AUDIO_MIXER_DEFAULTS = Object.freeze({
   masterVolume: 0.8,
   musicVolume: 0.75,
-  combatVolume: 0.45,
-  marchVolume: 0.3,
-  sailVolume: 0.25,
-  uiVolume: 0.5,
+  combatVolume: 0.18,
+  marchVolume: 0.12,
+  sailVolume: 0.1,
+  uiVolume: 0.2,
 });
 export const AUDIO_LIMITER = Object.freeze({ threshold: -10, knee: 12, ratio: 8 });
 export type MixerChannel = keyof typeof AUDIO_MIXER_DEFAULTS;
