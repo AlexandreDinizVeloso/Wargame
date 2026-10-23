@@ -37,6 +37,8 @@ export function useGame() {
       return [];
     }
   });
+  const [snapshotEpoch, setSnapshotEpoch] = useState(0);
+  const awaitingJoinedSnapshot = useRef(false);
   const [pings, setPings] = useState<MapPing[]>([]);
   const [game, setGame] = useState<GameView | null>(null),
     [playerId, setPlayerId] = useState(''),
@@ -117,6 +119,7 @@ export function useGame() {
               setPings((p) => [...p.filter((x) => x.expiresAt > Date.now()), data.ping].slice(-12));
             break;
           case 'joined':
+            awaitingJoinedSnapshot.current = true;
             if (new URLSearchParams(location.search).has('claim')) {
               const url = new URL(location.href);
               url.searchParams.delete('claim');
@@ -135,6 +138,10 @@ export function useGame() {
               return;
             }
             setGame(data.state);
+            if (awaitingJoinedSnapshot.current) {
+              awaitingJoinedSnapshot.current = false;
+              setSnapshotEpoch((epoch) => epoch + 1);
+            }
             break;
           case 'error':
             setError(data.message);
@@ -208,5 +215,17 @@ export function useGame() {
     setGame(null);
     setPlayerId('');
   };
-  return { game, playerId, status, error, setError, send, command, leave, pings, seatInvites };
+  return {
+    game,
+    playerId,
+    status,
+    error,
+    setError,
+    send,
+    command,
+    leave,
+    pings,
+    seatInvites,
+    snapshotEpoch,
+  };
 }

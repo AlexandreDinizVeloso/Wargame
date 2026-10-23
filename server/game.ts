@@ -163,7 +163,7 @@ export function createGame(
       mapId: mode === 'quick' ? `natural-earth-v101-${theater}` : 'natural-earth-v101-world',
       maxTurns,
       turnSeconds,
-      createdVersion: '1.1.0',
+      createdVersion: '1.2.0',
       allowBotSecretVictory: false,
       enableSecretObjectives: true,
     },

@@ -400,7 +400,7 @@ export function attachRooms(server: Server, options: Options = {}) {
         g.matchConfig.campaignId = randomBytes(16).toString('hex');
         g.matchConfig.ruleset = 'GOLD_098';
         g.matchConfig.scenarioId = scenario.id;
-        g.matchConfig.createdVersion = '1.1.0';
+        g.matchConfig.createdVersion = '1.2.0';
         g.matchConfig.verticalSlice = true;
       }
       g.roomName =

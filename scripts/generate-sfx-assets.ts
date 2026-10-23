@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   AUDIO_SAMPLE_RATE,
+  CINEMATIC_SFX_SPEC,
   generateMusicPCM,
   generateSfxPCM,
   MUSIC_SPEC,
@@ -32,19 +33,23 @@ export function encodePCM16Wav(samples: ArrayLike<number>, sampleRate = AUDIO_SA
   }
   return output;
 }
-export async function generateAudioAssets(root = path.resolve('public/assets')) {
+export async function generateAudioAssets(
+  root = path.resolve('public/assets'),
+  options: { legacyMusic?: boolean } = {},
+) {
   await Promise.all([
     mkdir(path.join(root, 'sfx'), { recursive: true }),
     mkdir(path.join(root, 'music'), { recursive: true }),
   ]);
-  for (const name of Object.keys(SFX_SPEC) as (keyof typeof SFX_SPEC)[]) {
+  const effects = { ...SFX_SPEC, ...CINEMATIC_SFX_SPEC };
+  for (const name of Object.keys(effects) as (keyof typeof effects)[]) {
     const pcm = generateSfxPCM(name);
     await writeFile(path.join(root, 'sfx', `${name}.wav`), encodePCM16Wav(pcm));
     console.log(
-      `${name}.wav: peak=${peakAmplitude(pcm).toFixed(2)}, LP=${SFX_SPEC[name].cutoff}Hz, ${SFX_SPEC[name].duration}s`,
+      `${name}.wav: peak=${peakAmplitude(pcm).toFixed(2)}, LP=${effects[name].cutoff}Hz, ${effects[name].duration}s`,
     );
   }
-  for (const name of ['peace', 'war'] as const) {
+  for (const name of options.legacyMusic === false ? [] : (['peace', 'war'] as const)) {
     const pcm = generateMusicPCM(name);
     await writeFile(path.join(root, 'music', `bgm-${name}.wav`), encodePCM16Wav(pcm));
     console.log(
@@ -53,4 +58,4 @@ export async function generateAudioAssets(root = path.resolve('public/assets')) 
   }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))
-  await generateAudioAssets();
+  await generateAudioAssets(undefined, { legacyMusic: !process.argv.includes('--sfx-only') });
