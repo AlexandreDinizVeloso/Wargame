@@ -488,7 +488,7 @@ export interface MatchConfig {
   maxTurns: number;
   turnSeconds: number;
   createdVersion:
-    '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0' | '0.99.0' | '1.0.0' | '1.0.1' | '1.1.0';
+    '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0' | '0.99.0' | '1.0.0' | '1.0.1' | '1.1.0' | '1.2.0';
   tutorial?: boolean;
   enableSecretObjectives: boolean;
   allowBotSecretVictory: boolean;

@@ -1,0 +1,117 @@
+.sound-library-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.sound-library-tabs button {
+  flex: 1;
+  padding: 10px 12px;
+}
+
+.sound-library-tabs button[aria-pressed='true'] {
+  color: #f3db9a;
+  border-color: #b78d42;
+  background: linear-gradient(145deg, #443725, #1f2427);
+}
+
+.sound-library header small {
+  color: #c8a965;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+}
+
+.sound-library header h3 {
+  margin: 8px 0;
+  font-family: 'Cinzel', serif;
+  font-size: 21px;
+  color: #efdfb1;
+}
+
+.sound-library header p,
+.sound-library header > span {
+  color: #b8b5a6;
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+.sound-library-tracks {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.sound-library-tracks > button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 13px 14px;
+  text-align: left;
+  background: linear-gradient(100deg, #292a27, #182025);
+  border: 1px solid #6c614340;
+}
+
+.sound-library-tracks > button:hover {
+  border-color: #c5a568;
+}
+
+.sound-library-tracks > button > span:first-child {
+  color: #d4b77b;
+  font-size: 28px;
+}
+
+.sound-library-tracks strong,
+.sound-library-tracks small {
+  display: block;
+}
+
+.sound-library-tracks strong {
+  color: #f0dfb4;
+  font-size: 13px;
+}
+
+.sound-library-tracks small {
+  margin-top: 4px;
+  color: #aaa99c;
+  font-size: 11px;
+}
+
+.sound-library-play {
+  margin-left: auto;
+  color: #cdb078;
+  font-size: 12px;
+}
+
+.sound-library-stop {
+  width: 100%;
+  margin: 10px 0 18px;
+  padding: 8px;
+}
+
+.sound-library h4 {
+  margin: 8px 0 12px;
+  color: #d8c89f;
+}
+
+.sound-library-effects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sound-library-effects button {
+  padding: 10px 8px;
+  color: #d9d1ba;
+  font-size: 12px;
+}
+
+.sound-library-effects button > span {
+  color: #c3a065;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sound-library button {
+    transition: none;
+  }
+}

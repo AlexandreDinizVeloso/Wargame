@@ -4,6 +4,3 @@ dist/
 *.log
 .local/
 coverage/
-godot-client/.godot/
-godot-client/export_credentials.cfg
-godot-client/*.tmp

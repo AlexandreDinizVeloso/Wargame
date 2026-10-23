@@ -1,5 +1,6 @@
 import {
   generateSfxPCM,
+  CINEMATIC_SFX_SPEC,
   normalizeAndFilterPCM,
   SFX_ASSET_REVISION,
   type SfxName,
@@ -26,8 +27,37 @@ export type Sound =
   | 'war'
   | 'peace'
   | 'victory'
+  | 'defeat'
+  | 'musket'
+  | 'steel'
+  | 'charge'
+  | 'impact'
+  | 'naval'
+  | 'season'
+  | 'battle-ambience'
   | 'alert';
 type Ambience = 'peace' | 'war' | 'off';
+export type CinematicMood = 'battle' | 'victory' | 'defeat' | null;
+export type MusicCue = 'peace' | 'war' | Exclude<CinematicMood, null>;
+export const SOUNDTRACKS: { key: MusicCue; title: string; description: string }[] = [
+  { key: 'peace', title: 'Atlas das Coroas', description: 'Paz · cordas, alaúde e flauta' },
+  {
+    key: 'war',
+    title: 'Estandartes ao Vento',
+    description: 'Guerra · violoncelos, metais e tímpanos',
+  },
+  {
+    key: 'battle',
+    title: 'Aço e Pólvora',
+    description: 'Batalha · ostinato e tambores de campanha',
+  },
+  {
+    key: 'victory',
+    title: 'O Peso da Vitória',
+    description: 'Vitória · fanfarra e retorno do tema',
+  },
+  { key: 'defeat', title: 'Depois das Cinzas', description: 'Derrota · cordas e flauta solista' },
+];
 type EffectChannel = Exclude<MixerChannel, 'masterVolume' | 'musicVolume'>;
 const hidden = () => typeof document !== 'undefined' && document.hidden;
 const read = (key: string) => {
@@ -47,14 +77,20 @@ export class CampaignAudio {
   private legacyEffectsValue = 1;
   private listeners = new Set<() => void>();
   private samples = new Map<SfxName, AudioBuffer>();
-  private musicSamples = new Map<'peace' | 'war', AudioBuffer>();
+  private musicSamples = new Map<MusicCue, AudioBuffer>();
+  private musicLoads = new Map<MusicCue, Promise<void>>();
   private fallbackSamples = new Map<string, AudioBuffer>();
   private loading = false;
   private assetsReady: Promise<void> | null = null;
   private ambience: Ambience = 'off';
+  private cinematicMood: CinematicMood = null;
+  private musicTrack: MusicCue | null = null;
   private musicSource: AudioBufferSourceNode | null = null;
+  private previewSource: AudioBufferSourceNode | null = null;
+  private previewRequest = 0;
   private musicVoices = new Map<AudioBufferSourceNode, GainNode>();
   private effects = new Map<AudioBufferSourceNode, EffectChannel>();
+  private lastPlayed = new Map<Sound, number>();
   constructor() {
     const raw = read(AUDIO_MIXER_STORAGE_KEY);
     this.values = parseAudioMixer(raw);
@@ -95,6 +131,9 @@ export class CampaignAudio {
   }
   get effectsVolume() {
     return this.legacyEffectsValue;
+  }
+  get nowPlaying() {
+    return SOUNDTRACKS.find((track) => track.key === this.musicTrack)?.title ?? null;
   }
   subscribe(listener: () => void) {
     this.listeners.add(listener);
@@ -143,12 +182,14 @@ export class CampaignAudio {
   }
   private applyVolumes() {
     if (!this.context) return;
-    for (const [key, node] of this.gains)
+    for (const [key, node] of this.gains) {
+      node.gain.cancelScheduledValues(this.context.currentTime);
       node.gain.setTargetAtTime(
         key === 'masterVolume' && this.mutedValue ? 0 : this.values[key],
         this.context.currentTime,
         0.035,
       );
+    }
   }
   unlock() {
     try {
@@ -199,7 +240,9 @@ export class CampaignAudio {
     if (this.loading || !this.context) return;
     this.loading = true;
     await Promise.allSettled([
-      ...(['cannon', 'march', 'sail', 'horn', 'coin'] as const).map(async (name) => {
+      ...(
+        ['cannon', 'march', 'sail', 'horn', 'coin', ...Object.keys(CINEMATIC_SFX_SPEC)] as SfxName[]
+      ).map(async (name) => {
         for (const extension of ['wav', 'ogg', 'mp3'])
           try {
             const decoded = await this.decode(
@@ -211,16 +254,36 @@ export class CampaignAudio {
             }
           } catch {}
       }),
-      ...(['peace', 'war'] as const).map(async (name) => {
+      ...(['peace', 'war'] as const).map((name) => this.ensureMusic(name)),
+    ]);
+  }
+  private ensureMusic(name: MusicCue): Promise<void> {
+    if (this.musicSamples.has(name)) return Promise.resolve();
+    const pending = this.musicLoads.get(name);
+    if (pending) return pending;
+    const load = (async () => {
+      const extensions =
+        name === 'peace' || name === 'war' ? ['ogg', 'mp3', 'wav'] : ['ogg', 'mp3'];
+      for (const extension of extensions)
         try {
-          const decoded = await this.decode(`/assets/music/bgm-${name}.wav`);
+          const decoded = await this.decode(
+            `/assets/music/bgm-${name}.${extension}?v=v120-original`,
+          );
           if (decoded) {
             this.musicSamples.set(name, decoded);
+            // Long OSTs are decoded only on demand; keep at most three themes in memory.
+            for (const key of this.musicSamples.keys()) {
+              if (this.musicSamples.size <= 3) break;
+              if (key !== name && key !== this.musicTrack && key !== 'peace')
+                this.musicSamples.delete(key);
+            }
             this.syncAmbience();
+            return;
           }
         } catch {}
-      }),
-    ]);
+    })().finally(() => this.musicLoads.delete(name));
+    this.musicLoads.set(name, load);
+    return load;
   }
   private bufferFromPCM(pcm: ArrayLike<number>, rate: number) {
     const buffer = this.context!.createBuffer(1, pcm.length, rate),
@@ -296,26 +359,44 @@ export class CampaignAudio {
       } catch {}
     this.effects.clear();
   }
-  private stopMusic() {
+  private stopMusic(includePreview = true) {
+    if (includePreview) this.previewRequest++;
     for (const [source, gain] of this.musicVoices) {
+      if (!includePreview && source === this.previewSource) continue;
       try {
         source.stop();
       } catch {}
       source.disconnect();
       gain.disconnect();
+      this.musicVoices.delete(source);
     }
-    this.musicVoices.clear();
     this.musicSource = null;
+    if (includePreview) this.previewSource = null;
+    this.musicTrack = null;
   }
   setAmbience(value: Ambience) {
     if (this.ambience === value) return;
     this.ambience = value;
-    this.syncAmbience(true);
+    this.syncAmbience();
   }
-  private syncAmbience(changed = false) {
+  setCinematicMood(value: CinematicMood) {
+    if (this.cinematicMood === value) return;
+    this.cinematicMood = value;
+    this.syncAmbience();
+  }
+  stopCinematicEffects() {
+    for (const [source, bus] of this.effects)
+      if (bus !== 'uiVolume') {
+        try {
+          source.stop();
+        } catch {}
+        this.effects.delete(source);
+      }
+    this.applyVolumes();
+  }
+  private syncAmbience() {
     if (!this.context || this.context.state !== 'running') return;
     if (
-      this.ambience === 'off' ||
       this.values.musicVolume === 0 ||
       this.values.masterVolume === 0 ||
       this.mutedValue ||
@@ -324,40 +405,70 @@ export class CampaignAudio {
       this.stopMusic();
       return;
     }
-    const buffer = this.musicSamples.get(this.ambience);
-    if (!buffer) return;
-    if (this.musicSource && !changed) return;
+    if (this.ambience === 'off' && this.cinematicMood === null) {
+      this.stopMusic(false);
+      return;
+    }
+    const track = this.cinematicMood ?? (this.ambience === 'war' ? 'war' : 'peace');
+    const buffer = this.musicSamples.get(track);
+    if (!buffer) {
+      void this.ensureMusic(track);
+      return;
+    }
+    if (this.musicSource && this.musicTrack === track) return;
     const now = this.context.currentTime;
     if (this.musicSource) {
       const gain = this.musicVoices.get(this.musicSource);
-      gain?.gain.setTargetAtTime(0, now, 0.12);
+      gain?.gain.cancelScheduledValues(now);
+      gain?.gain.setTargetAtTime(0, now, 0.24);
       try {
-        this.musicSource.stop(now + 0.6);
+        this.musicSource.stop(now + 1.25);
       } catch {}
     }
     const source = this.context.createBufferSource(),
       fader = this.context.createGain();
     source.buffer = buffer;
-    source.loop = true;
+    source.loop = track !== 'victory' && track !== 'defeat';
     source.loopStart = 0;
     source.loopEnd = buffer.duration;
     source.connect(fader);
     fader.connect(this.gains.get('musicVolume')!);
     fader.gain.setValueAtTime(0, now);
-    fader.gain.linearRampToValueAtTime(1, now + 0.45);
+    fader.gain.linearRampToValueAtTime(this.previewSource ? 0.16 : 1, now + 0.85);
     this.musicSource = source;
+    this.musicTrack = track;
     this.musicVoices.set(source, fader);
     source.onended = () => {
       source.disconnect();
       fader.disconnect();
       this.musicVoices.delete(source);
-      if (this.musicSource === source) this.musicSource = null;
+      if (this.musicSource === source) {
+        this.musicSource = null;
+        this.musicTrack = null;
+        if ((track === 'victory' || track === 'defeat') && this.cinematicMood === track) {
+          this.cinematicMood = null;
+          this.syncAmbience();
+        }
+      }
     };
     source.start();
+    for (const listener of this.listeners) listener();
+  }
+  private duckMusic() {
+    if (!this.context || !this.musicSource || this.previewSource) return;
+    const fader = this.musicVoices.get(this.musicSource);
+    if (!fader) return;
+    const now = this.context.currentTime;
+    if (typeof fader.gain.cancelAndHoldAtTime === 'function') fader.gain.cancelAndHoldAtTime(now);
+    else fader.gain.cancelScheduledValues(now);
+    fader.gain.setTargetAtTime(0.54, now, 0.025);
+    fader.gain.setTargetAtTime(1, now + 0.5, 0.23);
   }
   playCombatSound() {
-    if (this.ready('combatVolume'))
+    if (this.ready('combatVolume')) {
+      this.duckMusic();
       this.playBuffer(this.samples.get('cannon') ?? this.fallback('cannon'), 'combatVolume');
+    }
   }
   playMarchSound() {
     if (this.ready('marchVolume'))
@@ -368,6 +479,9 @@ export class CampaignAudio {
       this.playBuffer(this.samples.get('sail') ?? this.fallback('sail'), 'sailVolume');
   }
   play(sound: Sound) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - (this.lastPlayed.get(sound) ?? -Infinity) < 80) return;
+    this.lastPlayed.set(sound, now);
     if (sound === 'cannon') {
       this.playCombatSound();
       return;
@@ -381,17 +495,52 @@ export class CampaignAudio {
       return;
     }
     const channel: EffectChannel =
-      sound === 'horn' || sound === 'war' ? 'combatVolume' : 'uiVolume';
+      sound === 'horn' || sound === 'war' || (sound in CINEMATIC_SFX_SPEC && sound !== 'season')
+        ? 'combatVolume'
+        : 'uiVolume';
     if (!this.ready(channel)) return;
-    if (sound === 'horn' || sound === 'war')
+    if (sound in CINEMATIC_SFX_SPEC) {
+      const effect = sound as keyof typeof CINEMATIC_SFX_SPEC;
+      if (sound === 'musket' || sound === 'impact' || sound === 'naval') this.duckMusic();
+      this.playBuffer(this.samples.get(effect) ?? this.fallback(effect), channel);
+      return;
+    }
+    if (sound === 'horn' || sound === 'war') {
+      this.duckMusic();
       this.playBuffer(this.samples.get('horn') ?? this.fallback('horn'), channel);
-    else if (sound === 'coins')
+    } else if (sound === 'coins')
       this.playBuffer(this.samples.get('coin') ?? this.fallback('coin'), channel);
     else this.playBuffer(this.uiFallback(sound), channel);
   }
-  private previewMusic() {
-    const sample = this.musicSamples.get(this.ambience === 'war' ? 'war' : 'peace');
+  stopPreview() {
+    this.previewRequest++;
+    const preview = this.previewSource;
+    this.previewSource = null;
+    if (preview)
+      try {
+        preview.stop();
+      } catch {}
+    if (this.context && this.musicSource) {
+      const fader = this.musicVoices.get(this.musicSource);
+      fader?.gain.cancelScheduledValues(this.context.currentTime);
+      fader?.gain.setTargetAtTime(1, this.context.currentTime, 0.2);
+    }
+  }
+  previewTrack(track: MusicCue) {
+    this.unlock();
+    this.stopPreview();
+    const request = this.previewRequest;
+    void this.ensureMusic(track).then(() => {
+      if (this.previewRequest === request) this.previewMusic(track, 8);
+    });
+  }
+  private previewMusic(track: MusicCue = this.ambience === 'war' ? 'war' : 'peace', seconds = 3) {
+    const sample = this.musicSamples.get(track);
     if (!sample || this.context?.state !== 'running' || this.mutedValue || hidden()) return;
+    this.stopPreview();
+    const background = this.musicSource ? this.musicVoices.get(this.musicSource) : null;
+    background?.gain.cancelScheduledValues(this.context.currentTime);
+    background?.gain.setTargetAtTime(0.14, this.context.currentTime, 0.12);
     const source = this.context.createBufferSource(),
       fader = this.context.createGain();
     source.buffer = sample;
@@ -399,16 +548,18 @@ export class CampaignAudio {
     fader.connect(this.gains.get('musicVolume')!);
     fader.gain.setValueAtTime(0, this.context.currentTime);
     fader.gain.linearRampToValueAtTime(1, this.context.currentTime + 0.1);
-    fader.gain.setValueAtTime(1, this.context.currentTime + 2.7);
-    fader.gain.linearRampToValueAtTime(0, this.context.currentTime + 3);
+    fader.gain.setValueAtTime(1, this.context.currentTime + seconds - 0.5);
+    fader.gain.linearRampToValueAtTime(0, this.context.currentTime + seconds);
     this.musicVoices.set(source, fader);
+    this.previewSource = source;
     source.onended = () => {
       source.disconnect();
       fader.disconnect();
       this.musicVoices.delete(source);
+      if (this.previewSource === source) this.stopPreview();
     };
     source.start();
-    source.stop(this.context.currentTime + 3);
+    source.stop(this.context.currentTime + seconds);
   }
   testChannel(channel: MixerChannel) {
     this.unlock();

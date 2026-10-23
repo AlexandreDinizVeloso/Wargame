@@ -8,6 +8,6 @@ Vitórias são dominação/hegemonia (60% das terras ou submissão/eliminação 
 
 A interface oferece comando tático por destinos iluminados e três acessos à declaração formal de guerra. O navegador de salas dispensa digitar código para campanhas públicas no mesmo servidor. O host mantém o controle do cenário, timer e toggle de objetivos antes do início.
 
-O cliente é React/TypeScript/SVG. O motor autoritativo Node/TypeScript permanece headless, independente do renderer, com HTTP/WebSocket documentado para um futuro cliente Godot. Rede local, Radmin, Tailscale ou IPv6 continuam possíveis; consulte [rede](REDE.md).
+O cliente é React/TypeScript/SVG. O motor autoritativo Node/TypeScript permanece headless, independente do renderer, com HTTP/WebSocket documentado para o cliente web e integrações. Rede local, Radmin, Tailscale ou IPv6 continuam possíveis; consulte [rede](REDE.md).
 
 Detalhes em [regras v0.4](REGRAS_V4.md), [protocolo](PROTOCOL.md) e [validação](BALANCE.md). Regras v0.2/v0.3 descrevem versões históricas, não a partida atual.

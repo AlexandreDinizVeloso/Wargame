@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   Check,
+  Clapperboard,
   Crown,
   Globe2,
   Handshake,
@@ -27,6 +28,7 @@ import { CONTINENTS, makeMap, THEATERS } from '../shared/map';
 import { NATIONS, RELIGIONS } from '../shared/rules';
 import Atlas from './Atlas';
 import { Brand, CoatOfArms, type Command } from './ui';
+import './cinematics/gallery.css';
 const world = makeMap();
 export function NationCards({
   selected,
@@ -72,12 +74,14 @@ export function Entry({
   onHelp,
   onTutorial,
   onProfile,
+  onCinema,
 }: {
   send: (message: ClientMessage) => void;
   online: boolean;
   onHelp: () => void;
   onTutorial: () => void;
   onProfile: () => void;
+  onCinema: () => void;
 }) {
   const [form, setForm] = useState<'create' | 'join' | null>(() =>
       new URLSearchParams(location.search).has('room') ? 'join' : null,
@@ -116,15 +120,18 @@ export function Entry({
     <main className="entry-viewport">
       <Atlas provinces={world} players={[]} mode="POLITICAL" preview />
       <div className="entry-shade" />
-      <header className="entry-header">
+      <header className="entry-header entry-cinema-header">
         <Brand />
         <span className="edition">
-          LONG SEASONS EDITION <i /> 1.1
+          BROWSER CINEMA EDITION <i /> 1.2
         </span>
-        <button className="quiet-button" onClick={onProfile}>
+        <button className="quiet-button entry-cinema-profile" onClick={onProfile}>
           🏅 Perfil do Estrategista
         </button>
-        <button className="quiet-button" onClick={onHelp}>
+        <button className="quiet-button entry-cinema-open" onClick={onCinema}>
+          <Clapperboard size={15} /> Cinema e trilha
+        </button>
+        <button className="quiet-button entry-cinema-help" onClick={onHelp}>
           Como jogar <ArrowRight size={14} />
         </button>
       </header>

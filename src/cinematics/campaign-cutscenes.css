@@ -1,0 +1,958 @@
+.campaign-war,
+.campaign-season {
+  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  isolation: isolate;
+  overscroll-behavior: contain;
+}
+
+.campaign-war {
+  background: #080d13;
+  color: #ede2c9;
+}
+
+.campaign-war::before,
+.campaign-war::after {
+  content: '';
+  position: fixed;
+  right: 0;
+  left: 0;
+  height: clamp(10px, 3.8vh, 42px);
+  z-index: 6;
+  pointer-events: none;
+  background: #03070b;
+}
+
+.campaign-war::before {
+  top: 0;
+}
+.campaign-war::after {
+  bottom: 0;
+}
+
+.campaign-war__engraving,
+.campaign-war__vignette,
+.campaign-war__fog,
+.campaign-war__embers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.campaign-war__engraving {
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 116%, #a04e233d, transparent 65%),
+    radial-gradient(ellipse at 20% 38%, #75889110, transparent 55%),
+    repeating-linear-gradient(97deg, #cda86b03 0 1px, transparent 1px 5px), #080d13;
+}
+
+.campaign-war__engraving svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: #bb986b;
+  stroke-width: 1;
+  opacity: 0.1;
+}
+
+.campaign-war__vignette {
+  background: radial-gradient(ellipse at 50% 43%, transparent 5%, #04080d25 48%, #010407d9 100%);
+}
+
+.campaign-war__fog {
+  inset: 35% -14% -15%;
+  opacity: 0.38;
+  background:
+    radial-gradient(ellipse at 15% 70%, #a793754d, transparent 40%),
+    radial-gradient(ellipse at 72% 70%, #ae714c52, transparent 42%),
+    radial-gradient(ellipse at 55% 96%, #7a5f494f, transparent 40%);
+  filter: blur(25px);
+  animation: campaign-fog-drift 13s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.campaign-war__fog--far {
+  inset: 10% -30% 10%;
+  opacity: 0.2;
+  animation-delay: -6s;
+  animation-duration: 20s;
+  transform: scaleX(-1);
+}
+
+.campaign-war__embers {
+  overflow: hidden;
+}
+
+.campaign-war__embers i {
+  position: absolute;
+  left: var(--ember-x);
+  bottom: -15px;
+  width: 2px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f3bf76;
+  box-shadow: 0 0 9px #de632ac9;
+  animation: campaign-ember-rise var(--ember-duration) var(--ember-delay) linear infinite;
+}
+
+.campaign-war .campaign-war__content {
+  position: relative;
+  z-index: 2;
+  width: min(1120px, 94vw);
+  padding: clamp(45px, 6vh, 75px) 20px;
+  animation: campaign-scene-reveal 0.65s ease-out both;
+}
+
+.campaign-war__heading .war-cutscene-eyebrow {
+  font-size: 9px;
+  line-height: 1.7;
+  letter-spacing: 0.3em;
+  color: #b5a383;
+}
+
+.campaign-war .campaign-war__heading h2 {
+  margin: 14px 0 10px;
+  color: #f4e2ba;
+  font:
+    500 clamp(30px, 4.9vw, 66px)/1.12 Cinzel,
+    Georgia,
+    serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow: 0 4px 24px #edb46918;
+}
+
+.campaign-war__heading .war-cutscene-casus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 0;
+  font:
+    400 15px/1.6 Cinzel,
+    Georgia,
+    serif;
+  color: #ba9470;
+}
+
+.campaign-war__heading .war-cutscene-casus::before,
+.campaign-war__heading .war-cutscene-casus::after {
+  content: '';
+  width: 80px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #a07d4e9c);
+}
+
+.campaign-war__heading .war-cutscene-casus::after {
+  transform: rotate(180deg);
+}
+
+.campaign-war .campaign-war__heraldry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr);
+  align-items: center;
+  margin: 30px auto 0;
+  max-width: 960px;
+}
+
+.campaign-war .campaign-war__side {
+  gap: 0;
+  min-width: 0;
+  padding: 0 14px;
+}
+
+.campaign-war__side-label {
+  font-size: 9px;
+  font-weight: 500;
+  color: #a29176;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+}
+
+.campaign-war__standard {
+  position: relative;
+  width: clamp(170px, 20vw, 264px);
+  height: clamp(180px, 21.7vw, 285px);
+  display: grid;
+  place-items: center;
+  margin: 4px auto -2px;
+  filter: drop-shadow(0 14px 18px #0008);
+}
+
+.campaign-war .attacker .campaign-war__standard {
+  animation: campaign-standard-left 1.05s cubic-bezier(0.17, 0.67, 0.22, 1) both;
+}
+
+.campaign-war .defender .campaign-war__standard {
+  animation: campaign-standard-right 1.05s cubic-bezier(0.17, 0.67, 0.22, 1) both;
+}
+
+.campaign-war__ribbon {
+  position: absolute;
+  inset: 18% 28% 1%;
+  background: linear-gradient(90deg, #080c10bd, var(--realm-color), #0b0e12bf);
+  opacity: 0.47;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 89%, 0 100%);
+}
+
+.campaign-war__laurel {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  color: #ac8650;
+  opacity: 0.64;
+}
+
+.campaign-war__shield {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 68%;
+  height: 74%;
+  margin-top: -8%;
+  clip-path: polygon(3% 0, 97% 0, 97% 62%, 88% 79%, 72% 91%, 50% 100%, 28% 91%, 12% 79%, 3% 62%);
+  background: linear-gradient(
+    130deg,
+    #79603e 0%,
+    #ebd29c 17%,
+    #846b45 25%,
+    #c6aa70 48%,
+    #fff0c8 53%,
+    #7a5b32 75%,
+    #dfbd7a 100%
+  );
+}
+
+.campaign-war__shield::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  clip-path: inherit;
+  background:
+    linear-gradient(112deg, #ffffff16, transparent 30%, #01060d65 77%),
+    repeating-linear-gradient(101deg, #ffffff08 0 1px, transparent 1px 4px),
+    color-mix(in srgb, var(--realm-color) 23%, #111a20);
+}
+
+.campaign-war__shield > svg {
+  position: relative;
+  width: 91%;
+  height: 90%;
+  margin-top: -1%;
+  filter: drop-shadow(0 1px 1px #000c);
+}
+
+.campaign-war__shield > svg > path {
+  fill-opacity: 0.55;
+  stroke: #e0c18a;
+  stroke-width: 0.35;
+}
+
+.campaign-war__shield > svg > g {
+  stroke: #eddbac;
+  stroke-width: 1.1;
+}
+
+.campaign-war .campaign-war__nation {
+  width: 100%;
+  font:
+    400 clamp(16px, 2vw, 23px)/1.4 Cinzel,
+    Georgia,
+    serif;
+  color: #e5d5b5;
+  text-wrap: balance;
+  margin: 10px 0 4px;
+}
+
+.campaign-war .campaign-war__sovereign {
+  color: #968d7d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.campaign-war__forces {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  align-items: center;
+  width: 100%;
+  max-width: 295px;
+  padding: 15px 0 12px;
+  margin-top: 18px;
+  border-top: 1px solid #b6976229;
+}
+
+.campaign-war__forces > span {
+  height: 23px;
+  background: #a98a5738;
+}
+
+.campaign-war__forces strong {
+  display: block;
+  color: #d7bf95;
+  font:
+    400 26px/1 Cinzel,
+    Georgia,
+    serif;
+}
+
+.campaign-war__forces small {
+  display: block;
+  color: #a89e8a;
+  font-size: 9px;
+  margin-top: 7px;
+}
+
+.campaign-war .campaign-war__allies {
+  margin: 0;
+  max-width: 300px;
+  min-height: 25px;
+  color: #8e8575;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.campaign-war__clash {
+  display: grid;
+  grid-template-columns: 1fr 52px 1fr;
+  align-items: center;
+  gap: 10px;
+  align-self: center;
+  margin-top: -92px;
+  color: #a98856;
+  animation: campaign-blades-reveal 1.2s ease-out both;
+}
+
+.campaign-war__clash > svg {
+  width: 52px;
+  height: 52px;
+  filter: drop-shadow(0 0 14px #f0a75355);
+}
+
+.campaign-war__clash > span {
+  height: 1px;
+  background: #a9885655;
+}
+
+.campaign-war__footer {
+  margin: 21px auto 0;
+}
+
+.campaign-war .campaign-war__acknowledge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 240px;
+  min-height: 50px;
+  padding: 12px 22px;
+  margin: 0 auto;
+  background: linear-gradient(115deg, #67502d, #977544 60%, #624623);
+  color: #fff0cc;
+  border: 1px solid #d2ac6c;
+  box-shadow:
+    inset 0 1px 0 #f4d79a66,
+    0 5px 30px #0007;
+  font:
+    500 14px/1.2 Cinzel,
+    Georgia,
+    serif;
+  letter-spacing: 0.12em;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
+}
+
+.campaign-war .campaign-war__acknowledge:hover {
+  background: linear-gradient(115deg, #8a6836, #b48a4b 60%, #80602e);
+  box-shadow:
+    inset 0 1px 0 #f4d79a66,
+    0 5px 30px #b47d2526;
+}
+
+.campaign-war__acknowledge:focus-visible,
+.campaign-season__skip:focus-visible {
+  outline: 2px solid #edce92;
+  outline-offset: 5px;
+}
+
+.campaign-war__acknowledge > svg {
+  width: 20px;
+  height: 20px;
+}
+
+.campaign-war .campaign-war__acknowledge > span {
+  margin-left: 8px;
+  color: #f1d3a170;
+  font:
+    14px Georgia,
+    serif;
+}
+
+.campaign-war__footer p {
+  margin: 12px 0 2px;
+  color: #938977;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.campaign-war__footer > small {
+  color: #706c62;
+  font-size: 9px;
+}
+
+.campaign-season {
+  --season-light: #b5cba0;
+  --scene-sky-top: #0e2224;
+  --scene-sky-low: #7e9e84;
+  --scene-sun: #e2dfb2;
+  --scene-mist: #c7d6b9;
+  --scene-mountain: #456c66;
+  --scene-snow: #b6ccc0;
+  --scene-midground: #477b62;
+  --scene-ground: #557c3e;
+  --scene-foreground: #142d2a;
+  --scene-water: #618b8d;
+  --scene-tree: #21493b;
+  --scene-bark: #2d3a2e;
+  --scene-building: #b4ac7e;
+  --scene-roof: #695443;
+  --scene-window: #ddc993;
+  --scene-reed: #54784e;
+  background: #10251e;
+  overflow: hidden;
+  animation: campaign-season-open 0.45s ease-out both;
+}
+
+.campaign-season.season-summer {
+  --season-light: #e3c589;
+  --scene-sky-top: #123a4a;
+  --scene-sky-low: #a9bbad;
+  --scene-sun: #ffe5a8;
+  --scene-mist: #dedcc3;
+  --scene-mountain: #5c7978;
+  --scene-snow: #c7d1be;
+  --scene-midground: #6f8660;
+  --scene-ground: #a39b57;
+  --scene-foreground: #2f4632;
+  --scene-water: #569ca0;
+  --scene-tree: #345c42;
+  --scene-bark: #574e33;
+  --scene-building: #c1b380;
+  --scene-roof: #826347;
+  --scene-reed: #ac9b53;
+}
+
+.campaign-season.season-autumn {
+  --season-light: #e7af70;
+  --scene-sky-top: #33252b;
+  --scene-sky-low: #b19579;
+  --scene-sun: #f5bb85;
+  --scene-mist: #d8b8a0;
+  --scene-mountain: #685b62;
+  --scene-snow: #bba6a0;
+  --scene-midground: #886f4a;
+  --scene-ground: #a47a41;
+  --scene-foreground: #392f2a;
+  --scene-water: #837b88;
+  --scene-tree: #8a5b32;
+  --scene-bark: #43342b;
+  --scene-building: #ac9a77;
+  --scene-roof: #725043;
+  --scene-reed: #aa7b3e;
+}
+
+.campaign-season.season-winter {
+  --season-light: #bad9e4;
+  --scene-sky-top: #142531;
+  --scene-sky-low: #9bafba;
+  --scene-sun: #d9e7ed;
+  --scene-mist: #d9e7ef;
+  --scene-mountain: #7993a3;
+  --scene-snow: #d5e1e4;
+  --scene-midground: #a9bbc1;
+  --scene-ground: #cad7d8;
+  --scene-foreground: #435c66;
+  --scene-water: #849eae;
+  --scene-tree: #63808a;
+  --scene-bark: #3d5966;
+  --scene-building: #839295;
+  --scene-roof: #d0dce0;
+  --scene-window: #dcbf8d;
+  --scene-reed: #839791;
+}
+
+.campaign-season__landscape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -3;
+  animation: campaign-landscape-reveal 2.5s ease-out both;
+}
+
+.campaign-season__clouds {
+  animation: campaign-season-clouds 28s linear infinite alternate;
+}
+
+.campaign-season__haze {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, #020b17b3 0%, #06121db3 43%, #06121d28 78%, #020b175c),
+    radial-gradient(ellipse at 50% 44%, #06131b22 0%, #06131b66 75%);
+  pointer-events: none;
+}
+
+.campaign-season .campaign-season__copy {
+  width: min(820px, 90vw);
+  padding: 25px 18px 60px;
+  text-shadow: 0 3px 14px #00101687;
+}
+
+.campaign-season__copy > small {
+  font-size: 9px;
+  letter-spacing: 0.24em;
+  color: #ddded0;
+}
+
+.campaign-season__copy > small > span {
+  color: var(--season-light);
+  margin: 0 12px;
+}
+
+.campaign-season__sigil {
+  width: clamp(70px, 9.5vw, 115px);
+  height: clamp(70px, 9.5vw, 115px);
+  margin: 35px auto 22px;
+  color: var(--season-light);
+  filter: drop-shadow(0 0 18px #e2d6a51f);
+  animation: campaign-sigil-reveal 0.9s ease-out both;
+}
+
+.campaign-season__sigil > svg {
+  width: 100%;
+  height: 100%;
+}
+
+.campaign-season .campaign-season__copy h2 {
+  margin: 0 0 12px;
+  color: #f6edcf;
+  font:
+    400 clamp(38px, 6.8vw, 88px)/1.1 Cinzel,
+    Georgia,
+    serif;
+  letter-spacing: 0.15em;
+  text-indent: 0.15em;
+}
+
+.campaign-season .campaign-season__copy h3 {
+  font:
+    400 clamp(13px, 1.6vw, 19px)/1.5 Cinzel,
+    Georgia,
+    serif;
+  color: var(--season-light);
+  letter-spacing: 0.05em;
+}
+
+.campaign-season .campaign-season__copy p {
+  max-width: 640px;
+  margin: 24px auto 25px;
+  color: #e5e5d7;
+  font-size: clamp(12px, 1.35vw, 15px);
+  line-height: 1.8;
+  text-wrap: balance;
+}
+
+.campaign-season__chapter {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.campaign-season__chapter i {
+  width: 4px;
+  height: 4px;
+  border: 1px solid var(--season-light);
+  transform: rotate(45deg);
+}
+
+.campaign-season__chapter i:first-of-type {
+  background: var(--season-light);
+}
+
+.campaign-season__chapter > span {
+  width: 75px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--season-light));
+  opacity: 0.45;
+}
+
+.campaign-season__chapter > span:last-child {
+  transform: rotate(180deg);
+}
+
+.campaign-season__copy > small:last-child {
+  color: #dddccc;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.campaign-season__particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.campaign-season__particles i {
+  position: absolute;
+  top: -5%;
+  left: var(--season-x);
+  width: 4px;
+  height: 6px;
+  border-radius: 0 80%;
+  background: var(--season-light);
+  opacity: 0.38;
+  animation: campaign-season-fall var(--season-duration) var(--season-delay) linear infinite;
+}
+
+.campaign-season.season-summer .campaign-season__particles i {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  box-shadow: 0 0 9px #ffe5a8;
+  animation-direction: reverse;
+}
+
+.campaign-season.season-winter .campaign-season__particles i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #f5ffff;
+  opacity: 0.55;
+}
+
+.campaign-season .season-transition-timer {
+  height: 2px;
+  box-shadow: 0 0 13px var(--season-light);
+}
+
+.campaign-season__skip {
+  position: absolute;
+  bottom: 28px;
+  right: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 11px;
+  color: #e3e2d5;
+  font-size: 10px;
+  border: 1px solid #c1c6b638;
+  background: #07151d57;
+  border-radius: 3px;
+}
+
+.campaign-season__skip kbd {
+  color: #a6afa9;
+  font: inherit;
+  border: 1px solid #a8b2ad3b;
+  border-radius: 2px;
+  padding: 1px 4px;
+}
+
+@keyframes campaign-fog-drift {
+  from {
+    transform: translate3d(-3%, 4%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(7%, -3%, 0) scale(1.1);
+  }
+}
+
+@keyframes campaign-ember-rise {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(15deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.6;
+  }
+  75% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translate3d(70px, -68vh, 0) rotate(130deg);
+    opacity: 0;
+  }
+}
+
+@keyframes campaign-scene-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes campaign-standard-left {
+  0% {
+    opacity: 0;
+    transform: translateX(-130px) rotate(-9deg);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(6px) rotate(1deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+}
+
+@keyframes campaign-standard-right {
+  0% {
+    opacity: 0;
+    transform: translateX(130px) rotate(9deg);
+  }
+  70% {
+    opacity: 1;
+    transform: translateX(-6px) rotate(-1deg);
+  }
+  100% {
+    transform: translateX(0) rotate(0);
+  }
+}
+
+@keyframes campaign-blades-reveal {
+  0%,
+  35% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  75% {
+    opacity: 1;
+    transform: scale(1.09);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes campaign-season-open {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes campaign-landscape-reveal {
+  from {
+    transform: scale(1.045);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes campaign-sigil-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(9px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes campaign-season-clouds {
+  from {
+    transform: translateX(-30px);
+  }
+  to {
+    transform: translateX(35px);
+  }
+}
+
+@keyframes campaign-season-fall {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0);
+  }
+  100% {
+    transform: translate3d(70px, 115vh, 0) rotate(230deg);
+  }
+}
+
+@media (max-height: 760px) and (min-width: 701px) {
+  .campaign-war .campaign-war__content {
+    padding-top: 34px;
+    padding-bottom: 34px;
+  }
+  .campaign-war .campaign-war__heading h2 {
+    font-size: 39px;
+    margin-top: 8px;
+  }
+  .campaign-war .campaign-war__heraldry {
+    margin-top: 15px;
+  }
+  .campaign-war__standard {
+    width: 195px;
+    height: 210px;
+  }
+  .campaign-war .campaign-war__nation {
+    font-size: 18px;
+    margin-top: 3px;
+  }
+  .campaign-war__forces {
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+  .campaign-war__footer {
+    margin-top: 13px;
+  }
+  .campaign-season__sigil {
+    width: 78px;
+    height: 78px;
+    margin-top: 20px;
+    margin-bottom: 15px;
+  }
+  .campaign-season .campaign-season__copy h2 {
+    font-size: 60px;
+  }
+}
+
+@media (max-width: 700px) {
+  .campaign-war .campaign-war__content {
+    padding: 40px 2px 35px;
+    width: 96vw;
+  }
+  .campaign-war__heading .war-cutscene-eyebrow {
+    font-size: 7px;
+    letter-spacing: 0.14em;
+  }
+  .campaign-war .campaign-war__heading h2 {
+    font-size: clamp(25px, 7vw, 39px);
+    letter-spacing: 0.05em;
+  }
+  .campaign-war__heading .war-cutscene-casus {
+    font-size: 12px;
+    gap: 10px;
+  }
+  .campaign-war__heading .war-cutscene-casus::before,
+  .campaign-war__heading .war-cutscene-casus::after {
+    width: 33px;
+  }
+  .campaign-war .campaign-war__heraldry {
+    grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr);
+    margin-top: 25px;
+  }
+  .campaign-war .campaign-war__side {
+    padding: 0 5px;
+  }
+  .campaign-war__side-label {
+    font-size: 8px;
+  }
+  .campaign-war__standard {
+    width: clamp(130px, 37vw, 210px);
+    height: clamp(145px, 40vw, 225px);
+  }
+  .campaign-war .campaign-war__nation {
+    font-size: 14px;
+    min-height: 39px;
+    display: grid;
+    place-items: center;
+  }
+  .campaign-war .campaign-war__sovereign {
+    font-size: 9px;
+  }
+  .campaign-war__clash {
+    display: block;
+    margin-top: -118px;
+  }
+  .campaign-war__clash > svg {
+    width: 30px;
+    height: 30px;
+  }
+  .campaign-war__clash > span {
+    display: none;
+  }
+  .campaign-war__forces {
+    margin-top: 12px;
+    padding-top: 13px;
+  }
+  .campaign-war__forces strong {
+    font-size: 21px;
+  }
+  .campaign-war__forces small {
+    font-size: 8px;
+    line-height: 1.4;
+    padding: 0 4px;
+  }
+  .campaign-war .campaign-war__allies {
+    font-size: 8px;
+    min-height: 36px;
+  }
+  .campaign-war__footer {
+    margin-top: 17px;
+  }
+  .campaign-war__footer p {
+    max-width: 275px;
+    margin-left: auto;
+    margin-right: auto;
+    font-size: 8px;
+  }
+  .campaign-war .campaign-war__acknowledge {
+    min-height: 46px;
+    min-width: 220px;
+  }
+  .campaign-season .campaign-season__copy {
+    padding-bottom: 45px;
+  }
+  .campaign-season__copy > small {
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+  .campaign-season__copy > small > span {
+    margin: 0 4px;
+  }
+  .campaign-season .campaign-season__copy h2 {
+    font-size: clamp(30px, 8vw, 49px);
+    letter-spacing: 0.08em;
+    text-indent: 0.08em;
+  }
+  .campaign-season__sigil {
+    margin-top: 29px;
+    margin-bottom: 20px;
+  }
+  .campaign-season .campaign-season__copy p {
+    margin-top: 20px;
+    font-size: 12px;
+  }
+  .campaign-season__skip {
+    bottom: 22px;
+    right: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .campaign-war *,
+  .campaign-season *,
+  .campaign-season {
+    animation: none !important;
+    transition: none !important;
+    will-change: auto !important;
+  }
+  .campaign-war__embers,
+  .campaign-season__particles {
+    display: none;
+  }
+}

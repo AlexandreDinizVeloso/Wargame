@@ -1,3 +1,4 @@
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { goldNumber, manpowerNumber } from './resourceNumbers';
 import { authorityIncome, getNationAuthority } from '../shared/economy';
 import { FACTION_TRAITS, goldRules } from '../shared/factions';
@@ -8,13 +9,15 @@ import { CONTINENT_BONUSES } from '../shared/risk';
 import SupremeCommandButtons from './SupremeCommandButtons';
 const AudioSettingsModal = lazy(() => import('./AudioSettingsModal'));
 const QuickActionsPanel = lazy(() => import('./QuickActionsPanel'));
+const CinematicGallery = lazy(() => import('./cinematics/CinematicGallery'));
 import DilemmaCard from './DilemmaCard';
 import MapLensSelector from './MapLensSelector';
 import { MaritimeOverview } from './MaritimePanel';
 import OutlinerDock from './OutlinerDock';
-import TacticalBattleModal from './TacticalBattleModal';
+import BattleCinematic from './cinematics/BattleCinematic';
+import { useBattlePresentation } from './cinematics/useBattlePresentation';
 import { TopBarModal } from './TopBarModal';
-import TurnResolutionSequencer, { CINEMATIC_DURATION } from './TurnResolutionSequencer';
+import TurnResolutionSequencer from './TurnResolutionSequencer';
 import SeasonTransitionBanner from './SeasonTransitionBanner';
 import WarCutsceneModal from './WarCutsceneModal';
 import { useCampaignCinematics } from './useCampaignCinematics';
@@ -48,7 +51,6 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { crossingOptions } from '../shared/naval';
 import {
   RELIGIONS,
@@ -65,7 +67,7 @@ import {
   unitPath,
 } from '../shared/rules';
 import { SEASONS } from '../shared/strategy';
-import type { Battalion, GameView, MapMode, Province, TurnResolutionReport } from '../shared/types';
+import type { Battalion, GameView, MapMode, Province } from '../shared/types';
 import { OBJECTIVES } from '../shared/types';
 import Atlas, { MAP_MODES, type CameraHandle } from './Atlas';
 import BattalionDrawer, { CommanderPanel, TacticalBar } from './BattalionDrawer';
@@ -232,12 +234,71 @@ const REPORT_TITLES: Record<ReportTab, string> = {
   chat: '💬 Conselho',
 };
 const GLOBAL_PANELS: Panel[] = ['diplomacy', 'skills', 'maritime', 'world', 'secret', 'analytics'];
+function CampaignConclusionAudio({ victory, decided }: { victory: boolean; decided: boolean }) {
+  useEffect(() => {
+    if (!decided) {
+      audio.play('peace');
+      return;
+    }
+    const mood = victory ? 'victory' : 'defeat';
+    audio.setCinematicMood(mood);
+    audio.play(mood);
+    return () => audio.setCinematicMood(null);
+  }, [victory, decided]);
+  return null;
+}
 export default function App() {
-  const { game, playerId, status, error, setError, send, command, leave, pings, seatInvites } =
-    useGame();
-  const { cinematic, complete: completeCinematic } = useCampaignCinematics(game, playerId);
+  const {
+    game,
+    playerId,
+    status,
+    error,
+    setError,
+    send,
+    command,
+    leave,
+    pings,
+    seatInvites,
+    snapshotEpoch,
+  } = useGame();
+  const { cinematic, complete: completeCinematic } = useCampaignCinematics(
+    game,
+    playerId,
+    snapshotEpoch,
+  );
+  const [autoplayBattles, setAutoplayBattles] = useState(() => {
+    try {
+      return localStorage.getItem('concordia.autoplayBattles.v1') !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const {
+    replay,
+    tacticalBattle,
+    battleIndex,
+    battleCount,
+    battleAutoAdvance,
+    playReplay,
+    showBattle,
+    advanceBattle,
+    skipPresentation,
+    resetPresentation,
+  } = useBattlePresentation(
+    game,
+    playerId,
+    Boolean(cinematic) || galleryOpen,
+    autoplayBattles,
+    snapshotEpoch,
+  );
   const { profile, setProfile, toast: achievementToast } = useStrategistProfile(game, playerId);
   const [profileOpen, setProfileOpen] = useState(false);
+  const gallery = galleryOpen && (
+    <Suspense fallback={<p role="status">Preparando a sala de cinema…</p>}>
+      <CinematicGallery onClose={() => setGalleryOpen(false)} />
+    </Suspense>
+  );
   const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [focusedWindow, setFocusedWindow] = useState('');
@@ -327,25 +388,18 @@ export default function App() {
     [menu, setMenu] = useState(false),
     [endOpen, setEndOpen] = useState(false),
     [fogEnabled, setFogEnabled] = useState(true),
-    [tacticalBattle, setTacticalBattle] = useState<import('../shared/types').BattleReport | null>(
-      null,
-    ),
     [muted, setMuted] = useState(audio.muted),
-    [now, setNow] = useState(Date.now()),
-    [replay, setReplay] = useState<{
-      report: TurnResolutionReport;
-      progress: number;
-      nonce: number;
-    } | null>(null);
+    [now, setNow] = useState(Date.now());
   useEffect(() => {
     audio.setAmbience(
-      game?.phase === 'planning'
-        ? game.wars.some((w) => w.active && [...w.attackerIds, ...w.defenderIds].includes(playerId))
+      game?.phase === 'finished'
+        ? 'off'
+        : game?.wars.some(
+              (w) => w.active && [...w.attackerIds, ...w.defenderIds].includes(playerId),
+            )
           ? 'war'
-          : 'peace'
-        : 'off',
+          : 'peace',
     );
-    return () => audio.setAmbience('off');
   }, [
     game?.code,
     game?.phase,
@@ -355,6 +409,14 @@ export default function App() {
       .join('|'),
     playerId,
   ]);
+  useEffect(
+    () => () => {
+      audio.setAmbience('off');
+      audio.setCinematicMood(null);
+      audio.stopCinematicEffects();
+    },
+    [],
+  );
   useEffect(() => {
     if (!game || game.phase === 'lobby') return;
     const stamp = `${game.code}:${game.turn}`;
@@ -495,89 +557,20 @@ export default function App() {
       setWarRequest(null);
     }
   }, [endOpen]);
-  const playReplay = useCallback((report: TurnResolutionReport) => {
-    setTacticalBattle(null);
-    setReplay({ report, progress: 0, nonce: performance.now() });
-  }, []);
-  useEffect(() => {
-    if (!replay || cinematic) return;
-    const started = performance.now(),
-      cinematicReplay = verticalRules(game),
-      duration = cinematicReplay ? CINEMATIC_DURATION : 4000;
-    if (cinematicReplay) audio.play('horn');
-    if (!cinematicReplay && replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
-    if (!cinematicReplay && replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
-    const finish = setTimeout(() => {
-      setReplay(null);
-      if (cinematicReplay) setTacticalBattle(null);
-    }, duration);
-    const marching = setTimeout(() => {
-      if (cinematicReplay) {
-        if (replay.report.movements.some((m) => !m.isFleet)) audio.playMarchSound();
-        if (replay.report.movements.some((m) => m.isFleet)) audio.playSailSound();
-      }
-    }, 1500);
-    const cannon = setTimeout(
-        () => {
-          if (cinematicReplay) {
-            const battles = [...replay.report.battles].sort(
-              (a, b) => b.attackerTroops + b.defenderTroops - (a.attackerTroops + a.defenderTroops),
-            );
-            const chosen =
-              battles.find((b) => b.attackerId === playerId || b.defenderId === playerId) ??
-              battles[0];
-            if (chosen) setTacticalBattle(chosen);
-          } else if (replay.report.battles.length) audio.playCombatSound();
-        },
-        cinematicReplay ? 3500 : 1450,
-      ),
-      peace = setTimeout(() => {
-        if (replay.report.diplomaticChanges.some((c) => c.action === 'PEACE')) audio.play('peace');
-      }, 2900);
-    let frame = 0;
-    const tick = (t: number) => {
-      const progress = Math.min(1, (t - started) / duration);
-      if (progress === 1) {
-        setReplay(null);
-        if (cinematicReplay) setTacticalBattle(null);
-        return;
-      }
-      setReplay((r) => (r ? { ...r, progress } : null));
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(finish);
-      clearTimeout(cannon);
-      clearTimeout(marching);
-      clearTimeout(peace);
-    };
-  }, [replay?.nonce, cinematic?.id]);
-  const closeTacticalBattle = useCallback(() => setTacticalBattle(null), []);
-  const replayTurn = useRef<{ code: string; turn: number } | null>(null);
-  useEffect(() => {
-    if (!game) return;
-    const previous = replayTurn.current;
-    replayTurn.current = { code: game.code, turn: game.turn };
-    if (previous?.code === game.code && game.turn > previous.turn && game.lastReport)
-      playReplay(game.lastReport);
-  }, [game?.code, game?.turn, playReplay]);
   useEffect(() => {
     if (!game) return;
     if (game.phase === 'finished' && seenWinner.current !== game.code) {
       seenWinner.current = game.code;
       setEndOpen(true);
-      audio.play(game.winnerId ? 'victory' : 'peace');
     }
-  }, [game?.wars.length, game?.phase, game?.code]);
+  }, [game?.wars.length, game?.phase, game?.code, game?.winnerId, playerId]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
-      if (cinematic) return;
+      if (cinematic || tacticalBattle || galleryOpen) return;
       if (e.key === 'Escape') {
         if (focusedWindow === 'quick-actions' && quickActionsOpen) {
           setQuickActionsOpen(false);
@@ -604,15 +597,26 @@ export default function App() {
     };
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
-  }, [manual, menu, endOpen, warRequest, panels, focusedWindow, quickActionsOpen, cinematic?.id]);
+  }, [
+    manual,
+    menu,
+    endOpen,
+    warRequest,
+    panels,
+    focusedWindow,
+    quickActionsOpen,
+    cinematic?.id,
+    tacticalBattle?.id,
+    galleryOpen,
+  ]);
   const currentCode = game?.code;
   useEffect(() => {
     setPanels([]);
     setArmy('');
     setProvince('');
     setReference('');
-    setReplay(null);
-    setTacticalBattle(null);
+    resetPresentation();
+    setGalleryOpen(false);
     setQuickActionsOpen(false);
   }, [currentCode]);
   const rootClick = (event: React.MouseEvent) => {
@@ -628,12 +632,17 @@ export default function App() {
           send={send}
           online={status === 'online'}
           onHelp={openManual}
+          onCinema={() => {
+            audio.unlock();
+            setGalleryOpen(true);
+          }}
           onTutorial={startTutorial}
           onProfile={() => {
             setProfileOpen(true);
             setFocusedWindow('strategist-profile');
           }}
         />
+        {gallery}
         {manual && (
           <Manual
             close={closeManual}
@@ -804,14 +813,17 @@ export default function App() {
       data-audio-muted={muted}
       data-season={currentSeason.season}
     >
-      {cinematic?.type === 'season' && (
+      {gallery}
+      {!tacticalBattle && !galleryOpen && cinematic?.type === 'season' && (
         <SeasonTransitionBanner
           season={cinematic.season}
           turn={cinematic.turn}
           onComplete={completeCinematic}
         />
       )}
-      {cinematic?.type === 'war' &&
+      {!tacticalBattle &&
+        !galleryOpen &&
+        cinematic?.type === 'war' &&
         (() => {
           const war = game.wars.find((entry) => entry.id === cinematic.warId);
           return war ? (
@@ -841,7 +853,7 @@ export default function App() {
         onDeselect={() => setArmy('')}
         viewerId={playerId}
         fogEnabled={fogEnabled}
-        onBattle={setTacticalBattle}
+        onBattle={showBattle}
         replay={replay}
         pings={pings}
         onPing={signal}
@@ -1279,20 +1291,24 @@ export default function App() {
         </TopBarModal>
       )}
       {tacticalBattle && (
-        <TacticalBattleModal game={game} battle={tacticalBattle} onClose={closeTacticalBattle} />
+        <BattleCinematic
+          key={tacticalBattle.id}
+          game={game}
+          battle={tacticalBattle}
+          playerId={playerId}
+          index={battleIndex}
+          total={battleCount}
+          autoAdvance={battleAutoAdvance}
+          onComplete={advanceBattle}
+          onSkip={skipPresentation}
+        />
       )}
       {replay && verticalRules(game) && (
         <TurnResolutionSequencer
           report={replay.report}
           progress={replay.progress}
-          onSkip={() => {
-            setReplay(null);
-            setTacticalBattle(null);
-          }}
-          onReplay={() => {
-            setTacticalBattle(null);
-            playReplay(replay.report);
-          }}
+          onSkip={skipPresentation}
+          onReplay={() => playReplay(replay.report)}
         />
       )}
       {replay && !verticalRules(game) && (
@@ -1300,7 +1316,7 @@ export default function App() {
           <Play size={13} />
           Resolução da rodada {replay.report.turn}
           <i style={{ width: `${replay.progress * 100}%` }} />
-          <button aria-label="Encerrar animação" onClick={() => setReplay(null)}>
+          <button aria-label="Encerrar animação" onClick={skipPresentation}>
             <X size={12} />
           </button>
         </div>
@@ -1487,7 +1503,7 @@ export default function App() {
             playerId={playerId}
             command={command}
             tab={reportTab}
-            onBattle={setTacticalBattle}
+            onBattle={showBattle}
             onReplay={playReplay}
             onFocus={focus}
           />
@@ -1610,6 +1626,24 @@ export default function App() {
               Relevo cartográfico 2,5D
             </label>
             <PlayerNameForm name={me.name} command={command} />
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={autoplayBattles}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setAutoplayBattles(enabled);
+                  try {
+                    localStorage.setItem('concordia.autoplayBattles.v1', String(enabled));
+                  } catch {}
+                }}
+              />
+              Cinema de combate automático
+            </label>
+            <p className="fine-print">
+              Assista aos seus confrontos após a resolução. Os relatórios permitem rever qualquer
+              batalha visível.
+            </p>
             <p>
               Forças: {troopTotal} / {eco.armyCap} · {RELIGIONS[me.faith].name} · desgaste{' '}
               {number(me.warExhaustion)}%
@@ -1639,6 +1673,14 @@ export default function App() {
               }}
             >
               🔊 Mixer de Som
+            </button>
+            <button
+              onClick={() => {
+                audio.unlock();
+                setGalleryOpen(true);
+              }}
+            >
+              <Play size={15} /> Cinema e trilha
             </button>
             {game.hostId === playerId && (
               <CampaignSaveControls send={send} canExport invites={seatInvites} />
@@ -1701,7 +1743,7 @@ export default function App() {
           </section>
         </TopBarModal>
       )}
-      {endOpen && game.phase === 'finished' && (
+      {endOpen && game.phase === 'finished' && !tacticalBattle && !replay && !cinematic && (
         <TopBarModal
           id="result"
           title="Resultado da campanha"
@@ -1729,6 +1771,10 @@ export default function App() {
           }
         >
           <section className="result-modal popup-sheet">
+            <CampaignConclusionAudio
+              victory={game.winnerId === playerId}
+              decided={Boolean(game.winnerId)}
+            />
             <span className="eyebrow">A CRÔNICA FOI ESCRITA</span>
             <Crown size={50} />
             <h2>

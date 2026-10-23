@@ -1,6 +1,6 @@
 {
   "name": "concordia-wargame",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch server/index.ts",
-    "build": "npm run typecheck && npm run godot:sync && npm run test:acceptance && vite build",
+    "build": "npm run typecheck && npm run test:acceptance && vite build",
     "start": "tsx server/index.ts --production",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
@@ -21,13 +21,7 @@
     "test:docker": "tsx scripts/smoke-docker.ts",
     "desktop:dev": "npm --prefix desktop start",
     "desktop:package": "npm run build && npm --prefix desktop run package",
-    "test:acceptance": "node --import tsx tests/v101-acceptance.test.ts && node --import tsx tests/v110-bugfixes-seasons-godot.test.ts",
-    "godot:sync": "node --import tsx scripts/sync-godot-assets.ts",
-    "godot": "npm run godot:sync && node scripts/run-godot.mjs",
-    "godot:editor": "npm run godot:sync && node scripts/run-godot.mjs --editor",
-    "godot:check": "npm run godot:sync && node scripts/run-godot.mjs --headless --editor --quit",
-    "godot:export:windows": "npm run godot:sync && node scripts/run-godot.mjs --headless --export-release \"Windows Desktop\" \"../.local/godot-build/Concordia.exe\"",
-    "godot:benchmark": "npm run godot:sync && node scripts/run-godot.mjs --script res://tests/Benchmark.gd"
+    "test:acceptance": "node --import tsx tests/v101-acceptance.test.ts && node --import tsx tests/v110-bugfixes-seasons.test.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

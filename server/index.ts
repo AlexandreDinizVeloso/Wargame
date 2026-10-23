@@ -22,6 +22,7 @@ import { EVENTS, RESOURCES, SEASONS } from '../shared/strategy';
 import { OBJECTIVES } from '../shared/types';
 import worldGeometry from '../shared/world-geometry.json';
 import { handleHttpGameApi } from './httpGameApi';
+import { SFX_SPEC, CINEMATIC_SFX_SPEC } from '../shared/audioDSP';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const production = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
@@ -32,6 +33,7 @@ const mime: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.webp': 'image/webp',
   '.woff2': 'font/woff2',
   '.json': 'application/json',
   '.wav': 'audio/wav',
@@ -44,14 +46,14 @@ const server = http.createServer(async (req, res) => {
   if (await handleHttpGameApi(req, res, roomService)) return;
   if (req.method === 'GET' && req.url?.split('?')[0] === '/api/audio-assets') {
     const folder = path.join(root, production ? 'dist' : 'public', 'assets', 'sfx');
-    const files = ['cannon', 'march', 'sail', 'horn', 'coin']
+    const files = Object.keys({ ...SFX_SPEC, ...CINEMATIC_SFX_SPEC })
       .flatMap((name) => ['wav', 'ogg', 'mp3'].map((ext) => `${name}.${ext}`))
       .filter((name) => existsSync(path.join(folder, name)));
     const musicFolder = path.join(root, production ? 'dist' : 'public', 'assets', 'music');
     files.push(
-      ...['bgm-peace.wav', 'bgm-war.wav'].filter((name) =>
-        existsSync(path.join(musicFolder, name)),
-      ),
+      ...['peace', 'war', 'battle', 'victory', 'defeat']
+        .flatMap((theme) => ['ogg', 'mp3', 'wav'].map((extension) => `bgm-${theme}.${extension}`))
+        .filter((name) => existsSync(path.join(musicFolder, name))),
     );
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
     res.end(JSON.stringify(files));
@@ -63,7 +65,7 @@ const server = http.createServer(async (req, res) => {
       JSON.stringify({
         status: 'ok',
         game: 'concordia',
-        version: '1.1.0',
+        version: '1.2.0',
         protocolVersion: 7,
       }),
     );
@@ -115,7 +117,7 @@ const server = http.createServer(async (req, res) => {
     res.end(
       JSON.stringify({
         protocolVersion: 7,
-        version: '1.1.0',
+        version: '1.2.0',
         geometry: worldGeometry,
         polling: { state: '/api/rooms/:code/state', intervalMs: 1000, presenceLeaseMs: 15000 },
         nations: NATIONS.map((n) => ({ ...n, emblemPath: EMBLEMS[n.emblem] })),

@@ -1,12 +1,24 @@
 /** Pure deterministic DSP shared by the asset generator and acceptance tests. */
 export const AUDIO_SAMPLE_RATE = 44100;
-export const SFX_ASSET_REVISION = 'v110-soft';
+export const SFX_ASSET_REVISION = 'v120-cinematic';
 export const SFX_SPEC = {
   sail: { targetPeak: 0.12, cutoff: 220, duration: 2.2 },
   march: { targetPeak: 0.14, cutoff: 180, duration: 0.9 },
   cannon: { targetPeak: 0.24, cutoff: 220, duration: 1.8 },
   horn: { targetPeak: 0.2, cutoff: 250, duration: 1.5 },
   coin: { targetPeak: 0.2, cutoff: 250, duration: 0.9 },
+} as const;
+/** Added battle foley has its own spectral profile; the five legacy cues keep their exact contract. */
+export const CINEMATIC_SFX_SPEC = {
+  musket: { targetPeak: 0.19, cutoff: 680, duration: 1.45 },
+  steel: { targetPeak: 0.16, cutoff: 1150, duration: 1.65 },
+  charge: { targetPeak: 0.21, cutoff: 720, duration: 3.2 },
+  impact: { targetPeak: 0.2, cutoff: 450, duration: 1.8 },
+  naval: { targetPeak: 0.19, cutoff: 700, duration: 3.6 },
+  victory: { targetPeak: 0.19, cutoff: 1500, duration: 3.8 },
+  defeat: { targetPeak: 0.16, cutoff: 1100, duration: 3.8 },
+  season: { targetPeak: 0.12, cutoff: 1100, duration: 1.6 },
+  'battle-ambience': { targetPeak: 0.075, cutoff: 280, duration: 8 },
 } as const;
 export const MUSIC_SPEC = { duration: 16, targetPeak: 0.55, cutoff: 1800 } as const;
 export function peakAmplitude(samples: ArrayLike<number>): number {
@@ -71,9 +83,12 @@ export function seededNoise(seed: number) {
     return ((state >>> 0) / 4294967296) * 2 - 1;
   };
 }
-export type SfxName = keyof typeof SFX_SPEC;
+export type SfxName = keyof typeof SFX_SPEC | keyof typeof CINEMATIC_SFX_SPEC;
 export function generateSfxPCM(name: SfxName, rate = AUDIO_SAMPLE_RATE): Float64Array {
-  const spec = SFX_SPEC[name],
+  if (name in CINEMATIC_SFX_SPEC)
+    return generateCinematicSfxPCM(name as keyof typeof CINEMATIC_SFX_SPEC, rate);
+  const legacyName = name as keyof typeof SFX_SPEC;
+  const spec = SFX_SPEC[legacyName],
     data = new Float64Array(Math.round(spec.duration * rate));
   const noise = seededNoise(101 + [...name].reduce((n, c) => n + c.charCodeAt(0), 0));
   let brown = 0,
@@ -123,6 +138,99 @@ export function generateSfxPCM(name: SfxName, rate = AUDIO_SAMPLE_RATE): Float64
       value *= Math.min(1, (spec.duration - t) / 0.08);
     }
     data[i] = value;
+  }
+  return normalizeAndFilterPCM(data, spec.targetPeak, spec.cutoff, rate);
+}
+/** Original, deterministic foley: low rumble/wood plus tuned partials, never sharp noise bursts. */
+function generateCinematicSfxPCM(
+  name: keyof typeof CINEMATIC_SFX_SPEC,
+  rate: number,
+): Float64Array {
+  const spec = CINEMATIC_SFX_SPEC[name],
+    data = new Float64Array(Math.round(spec.duration * rate)),
+    noise = seededNoise(1201 + [...name].reduce((sum, letter) => sum + letter.charCodeAt(0), 0));
+  let brown = 0,
+    air = 0;
+  const strike = (t: number, frequency: number, decay: number) =>
+    t < 0
+      ? 0
+      : Math.min(1, t / 0.005) * Math.exp(-t * decay) * Math.sin(2 * Math.PI * frequency * t);
+  const brass = (t: number, frequency: number) =>
+    Math.sin(2 * Math.PI * frequency * t) +
+    Math.sin(2 * Math.PI * frequency * 2 * t) * 0.23 +
+    Math.sin(2 * Math.PI * frequency * 3 * t) * 0.075;
+  for (let i = 0; i < data.length; i++) {
+    const t = i / rate;
+    brown = (brown + noise() * 0.035) / 1.035;
+    air += 0.003 * (brown - air);
+    let value = 0;
+    if (name === 'musket') {
+      for (const at of [0.02, 0.1, 0.24]) {
+        const s = t - at;
+        if (s >= 0)
+          value +=
+            strike(s, 155 - at * 90, 18) * 0.68 +
+            strike(s, 70, 9) * 0.4 +
+            brown * Math.min(1, s / 0.006) * Math.exp(-s * 10) * 1.2;
+      }
+    } else if (name === 'steel') {
+      for (const at of [0.02, 0.29, 0.67]) {
+        const s = t - at;
+        if (s >= 0)
+          value +=
+            strike(s, 392, 5.8) * 0.33 +
+            strike(s, 587.33, 7.5) * 0.18 +
+            strike(s, 836, 13) * 0.06 +
+            strike(s, 112, 22) * 0.52;
+      }
+    } else if (name === 'charge') {
+      const envelope = Math.min(1, t / 0.6) * Math.min(1, (spec.duration - t) / 0.65);
+      for (const at of [0.1, 0.45, 0.77, 1.05, 1.3, 1.54, 1.76, 1.97, 2.17, 2.36, 2.54])
+        value += strike(t - at, 76, 15) * 0.45 + strike(t - at - 0.08, 104, 22) * 0.18;
+      value += (brass(t, 146.8324) * 0.11 + brass(t, 220) * 0.06 + air * 0.7) * envelope;
+    } else if (name === 'impact') {
+      value =
+        strike(t, 62, 5) * 0.7 +
+        strike(t - 0.025, 94, 8) * 0.35 +
+        strike(t - 0.11, 138, 14) * 0.16 +
+        brown * Math.min(1, t / 0.005) * Math.exp(-t * 4.8) * 1.4;
+    } else if (name === 'naval') {
+      const envelope = Math.min(1, t / 0.25) * Math.min(1, (spec.duration - t) / 0.8);
+      value =
+        (air * 1.4 + brown * 0.5 + Math.sin(2 * Math.PI * 83 * t) * Math.sin(t * 6) * 0.025) *
+        envelope;
+      for (const at of [0.28, 1.28, 2.24]) {
+        const s = t - at;
+        if (s >= 0)
+          value +=
+            strike(s, 48, 3.6) * 0.3 +
+            strike(s - 0.08, 126, 8) * 0.14 +
+            brown * Math.exp(-s * 4) * 0.5;
+      }
+    } else if (name === 'season') {
+      const envelope = Math.min(1, t / 0.16) * Math.min(1, (spec.duration - t) / 0.7);
+      value =
+        (air * 0.7 +
+          strike(t - 0.04, 293.6648, 2.6) * 0.18 +
+          strike(t - 0.32, 391.9954, 3) * 0.13) *
+        envelope;
+    } else if (name === 'victory' || name === 'defeat') {
+      const notes =
+        name === 'victory' ? [146.8324, 184.9972, 220, 293.6648] : [220, 174.6141, 146.8324, 110];
+      for (let note = 0; note < notes.length; note++) {
+        const s = t - note * 0.35;
+        if (s >= 0) {
+          const envelope =
+            Math.min(1, s / 0.15) * Math.exp(-s * 0.8) * Math.min(1, (spec.duration - t) / 0.65);
+          value += brass(s, notes[note]) * envelope * (name === 'victory' ? 0.22 : 0.16);
+        }
+      }
+    } else {
+      const envelope = Math.min(1, t / 0.7) * Math.min(1, (spec.duration - t) / 1.2);
+      value = (air * 1.4 + brown * 0.18) * envelope;
+      for (const at of [0.5, 3.2, 6.1]) value += strike(t - at, 46, 2.6) * 0.09;
+    }
+    data[i] = value * Math.min(1, t / 0.005) * Math.min(1, (spec.duration - t) / 0.08);
   }
   return normalizeAndFilterPCM(data, spec.targetPeak, spec.cutoff, rate);
 }

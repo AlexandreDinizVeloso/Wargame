@@ -1,0 +1,902 @@
+.cc-battle-cinematic {
+  --cc-ivory: #f2e9d2;
+  --cc-gold: #d7b778;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--cc-ivory);
+  background: #101614;
+  font-family: 'Inter', sans-serif;
+  font-variant-numeric: tabular-nums;
+  animation: cc-film-arrive 550ms ease-out both;
+}
+.cc-battle-cinematic canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.cc-film-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(5 10 13 / 72%) 0,
+      transparent 30%,
+      transparent 43%,
+      rgb(5 10 13 / 42%) 71%,
+      #060b0f 100%
+    ),
+    radial-gradient(ellipse at center, transparent 15%, rgb(3 7 10 / 54%) 100%);
+}
+.cc-letterbox {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  height: clamp(18px, 4vh, 44px);
+  background: #06090c;
+  pointer-events: none;
+}
+.cc-letterbox--top {
+  top: 0;
+}
+.cc-letterbox--bottom {
+  bottom: 0;
+}
+.cc-film-header {
+  position: absolute;
+  top: clamp(31px, 6.5vh, 72px);
+  left: clamp(22px, 4vw, 76px);
+  right: clamp(22px, 4vw, 76px);
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: center;
+  gap: 20px;
+}
+.cc-film-edition {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--cc-gold);
+  font-family: 'Cinzel', Georgia, serif;
+  letter-spacing: 0.2em;
+  font-size: 17px;
+}
+.cc-film-edition small {
+  display: block;
+  margin-top: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 8px;
+  color: #b7b4a8;
+  letter-spacing: 0.21em;
+}
+.cc-film-seal {
+  display: grid;
+  flex: 0 0 38px;
+  place-items: center;
+  height: 44px;
+  border: 1px solid rgb(215 183 120 / 63%);
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+  background: rgb(36 32 23 / 35%);
+  font-size: 26px;
+  letter-spacing: 0;
+}
+.cc-film-location {
+  text-align: center;
+}
+.cc-film-location > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #e1d6bc;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.cc-film-location > span i {
+  width: 3px;
+  height: 3px;
+  background: var(--cc-gold);
+  transform: rotate(45deg);
+}
+.cc-film-location h2 {
+  margin: 10px 0 0;
+  color: var(--cc-ivory);
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: clamp(27px, 3.3vw, 55px);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: 0.04em;
+  text-shadow: 0 3px 28px #000;
+}
+.cc-film-counter {
+  justify-self: end;
+  text-align: right;
+}
+.cc-film-counter > span {
+  display: block;
+  color: #b7b4a8;
+  font-size: 8px;
+  letter-spacing: 0.25em;
+}
+.cc-film-counter > b {
+  display: block;
+  margin-top: 5px;
+  color: var(--cc-gold);
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 28px;
+  font-weight: 400;
+}
+.cc-film-counter b small {
+  color: #aca58e;
+  font-size: 15px;
+}
+.cc-field-context {
+  position: absolute;
+  top: clamp(138px, 21vh, 208px);
+  left: 25%;
+  right: 25%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px 13px;
+  color: #d7d2c1;
+  font-size: 10px;
+  text-shadow: 0 2px 8px #000;
+}
+.cc-field-context span + span::before {
+  content: '·';
+  margin-right: 13px;
+  color: var(--cc-gold);
+}
+.cc-realm {
+  position: absolute;
+  z-index: 2;
+  bottom: clamp(126px, 19vh, 215px);
+  width: clamp(210px, 21vw, 310px);
+  padding: 20px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--cc-realm), transparent 10%);
+  background: linear-gradient(180deg, transparent, rgb(5 12 17 / 36%));
+  text-shadow: 0 2px 12px #000;
+}
+.cc-realm--attacker {
+  left: clamp(22px, 5vw, 96px);
+}
+.cc-realm--defender {
+  right: clamp(22px, 5vw, 96px);
+}
+.cc-realm header {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.cc-realm header > div:last-child {
+  min-width: 0;
+}
+.cc-realm header small {
+  display: block;
+  color: var(--cc-gold);
+  font-size: 8px;
+  letter-spacing: 0.17em;
+}
+.cc-realm h3 {
+  margin: 5px 0;
+  font-family: 'Cinzel', Georgia, serif;
+  color: #f2ead9;
+  font-size: clamp(15px, 1.4vw, 21px);
+  font-weight: 400;
+  line-height: 1.2;
+}
+.cc-realm header span {
+  color: #a5aaac;
+  font-size: 10px;
+}
+.cc-heraldry {
+  display: grid;
+  flex: 0 0 54px;
+  place-items: center;
+  filter: drop-shadow(0 4px 9px #000);
+}
+.cc-heraldry svg {
+  width: 48px;
+  height: 55px;
+}
+.cc-heraldry svg > path:first-child {
+  fill: #152125;
+  fill-opacity: 0.9;
+  stroke-width: 1.5;
+}
+.cc-independent {
+  font-family: Georgia, serif;
+  font-size: 40px !important;
+  color: #b7b099 !important;
+}
+.cc-strength {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 19px 0 18px;
+}
+.cc-strength > strong {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: clamp(38px, 4.6vw, 67px);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--cc-ivory);
+}
+.cc-strength > span {
+  color: #c0c2bc;
+  font-size: 10px;
+}
+.cc-strength b {
+  display: block;
+  margin-top: 6px;
+  color: #dd9e88;
+  font-size: 11px;
+  font-weight: 400;
+}
+.cc-morale > div {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  color: #b8c0ba;
+  font-size: 10px;
+}
+.cc-morale b {
+  color: #ddd9ca;
+  font-size: 11px;
+  font-weight: 400;
+}
+.cc-morale > span {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  background: rgb(204 217 207 / 15%);
+}
+.cc-morale i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #6a8c79, #c9c19b);
+  transition: width 100ms linear;
+}
+.cc-composition {
+  display: flex;
+  gap: 15px;
+  margin-top: 14px;
+}
+.cc-composition > span {
+  color: #a9afa7;
+  font-size: 9px;
+}
+.cc-composition b {
+  display: block;
+  margin-bottom: 3px;
+  color: #dad7c9;
+  font-size: 13px;
+  font-weight: 400;
+}
+.cc-side-result {
+  margin: 14px 0 0;
+  color: #a7afa9;
+  font-size: 10px;
+}
+.cc-side-result i {
+  margin: 0 5px;
+  color: var(--cc-gold);
+  font-style: normal;
+}
+.cc-side-result b {
+  color: #ded8c5;
+  font-weight: 400;
+}
+.cc-phase-caption {
+  position: absolute;
+  z-index: 2;
+  bottom: clamp(148px, 22vh, 240px);
+  left: 28%;
+  right: 28%;
+  text-align: center;
+  text-shadow: 0 3px 20px #000;
+}
+.cc-phase-caption > span {
+  display: block;
+  color: #ead9b3;
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: clamp(14px, 1.6vw, 23px);
+  letter-spacing: 0.06em;
+}
+.cc-phase-caption p {
+  margin: 9px 0 0;
+  color: #c0c2b8;
+  font-size: 11px;
+}
+.cc-paused-label {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 6px 10px;
+  border: 1px solid #8e7d55;
+  background: #111c20;
+  color: var(--cc-gold);
+  font-size: 10px;
+  font-weight: 400;
+}
+.cc-phase--result .cc-phase-caption .cc-paused-label {
+  display: none;
+}
+.cc-verdict {
+  position: absolute;
+  z-index: 3;
+  top: 29%;
+  left: 50%;
+  width: min(520px, 44vw);
+  transform: translateX(-50%);
+  text-align: center;
+  text-shadow: 0 3px 24px #000;
+  animation: cc-verdict-arrive 650ms ease-out both;
+}
+.cc-verdict::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -40px -70px;
+  background: radial-gradient(ellipse, rgb(5 10 13 / 86%), transparent 74%);
+}
+.cc-verdict-overline {
+  color: #c9b47e;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+}
+.cc-verdict h3 {
+  margin: 17px 0 10px;
+  color: #f2dfb4;
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: clamp(27px, 3.4vw, 51px);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: 0.025em;
+}
+.cc-verdict--defeat h3 {
+  color: #ddbaaa;
+}
+.cc-winner-name {
+  margin: 0;
+  color: #ebe4d2;
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: clamp(12px, 1.35vw, 19px);
+}
+.cc-verdict-rule {
+  height: 1px;
+  width: 54%;
+  margin: 22px auto 19px;
+  background: linear-gradient(90deg, transparent, #b39966, transparent);
+}
+.cc-casualty-totals {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+.cc-casualty-totals small {
+  display: block;
+  color: #aaa99c;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+.cc-casualty-totals b {
+  display: block;
+  margin-top: 5px;
+  color: #e6cfb2;
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 30px;
+  font-weight: 400;
+}
+.cc-casualty-totals > i {
+  color: #9e875c;
+  font-size: 20px;
+  font-style: normal;
+}
+.cc-verdict-detail {
+  margin: 14px auto 0;
+  max-width: 350px;
+  color: #ccc7b6;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.cc-power-balance {
+  margin: 13px 0 0;
+  color: #999f97;
+  font-size: 10px;
+}
+.cc-power-balance span {
+  margin: 0 8px;
+  color: #c6aa72;
+}
+.cc-film-footer {
+  position: absolute;
+  z-index: 4;
+  bottom: clamp(28px, 5.5vh, 60px);
+  left: clamp(22px, 4vw, 76px);
+  right: clamp(22px, 4vw, 76px);
+}
+.cc-timeline {
+  position: relative;
+  height: 1px;
+  margin-bottom: 22px;
+  background: rgb(203 190 150 / 20%);
+}
+.cc-timeline > i {
+  display: block;
+  height: 100%;
+  background: #d4b473;
+  box-shadow: 0 0 10px rgb(225 197 137 / 50%);
+}
+.cc-timeline > b {
+  position: absolute;
+  top: -2px;
+  width: 4px;
+  height: 4px;
+  transform: rotate(45deg);
+  background: #57605b;
+}
+.cc-timeline > b.cc-passed {
+  background: #d4b473;
+}
+.cc-film-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.cc-film-description {
+  color: #8f9893;
+  font-size: 10px;
+  letter-spacing: 0.025em;
+}
+.cc-film-description i {
+  margin: 0 8px;
+  color: #ba9f68;
+  font-style: normal;
+}
+.cc-control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cc-control-group button {
+  min-height: 35px;
+  padding: 8px 12px;
+  border: 1px solid rgb(190 168 114 / 25%);
+  border-radius: 2px;
+  background: rgb(11 19 23 / 65%);
+  color: #e0d9c7;
+  font-size: 11px;
+}
+.cc-control-group button:hover {
+  background: rgb(91 76 47 / 42%);
+  border-color: #b99f67;
+}
+.cc-control-group button:focus-visible {
+  outline: 2px solid #e0c991;
+  outline-offset: 4px;
+}
+.cc-control-group button.cc-primary-button {
+  border-color: #aa905a;
+  background: rgb(133 107 56 / 25%);
+  color: #f1dfb7;
+}
+.cc-control-group button.cc-icon-button {
+  width: 35px;
+  padding: 7px;
+}
+.cc-control-group kbd {
+  margin-left: 2px;
+  padding: 1px 4px;
+  border: 1px solid #5b5b4d;
+  border-radius: 2px;
+  color: #a9b0a6;
+  font: inherit;
+  font-size: 8px;
+}
+.cc-is-paused .cc-film-shade {
+  background-color: rgb(0 0 0 / 12%);
+}
+@keyframes cc-film-arrive {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cc-verdict-arrive {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@media (max-width: 1000px) {
+  .cc-film-edition {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+  }
+  .cc-film-edition small {
+    font-size: 7px;
+  }
+  .cc-film-seal {
+    flex-basis: 30px;
+    height: 36px;
+    font-size: 20px;
+  }
+  .cc-realm {
+    width: 225px;
+    bottom: 132px;
+  }
+  .cc-realm--attacker {
+    left: 26px;
+  }
+  .cc-realm--defender {
+    right: 26px;
+  }
+  .cc-phase-caption {
+    bottom: 365px;
+    left: 24%;
+    right: 24%;
+  }
+  .cc-verdict {
+    top: 24%;
+    width: 55vw;
+  }
+  .cc-phase--result .cc-realm {
+    width: 190px;
+  }
+  .cc-phase--result .cc-composition {
+    display: none;
+  }
+  .cc-verdict h3 {
+    font-size: 31px;
+  }
+  .cc-verdict-rule {
+    margin: 14px auto;
+  }
+  .cc-verdict-detail {
+    font-size: 10px;
+  }
+}
+@media (max-width: 650px) {
+  .cc-film-header {
+    grid-template-columns: 1fr auto;
+    top: 33px;
+    left: 18px;
+    right: 18px;
+    gap: 14px;
+  }
+  .cc-film-edition {
+    display: none;
+  }
+  .cc-film-location {
+    text-align: left;
+  }
+  .cc-film-location > span {
+    justify-content: flex-start;
+    font-size: 7px;
+    letter-spacing: 0.12em;
+    gap: 7px;
+  }
+  .cc-film-location h2 {
+    font-size: 27px;
+    margin-top: 9px;
+  }
+  .cc-film-counter > span {
+    font-size: 7px;
+  }
+  .cc-film-counter > b {
+    font-size: 24px;
+  }
+  .cc-film-counter b small {
+    font-size: 12px;
+  }
+  .cc-field-context {
+    top: 111px;
+    left: 18px;
+    right: 18px;
+    justify-content: flex-start;
+    font-size: 9px;
+  }
+  .cc-realm,
+  .cc-phase--result .cc-realm {
+    bottom: 125px;
+    width: calc(50% - 26px);
+    padding-top: 12px;
+    background: none;
+  }
+  .cc-realm--attacker {
+    left: 18px;
+  }
+  .cc-realm--defender {
+    right: 18px;
+  }
+  .cc-realm header {
+    align-items: flex-start;
+    gap: 6px;
+    min-height: 53px;
+  }
+  .cc-heraldry {
+    flex-basis: 28px;
+  }
+  .cc-heraldry svg {
+    width: 27px;
+    height: 32px;
+  }
+  .cc-independent {
+    font-size: 25px !important;
+  }
+  .cc-realm header small {
+    font-size: 6px;
+    letter-spacing: 0.1em;
+  }
+  .cc-realm h3 {
+    font-size: 12px;
+    margin: 5px 0 3px;
+  }
+  .cc-realm header span {
+    font-size: 8px;
+  }
+  .cc-strength {
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .cc-strength > strong {
+    font-size: 36px;
+  }
+  .cc-strength > span {
+    font-size: 8px;
+  }
+  .cc-strength b {
+    font-size: 9px;
+    margin-top: 4px;
+  }
+  .cc-composition {
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .cc-composition > span {
+    font-size: 7px;
+  }
+  .cc-composition b {
+    font-size: 11px;
+  }
+  .cc-morale > div {
+    font-size: 8px;
+    margin-bottom: 5px;
+  }
+  .cc-morale b {
+    font-size: 9px;
+  }
+  .cc-side-result {
+    font-size: 8px;
+    margin-top: 10px;
+  }
+  .cc-side-result i {
+    margin: 0 2px;
+  }
+  .cc-phase-caption {
+    top: 24%;
+    bottom: auto;
+    left: 18px;
+    right: 18px;
+  }
+  .cc-phase-caption > span {
+    font-size: 16px;
+  }
+  .cc-phase-caption p {
+    font-size: 10px;
+  }
+  .cc-verdict {
+    top: 26%;
+    width: calc(100% - 44px);
+  }
+  .cc-verdict::before {
+    inset: -18px -25px;
+  }
+  .cc-verdict-overline {
+    font-size: 8px;
+  }
+  .cc-verdict h3 {
+    margin: 12px 0 8px;
+    font-size: 29px;
+  }
+  .cc-winner-name {
+    font-size: 12px;
+  }
+  .cc-verdict-rule {
+    margin: 12px auto;
+  }
+  .cc-casualty-totals {
+    gap: 18px;
+  }
+  .cc-casualty-totals small {
+    font-size: 7px;
+  }
+  .cc-casualty-totals b {
+    font-size: 24px;
+    margin-top: 3px;
+  }
+  .cc-verdict-detail {
+    font-size: 9px;
+    max-width: 275px;
+    margin-top: 10px;
+  }
+  .cc-power-balance {
+    font-size: 9px;
+    margin-top: 9px;
+  }
+  .cc-film-footer {
+    left: 18px;
+    right: 18px;
+    bottom: 29px;
+  }
+  .cc-timeline {
+    margin-bottom: 17px;
+  }
+  .cc-film-controls {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .cc-film-description {
+    font-size: 8px;
+  }
+  .cc-control-group {
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+  }
+  .cc-control-group button {
+    min-height: 34px;
+    padding: 7px 9px;
+    font-size: 10px;
+    gap: 6px;
+  }
+  .cc-control-group kbd {
+    display: none;
+  }
+  .cc-control-pause span {
+    display: none;
+  }
+}
+@media (max-height: 650px) and (min-width: 651px) {
+  .cc-letterbox {
+    height: 14px;
+  }
+  .cc-film-header {
+    top: 28px;
+  }
+  .cc-film-location h2 {
+    font-size: 28px;
+    margin-top: 5px;
+  }
+  .cc-field-context {
+    top: 105px;
+  }
+  .cc-realm,
+  .cc-phase--result .cc-realm {
+    bottom: 90px;
+    width: 210px;
+  }
+  .cc-realm h3 {
+    font-size: 15px;
+  }
+  .cc-realm header {
+    gap: 8px;
+  }
+  .cc-heraldry {
+    flex-basis: 38px;
+  }
+  .cc-heraldry svg {
+    width: 34px;
+    height: 40px;
+  }
+  .cc-strength {
+    margin: 12px 0;
+  }
+  .cc-strength > strong {
+    font-size: 40px;
+  }
+  .cc-phase-caption {
+    bottom: 93px;
+  }
+  .cc-composition {
+    margin-top: 10px;
+  }
+  .cc-film-footer {
+    bottom: 25px;
+  }
+  .cc-timeline {
+    margin-bottom: 13px;
+  }
+  .cc-verdict {
+    top: 24%;
+    width: 42vw;
+  }
+  .cc-verdict h3 {
+    font-size: 28px;
+    margin: 9px 0;
+  }
+  .cc-verdict-rule {
+    margin: 10px auto;
+  }
+  .cc-casualty-totals b {
+    font-size: 24px;
+  }
+  .cc-verdict-detail {
+    margin-top: 8px;
+    font-size: 10px;
+  }
+}
+@media (max-height: 650px) and (max-width: 650px) {
+  .cc-realm,
+  .cc-phase--result .cc-realm {
+    bottom: 105px;
+  }
+  .cc-realm header > div > span,
+  .cc-composition,
+  .cc-side-result {
+    display: none;
+  }
+  .cc-realm header {
+    min-height: 40px;
+  }
+  .cc-phase-caption {
+    top: 24%;
+    bottom: auto;
+  }
+  .cc-verdict {
+    top: 27%;
+  }
+  .cc-verdict h3 {
+    font-size: 23px;
+    margin: 8px 0 6px;
+  }
+  .cc-verdict-rule,
+  .cc-power-balance,
+  .cc-verdict-detail {
+    display: none;
+  }
+  .cc-casualty-totals {
+    margin-top: 9px;
+  }
+  .cc-casualty-totals b {
+    font-size: 20px;
+  }
+  .cc-casualty-totals small {
+    font-size: 6px;
+  }
+  .cc-verdict-overline {
+    font-size: 7px;
+  }
+}
+.cc-reduced-motion,
+.cc-reduced-motion .cc-verdict,
+.cc-reduced-motion .cc-morale i {
+  animation: none;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-battle-cinematic,
+  .cc-verdict,
+  .cc-morale i {
+    animation: none;
+    transition: none;
+  }
+}

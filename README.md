@@ -1,23 +1,27 @@
-# Concórdia — Atlas de Impérios · v1.1
+# Concórdia — Atlas de Impérios · v1.2
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
 
-## v1.1 · Godot 4 3D War-Table & Long Seasons
+## v1.2 · Browser Cinema Edition
 
-- **Cliente nativo Godot 4.3+** em [godot-client](godot-client/README_GODOT.md): mesa 3D, territórios extrudados, miniaturas de tropas, navios e construções; partidas compartilhadas com o navegador.
-- **Três rodadas por estação:** recrutamento na primavera, campanhas no verão, comércio e obras no outono, congelamento e manutenção no inverno.
-- **40 Ouro permitem dois Mercados de 20** na primeira rodada. A HUD mostra o saldo disponível após as ordens reservadas.
-- Movimentos de batalhões independentes, clique direito através das decorações e mares sem polígonos preenchidos.
-- Transições sazonais de 2,5 segundos, anúncio cinematográfico de guerra e efeitos sonoros mais discretos.
+O cliente principal é **HTML no navegador**, com React, SVG, WebGL e Canvas 2D. Não há engine externa para instalar. O servidor Node.js continua responsável pelas regras, pelas salas e pela persistência.
+
+- **Cinematics de combate terrestre e naval** com aproximação, artilharia, salvas, carga e desfecho, baseadas no relatório real da batalha.
+- **Trilha original** de paz, guerra, batalha, vitória e derrota, com transições de volume entre cenas.
+- **SFX integrados** de marcha, navegação, mosquetes, canhões, aço, impacto, carga e resultados, com mixer independente.
+- Cutscenes de declaração de guerra e mudança de estação, com brasões e contexto da campanha.
+- Inspetor e Crônica continuam como janelas móveis e redimensionáveis sobre o mapa.
 
 ```sh
-npm install
+npm ci --include=dev
 npm run dev
-# Em outro terminal, com Godot instalado:
-npm run godot
 ```
 
-Também é possível abrir `godot-client/project.godot` e apertar **F5**. O servidor padrão é `http://localhost:3000`; amigos usam o endereço do anfitrião na rede Radmin, LAN ou IPv6. Veja [regras e validação v1.1](docs/V1_1.md), [cliente Godot](godot-client/README_GODOT.md) e [rede](docs/REDE.md).
+Abra **http://localhost:3000**. Amigos usam o endereço do anfitrião na rede Radmin, LAN ou IPv6. Veja [apresentação e controles v1.2](docs/V1_2.md) e [configuração de rede](docs/REDE.md).
+
+### Regras preservadas da v1.1
+
+Três rodadas por estação; 40 Ouro permitem dois Mercados de 20; movimentos de batalhões independentes; clique direito através das decorações; mares sem polígonos preenchidos. O experimento Godot foi retirado desta versão e permanece no [histórico v1.1](https://github.com/AlexandreDinizVeloso/Wargame/tree/610bba79c99f7dc7c658f806a2d59272211b1235/godot-client). As campanhas e as credenciais continuam no protocolo 7.
 
 ## v1.01 · Risk-Paced Edition & Audio/UI Fix
 
@@ -77,7 +81,7 @@ Veja [escopo e validação v0.95](docs/V0_95.md).
 
 - **Miniaturas SVG:** estandartes heráldicos por composição, líderes/estrelas/moral, galeões com carga, rosas dos ventos comerciais e seis construções ilustradas. Cercos têm progresso, com fogo/fumaça restritos ao replay; inverno aplica geada ao norte e montanhas.
 - **HUD única:** uma janela contextual alterna cidade/formação; Diplomacia, Árvore Militar, Comércio & Mares, Crises & Coalizões, Objetivos e Estatísticas abrem diretamente pelo menu superior. Esc ou clique fora fecha a consulta.
-- **Áudio procedural:** ambiente de paz/guerra com volume e mute de música separados dos efeitos; transição de rodada com resumo pessoal por 2,5 segundos.
+- **Áudio original:** OST de campanha e combate com música e efeitos em canais separados; transições com redução gradual de volume, mute e preferências locais.
 - **Tutorial de cinco passos:** a tela inicial cria uma mesa privada de treino. Ações reais avançam o guia; o botão no topo também permite orientar uma campanha existente.
 - **Crônica interativa:** gráficos por nação, inspeção de rodadas, receitas/tesouro/território/forças/vitórias e quatro títulos com empates. Dados militares antigos ausentes aparecem como lacunas; informações privadas continuam protegidas.
 - **Docker Node 20 Alpine**, volume de salas, healthcheck e Compose/Caddy para HTTPS. Veja [deploy cloud](docs/DEPLOY_CLOUD.md).
@@ -148,7 +152,7 @@ Sem banco externo, chave de API ou assets remotos. No cloud com cache pessoal se
 | Nação       | Mecânica                                                                                                            |
 | ----------- | ------------------------------------------------------------------------------------------------------------------- |
 | Aurélia     | Vassalagem voluntária ou por tratado; recebe 25% da renda bruta dos súditos; compartilha visão e dominação          |
-| Ferro-Norte | +8 ouro por baixa inimiga; moral ao saquear; ignora inverno e penalidades da floresta                               |
+| Ferro-Norte | +8 ouro por baixa inimiga; moral ao saquear; resiste ao atrito comum e às penalidades da floresta                   |
 | Véspera     | Mercenários imediatos em porto/mercado, −35% custo; +30% receita comercial local; visão comprável e suborno dobrado |
 | Sol Invicto | Conversão +25 ouro e +10 Fervor; +20% ataque/moral em guerra religiosa e chance de agitação adjacente               |
 | Kaldor      | Fortes −30%, até nível 3, causam 15% de atrito em sitiantes; artilharia −25% custo e +25% fogo                      |
@@ -168,7 +172,7 @@ Trigo, ferro, cavalos, minas de ouro e relíquias aparecem no mapa e alteram rec
 - Declare guerra pela central Diplomacia, pela aba Diplomacia do Reino de uma província estrangeira ou pela confirmação ao tentar invadir em paz. **Declarar Guerra e Marchar** é uma operação atômica no servidor.
 - **Scroll** ajusta zoom; botão direito/meio ou Espaço + arraste move a câmera; **1–5** troca o modo de mapa.
 
-As janelas podem ser arrastadas, redimensionadas e minimizadas; ↺ restaura os padrões. A resolução tem replay de quatro segundos e áudio sintetizado com opção de silenciar.
+As janelas podem ser arrastadas, redimensionadas e minimizadas; ↺ restaura os padrões. A resolução mantém o replay do mapa e oferece cinematics de combate com pausa, salto e repetição; áudio e música podem ser silenciados separadamente.
 
 ## Ritmo e vitória
 
@@ -208,6 +212,6 @@ O smoke inicia um servidor isolado em porta livre e abre três navegadores Chrom
 | `server/rooms.ts`, `storage.ts`, `migration.ts`                                                    | HTTP/WS, sessões, timer e persistência                           |
 | `src/`                                                                                             | Cliente React/SVG, HUD, áudio e janelas                          |
 
-`shared/` e `server/` não importam React, `src/` ou DOM. Um cliente Godot pode consumir o [protocolo 7](docs/PROTOCOL.md). Consulte [regras v0.7](docs/REGRAS_V7.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3/v0.4/v0.5/v0.6 em `docs/` são arquivos históricos.
+`shared/` e `server/` não importam React, `src/` ou DOM. O cliente HTML consome o [protocolo 7](docs/PROTOCOL.md), também disponível por HTTP para integrações. Consulte [regras v0.7](docs/REGRAS_V7.md), [validação/balanceamento](docs/BALANCE.md), [cartografia](docs/CARTOGRAFIA.md) e [rede sem IPv4 público](docs/REDE.md). As regras e resultados v0.2/v0.3/v0.4/v0.5/v0.6 em `docs/` são arquivos históricos.
 
 Análise das partidas anteriores: [plano da v0.7](docs/PLANO_V7.md). A direção atual está na [v0.95](docs/V0_95.md).

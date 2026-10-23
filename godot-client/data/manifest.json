@@ -1,7 +1,0 @@
-{
-  "generatedBy": "npm run godot:sync",
-  "version": "1.1.0",
-  "geometrySha256": "82580ee53978939cf18657063d5b7d0495ee459f47d6455dd8d64d061640bf9b",
-  "mapSha256": "6160e4ecd4ff91a592fec78312198b0a47a64f115df3b6bc62d2b093fdb11ad0",
-  "source": "shared/map.ts + shared/world-geometry.json"
-}

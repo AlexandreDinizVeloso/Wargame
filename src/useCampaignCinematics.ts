@@ -8,13 +8,13 @@ type CampaignCinematic =
 type Seen = { wars: string[]; seasonStart: number };
 
 /** Snapshot changes queue cinematics once; loading an existing campaign never replays its wars. */
-export function useCampaignCinematics(game: GameView | null, playerId: string) {
+export function useCampaignCinematics(game: GameView | null, playerId: string, snapshotEpoch = 0) {
   const [queue, setQueue] = useState<CampaignCinematic[]>([]);
-  const history = useRef<{ key: string; seen: Seen } | null>(null);
+  const history = useRef<{ key: string; seen: Seen; epoch: number } | null>(null);
   useEffect(() => {
     if (!game || !playerId) return;
     const key = `concordia-v110-cinematics-${game.code}-${playerId}`;
-    const initial = history.current?.key !== key;
+    const initial = history.current?.key !== key || history.current.epoch !== snapshotEpoch;
     if (initial) {
       let seen: Seen = { wars: game.wars.map((war) => war.id), seasonStart: 0 };
       try {
@@ -32,7 +32,7 @@ export function useCampaignCinematics(game: GameView | null, playerId: string) {
       } catch {}
       // Every war in an initial snapshot predates this live connection.
       seen.wars = [...new Set([...seen.wars, ...game.wars.map((war) => war.id)])];
-      history.current = { key, seen };
+      history.current = { key, seen, epoch: snapshotEpoch };
       setQueue([]);
     }
     const seen = history.current!.seen;
@@ -58,7 +58,7 @@ export function useCampaignCinematics(game: GameView | null, playerId: string) {
     try {
       sessionStorage.setItem(key, JSON.stringify(seen));
     } catch {}
-  }, [game?.code, game?.phase, game?.turn, game?.wars, playerId]);
+  }, [game?.code, game?.phase, game?.turn, game?.wars, playerId, snapshotEpoch]);
   const complete = useCallback(() => setQueue((previous) => previous.slice(1)), []);
   return { cinematic: queue[0], complete };
 }
