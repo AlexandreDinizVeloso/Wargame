@@ -1,75 +1,135 @@
-"""Generate 95 disjoint strategic land provinces from public-domain Natural Earth.
-Run: PYTHONPATH=/workspace/.cache/concordia-python python3 scripts/generate-map.py
-Dependency: shapely. Raw source is cached, never required by the game runtime.
+"""Generate the 42 Risk-paced macro territories from public-domain Natural Earth.
+
+Requires Python 3 and Shapely. Country polygons are clipped/merged, repaired, and
+validated before JSON is written. Labels use stable strategic anchors to keep
+adjacent territory centers at least 48 SVG pixels apart.
 """
 import json
+import math
 import urllib.request
 from pathlib import Path
-from shapely.geometry import shape, box
+from shapely.geometry import Polygon, box, shape
 from shapely.ops import unary_union
+
 SOURCE = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson'
-cache = Path('/tmp/concordia-world-countries.json')
-if not cache.exists():
-    cache.write_bytes(urllib.request.urlopen(SOURCE, timeout=30).read())
-countries = {f['properties']['ADM0_A3']: shape(f['geometry']) for f in json.loads(cache.read_text())['features']}
-regions = []
-def add(key, name, continent, codes, bounds=None, subtract=None):
-    geom = unary_union([countries[c] for c in codes.split()])
-    if bounds: geom = geom.intersection(box(*bounds))
-    if subtract: geom = geom.difference(subtract)
-    regions.append((key, name, continent, geom))
-EU='EUROPE'; AF='MENA_AFRICA'; AS='ASIA'; AM='AMERICAS'
-add('portugal','Portugal',EU,'PRT')
-add('castile','Castela',EU,'ESP',(-180,-90,-1,90));add('aragon','Aragão e Catalunha',EU,'ESP',(-1,-90,180,90))
-add('france','França',EU,'FRA',(-10,48,15,55));add('aquitaine','Aquitânia',EU,'FRA',(-10,40,4,48));add('burgundy','Borgonha e Ródano',EU,'FRA',(4,40,15,48))
-add('britain','Inglaterra',EU,'GBR',(-180,-90,180,55));add('scotland','Escócia',EU,'GBR',(-180,55,180,90));add('ireland','Irlanda',EU,'IRL')
-add('lowlands','Países Baixos',EU,'BEL NLD LUX');add('rhineland','Renânia',EU,'DEU',(-180,-90,9,90))
-add('germany','Saxônia e Brandemburgo',EU,'DEU',(9,49,180,90));add('bavaria','Baviera',EU,'DEU',(9,-90,180,49))
-add('alps','Alpes',EU,'CHE AUT');add('italy','Lombardia e Toscana',EU,'ITA',(-180,41,180,90));add('naples','Nápoles e Sicília',EU,'ITA',(-180,-90,180,41))
-add('scandinavia','Escandinávia',EU,'NOR SWE FIN ISL');add('denmark','Dinamarca',EU,'DNK');add('poland','Polônia',EU,'POL');add('lithuania','Lituânia e Báltico',EU,'LTU LVA EST')
-add('bohemia','Boêmia',EU,'CZE SVK');add('hungary','Hungria',EU,'HUN');add('balkans','Bálcãs',EU,'HRV BIH SRB MNE MKD ALB SVN KOS');add('greece','Grécia e Trácia',EU,'GRC BGR');add('romania','Romênia e Moldávia',EU,'ROU MDA')
-crimea = countries['UKR'].intersection(box(32,44,37,46))
-add('crimea','Crimeia',EU,'UKR',(32,44,37,46));add('ruthenia','Rutênia',EU,'UKR BLR',subtract=crimea);add('muscovy','Moscóvia',EU,'RUS',(-20,-90,50,90))
-add('maghreb','Marrocos',AF,'MAR SAH');add('algiers','Argélia e Tunísia',AF,'DZA TUN');add('tripoli','Tripolitânia',AF,'LBY');add('nile','Baixo Nilo e Cairo',AF,'EGY');add('nubia','Núbia e Alto Nilo',AF,'SDN SDS')
-add('west-africa','Senegal e Mali',AF,'SEN MLI MRT GMB GNB GIN SLE LBR CIV BFA NER');add('gold-coast','Costa do Ouro',AF,'GHA TGO BEN NGA');add('central-africa','Congo e África Central',AF,'CMR TCD CAF COD COG GAB GNQ AGO');add('horn','Chifre da África',AF,'ETH ERI DJI SOM SOL');add('east-africa','Zanzibar e África Oriental',AF,'KEN UGA RWA BDI TZA MWI MDG');add('zambezi','Zambeze',AF,'ZMB MOZ ZWE');add('south-africa','Cabo e África Austral',AF,'ZAF NAM BWA LSO SWZ')
-add('anatolia','Anatólia',AF,'TUR CYP CYN');add('levant','Levante e Jerusalém',AF,'SYR JOR ISR LBN PSX');add('arabia','Arábia',AF,'SAU YEM OMN ARE QAT KWT');add('mesopotamia','Mesopotâmia',AF,'IRQ');add('persia','Pérsia',AF,'IRN')
-add('caucasus','Cáucaso',AS,'GEO ARM AZE');add('siberia','Sibéria Ocidental',AS,'RUS',(50,-90,110,90))
-yak = countries['RUS'].intersection(box(110,-90,180,90)).union(countries['RUS'].intersection(box(-180,-90,-160,90)))
-regions.append(('yakutia','Iacútia e Sibéria Oriental',AS,yak))
-add('central-asia','Cazaquistão e Turcomênia',AS,'KAZ TKM');add('samarkand','Samarcanda e Transoxiana',AS,'UZB TJK KGZ');add('afghan','Afeganistão e Khyber',AS,'AFG');add('punjab','Punjab e Vale do Indo',AS,'PAK');add('india-north','Deli e Ganges',AS,'IND NPL BTN',(-180,23,180,90));add('bengal','Bengala',AS,'BGD');add('india-south','Decão e Madras',AS,'IND LKA',(-180,-90,180,23));add('burma','Birmânia',AS,'MMR');add('indochina','Indochina',AS,'THA LAO KHM VNM');add('malaya','Malaia',AS,'MYS BRN')
-sumatra=countries['IDN'].intersection(box(-180,-90,106,90));java=countries['IDN'].intersection(box(106,-90,180,-5))
-regions.append(('sumatra','Sumatra',AS,sumatra));regions.append(('java','Java e Pequenas Sondas',AS,java));add('philippines','Filipinas',AS,'PHL')
-add('archipelago','Bornéu e Celebes',AS,'IDN PNG TLS NZL FJI VUT SLB NCL',subtract=sumatra.union(java))
-add('australia-west','Austrália Ocidental',AS,'AUS',(-180,-90,135,90));add('australia-east','Austrália Oriental',AS,'AUS',(135,-90,180,90))
-add('mongolia','Mongólia',AS,'MNG');add('china-north','Pequim e Rio Amarelo',AS,'CHN TWN',(105,34,180,90));add('china-east','Nanquim e Xangai',AS,'CHN TWN',(105,25,180,34));add('china-south','Cantão',AS,'CHN TWN',(105,-90,180,25))
-tibet=countries['CHN'].intersection(box(78,27,100,36));regions.append(('tibet','Tibete e Himalaia',AS,tibet));add('china-west','Sichuan e Turquestão',AS,'CHN',(-180,-90,105,90),subtract=tibet);add('korea','Coreia',AS,'KOR PRK');add('japan','Japão',AS,'JPN')
-add('alaska','Alasca',AM,'USA',(-180,50,-130,90));add('canada-west','Canadá Ocidental',AM,'CAN',(-180,-90,-100,90));add('canada-east','Canadá Oriental',AM,'CAN GRL',(-100,-90,0,90));add('usa-west','Califórnia e Pacífico',AM,'USA',(-130,-90,-112,50));add('great-plains','Grandes Planícies',AM,'USA',(-112,-90,-90,50));add('great-lakes','Grandes Lagos',AM,'USA',(-90,40,-80,50));
-usa_east=countries['USA'].intersection(box(-80,-90,0,50)).union(countries['USA'].intersection(box(-90,-90,-80,40)))
-regions.append(('usa-east','Nova Inglaterra e Virgínia',AM,usa_east))
-add('mexico','México',AM,'MEX',(-180,-90,-90,90));add('yukatan','Iucatã',AM,'MEX',(-90,-90,180,90));add('central-america','América Central',AM,'PAN CRI NIC HND SLV GTM BLZ');add('caribbean','Caribe',AM,'CUB HTI DOM JAM PRI TTO BHS');add('colombia','Nova Granada',AM,'COL');add('venezuela','Venezuela',AM,'VEN');add('guianas','Guianas',AM,'GUY SUR FRA',(-62,-5,-48,10));add('andes','Peru e Andes',AM,'ECU PER');add('bolivia','Alto Peru',AM,'BOL PRY');add('amazon','Amazônia',AM,'BRA',(-180,-8,180,90));add('brazil-north','Bahia e Pernambuco',AM,'BRA',(-180,-16,180,-8));add('brazil','Rio e Minas',AM,'BRA',(-180,-23,180,-16));add('sao-paulo','São Paulo e Brasil Meridional',AM,'BRA',(-180,-90,180,-23));add('chile','Chile',AM,'CHL');add('rioplata','Rio da Prata',AM,'ARG URY FLK',(-180,-40,180,90));add('patagonia','Patagônia',AM,'ARG FLK',(-180,-90,180,-40))
-assert len(regions)==95, len(regions)
-def project(x,y):return [round((x+180)*4,2),round((85-y)*4,2)]
-result=[]
-for i,(key,name,continent,g) in enumerate(regions):
-    polygons = list(g.geoms) if hasattr(g,'geoms') else [g]
-    polygons = [p for p in polygons if p.geom_type=='Polygon' and p.area>=.02]
-    assert polygons,key
-    rings=[[project(x,y) for x,y in p.simplify(.10,preserve_topology=True).exterior.coords] for p in polygons]
-    point=max(polygons,key=lambda p:p.area).representative_point()
-    neighbors=[r[0] for j,r in enumerate(regions) if i!=j and g.distance(r[3])<.08]
-    result.append(dict(id=key,name=name,continent=continent,rings=rings,x=project(point.x,point.y)[0],y=project(point.x,point.y)[1],neighbors=neighbors))
-lookup={p['id']:p for p in result}
-# Physical straits; ocean journeys use fleets/charters, never arbitrary land links.
-crossings=[('britain','france'),('britain','ireland'),('scotland','ireland'),('scandinavia','denmark'),('denmark','germany'),('denmark','lowlands'),('greece','anatolia'),('japan','korea'),('malaya','sumatra'),('sumatra','java'),('java','archipelago'),('malaya','archipelago'),('archipelago','philippines'),('caribbean','mexico'),('caribbean','central-america'),('alaska','yakutia')]
-blocked=[('tibet','india-north'),('algiers','central-africa'),('tripoli','central-africa')]
-for a,b in crossings:
-    for src,dst in [(a,b),(b,a)]:
-        if dst not in lookup[src]['neighbors']:lookup[src]['neighbors'].append(dst)
-for a,b in blocked:
-    for src,dst in [(a,b),(b,a)]:lookup[src]['neighbors']=[n for n in lookup[src]['neighbors'] if n!=dst]
-for p in result:p['neighbors']=sorted(set(p['neighbors']))
-# Polygons must not overlap; touching borders have zero area.
-for i,r in enumerate(regions):
-    for s in regions[i+1:]:assert r[3].intersection(s[3]).area<.001,(r[0],s[0])
-Path('shared/world-geometry.json').write_text(json.dumps(result,ensure_ascii=False,separators=(',',':'))+'\n')
-print('Generated',len(result),'land provinces; source public domain:',SOURCE)
+CACHE = Path('/tmp/concordia-world-countries.json')
+if not CACHE.exists():
+    CACHE.write_bytes(urllib.request.urlopen(SOURCE, timeout=30).read())
+COUNTRIES = {
+    f['properties']['ADM0_A3']: shape(f['geometry']).buffer(0)
+    for f in json.loads(CACHE.read_text())['features']
+}
+REGIONS = []
+EU, AF, AS, NA, SA = 'EUROPE', 'MENA_AFRICA', 'ASIA', 'NORTH_AMERICA', 'SOUTH_AMERICA'
+
+def countries(codes):
+    return unary_union([COUNTRIES[code] for code in codes.split()])
+
+def add(key, name, continent, codes, anchor, bounds=None, geometry=None):
+    area = countries(codes) if geometry is None else geometry
+    if bounds is not None:
+        area = area.intersection(box(*bounds))
+    REGIONS.append((key, name, continent, area.buffer(0), anchor))
+
+# South America: four large territories, including an undivided Brazil.
+add('brazil', 'Brasil', SA, 'BRA GUY SUR', (-52, -12), geometry=countries('BRA GUY SUR').union(COUNTRIES['FRA'].intersection(box(-62, -5, -48, 10))))
+add('rioplata', 'Cone Sul', SA, 'ARG URY CHL PRY FLK', (-65, -37))
+add('andes', 'Andes', SA, 'PER BOL ECU', (-75, -13))
+add('colombia', 'Colômbia e Venezuela', SA, 'COL VEN', (-68, 5))
+# North and Central America: seven territories.
+add('alaska', 'Alasca', NA, 'USA', (-154, 62), (-180, 50, -130, 90))
+add('canada-west', 'Canadá Ocidental', NA, 'CAN', (-120, 58), (-180, -90, -100, 90))
+add('canada-east', 'Canadá Oriental', NA, 'CAN GRL', (-83, 56), (-100, -90, 0, 90))
+add('usa-west', 'Estados Unidos Ocidentais', NA, 'USA', (-116, 37), (-130, -90, -100, 50))
+add('usa-east', 'Estados Unidos Orientais', NA, 'USA', (-83, 37), (-100, -90, 0, 50))
+add('mexico', 'México', NA, 'MEX', (-103, 23))
+add('central-america', 'América Central e Caribe', NA, 'PAN CRI NIC HND SLV GTM BLZ CUB HTI DOM JAM PRI TTO BHS', (-80, 13))
+# Europe: nine macro territories.
+add('castile', 'Península Ibérica', EU, 'ESP PRT', (-6, 39))
+add('france', 'França', EU, 'FRA', (2, 49), (-10, 35, 12, 60))
+add('britain', 'Ilhas Britânicas', EU, 'GBR IRL', (-6, 58))
+add('germany', 'Europa Central', EU, 'DEU BEL NLD LUX DNK CHE AUT CZE SVK HUN', (14, 54))
+add('italy', 'Itália', EU, 'ITA', (13, 40))
+add('scandinavia', 'Escandinávia', EU, 'SWE NOR FIN ISL', (23, 67))
+add('poland', 'Polônia e Báltico', EU, 'POL LTU LVA EST', (30, 54))
+add('balkans', 'Bálcãs e Grécia', EU, 'ROU BGR ALB GRC MKD SRB KOS MNE BIH HRV SVN', (26, 40))
+add('muscovy', 'Moscóvia', EU, '', (40, 62), geometry=COUNTRIES['RUS'].intersection(box(-180, -90, 50, 90)).difference(box(-180, -90, -130, 90)).union(countries('UKR BLR MDA')))
+# Africa and Middle East: nine territories.
+add('maghreb', 'Magrebe', AF, 'MAR DZA TUN LBY SAH', (3, 28))
+add('nile', 'Egito e Nilo', AF, 'EGY SDN SDS', (29, 26))
+add('west-africa', 'África Ocidental', AF, 'MRT SEN GMB GNB GIN SLE LBR CIV BFA GHA TGO BEN NER MLI NGA', (0, 10))
+add('central-africa', 'África Central', AF, 'CMR TCD CAF COG COD GAB GNQ AGO', (20, 0))
+add('east-africa', 'África Oriental', AF, 'ETH ERI DJI SOM SOL KEN UGA TZA RWA BDI', (40, 2))
+add('south-africa', 'África Austral', AF, 'ZAF NAM BWA ZWE ZMB MOZ MWI LSO SWZ MDG', (25, -23))
+add('anatolia', 'Anatólia', AF, 'TUR ARM GEO AZE CYP', (39, 40))
+add('arabia', 'Arábia e Levante', AF, 'SAU YEM OMN ARE QAT KWT JOR ISR PSX LBN SYR', (43, 22))
+add('persia', 'Pérsia e Mesopotâmia', AF, 'IRN IRQ', (55, 33))
+# Asia and Oceania: thirteen territories.
+add('ural', 'Urais', AS, 'RUS', (66, 61), (50, -90, 85, 90))
+add('siberia', 'Sibéria', AS, '', (112, 63), geometry=COUNTRIES['RUS'].intersection(box(85, -90, 180, 90)).union(COUNTRIES['RUS'].intersection(box(-180, -90, -130, 90))))
+add('central-asia', 'Ásia Central', AS, 'KAZ UZB TKM TJK KGZ', (68, 43))
+add('afghan', 'Afeganistão e Khyber', AS, '', (69, 29), geometry=COUNTRIES['AFG'].union(COUNTRIES['PAK'].intersection(box(-180, -90, 70, 90))))
+add('india-north', 'Hindustão', AS, '', (82, 26), geometry=COUNTRIES['IND'].intersection(box(-180, 20, 180, 90)).union(COUNTRIES['PAK'].intersection(box(70, -90, 180, 90))).union(countries('NPL BGD BTN')))
+add('india-south', 'Decão', AS, '', (78, 12), geometry=COUNTRIES['IND'].intersection(box(-180, -90, 180, 20)).union(COUNTRIES['LKA']))
+add('indochina', 'Indochina', AS, '', (105, 13), geometry=countries('MMR THA KHM VNM LAO').union(COUNTRIES['MYS'].intersection(box(-180, -90, 105, 90))))
+manchuria = COUNTRIES['CHN'].intersection(box(120, 40, 180, 90))
+add('china-west', 'China Interior e Tibete', AS, 'CHN', (92, 40), (-180, -90, 105, 90))
+add('china-east', 'China Oriental', AS, '', (114, 28), geometry=COUNTRIES['CHN'].intersection(box(105, -90, 180, 90)).difference(manchuria).union(COUNTRIES['TWN']))
+add('mongolia', 'Mongólia', AS, 'MNG', (105, 50))
+add('korea', 'Coreia e Manchúria', AS, '', (127, 44), geometry=countries('PRK KOR').union(manchuria))
+add('japan', 'Japão', AS, 'JPN', (139, 37))
+add('archipelago', 'Indonésia e Oceania', AS, '', (126, -19), geometry=countries('IDN PNG AUS NZL PHL BRN').union(COUNTRIES['MYS'].intersection(box(105, -90, 180, 90))))
+assert len(REGIONS) == 42
+
+def project(lon, lat):
+    return [round((lon + 180) * 4, 2), round((85 - lat) * 4, 2)]
+
+result = []
+for index, (key, name, continent, area, anchor) in enumerate(REGIONS):
+    assert area.is_valid and not area.is_empty, key
+    parts = list(area.geoms) if hasattr(area, 'geoms') else [area]
+    parts = [p.simplify(.08, preserve_topology=True) for p in parts if p.geom_type == 'Polygon' and p.area >= .02]
+    assert parts and all(p.is_valid for p in parts), key
+    rings = []
+    for part in parts:
+        # Rounding can turn a near-tangent coastal cut into a self-intersection.
+        # Repair in final SVG coordinates, then serialize the repaired rings.
+        projected = Polygon(
+            [project(x, y) for x, y in part.exterior.coords],
+            [[project(x, y) for x, y in hole.coords] for hole in part.interiors],
+        ).buffer(0)
+        pieces = list(projected.geoms) if hasattr(projected, 'geoms') else [projected]
+        for piece in pieces:
+            if piece.geom_type != 'Polygon' or piece.is_empty:
+                continue
+            assert piece.is_valid, key
+            boundary = [list(point) for point in piece.exterior.coords]
+            assert Polygon(boundary).is_valid, key
+            rings.append(boundary)
+            for hole in piece.interiors:
+                boundary = [list(point) for point in hole.coords]
+                assert Polygon(boundary).is_valid, key
+                rings.append(boundary)
+    neighbors = [other[0] for j, other in enumerate(REGIONS) if index != j and area.distance(other[3]) < .08]
+    x, y = project(*anchor)
+    result.append(dict(id=key, name=name, continent=continent, rings=rings, x=x, y=y, neighbors=neighbors))
+lookup = {p['id']: p for p in result}
+# Narrow strategic water passages; they also carry sea-control metadata in map.ts.
+straits = [('britain', 'france'), ('castile', 'maghreb'), ('scandinavia', 'germany'), ('italy', 'balkans'), ('balkans', 'anatolia'), ('arabia', 'east-africa'), ('indochina', 'archipelago'), ('korea', 'japan'), ('alaska', 'siberia')]
+for a, b in straits:
+    lookup[a]['neighbors'].append(b)
+    lookup[b]['neighbors'].append(a)
+# Central Sahara is not a direct north/south highway.
+for a, b in [('maghreb', 'central-africa')]:
+    lookup[a]['neighbors'] = [n for n in lookup[a]['neighbors'] if n != b]
+    lookup[b]['neighbors'] = [n for n in lookup[b]['neighbors'] if n != a]
+for p in result:
+    p['neighbors'] = sorted(set(p['neighbors']))
+    for neighbor in p['neighbors']:
+        distance = math.hypot(p['x'] - lookup[neighbor]['x'], p['y'] - lookup[neighbor]['y'])
+        assert distance >= 48, (p['id'], neighbor, distance)
+for i, region in enumerate(REGIONS):
+    for other in REGIONS[i + 1:]:
+        assert region[3].intersection(other[3]).area < .001, (region[0], other[0])
+Path('shared/world-geometry.json').write_text(json.dumps(result, ensure_ascii=False, separators=(',', ':')) + '\n')
+print('Generated 42 land territories; valid disjoint source polygons; adjacent centers >=48px.')

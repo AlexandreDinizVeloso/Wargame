@@ -12,7 +12,8 @@ export const SCENARIOS: {
   {
     id: 'WORLD_GRAND_CAMPAIGN',
     name: 'Grande Campanha Global — 1500',
-    description: 'Mundo completo; oito nações distribuídas pelo planeta, recursos balanceados.',
+    description:
+      '42 territórios e 10 mares; oito nações e bônus pelo domínio dos cinco continentes.',
     mode: 'campaign',
     year: 1500,
   },
@@ -20,7 +21,7 @@ export const SCENARIOS: {
     id: 'SHATTERED_EMPIRES',
     name: 'Crise dos Três Impérios — Ação Imediata',
     description:
-      'Ato II, quatro províncias por nação, 150 ouro, quartéis, portos e forças ampliadas.',
+      'Ato II, quatro províncias por nação, 60 ouro, quartéis, portos e forças ampliadas.',
     mode: 'campaign',
     year: 1550,
   },
@@ -34,7 +35,7 @@ export const SCENARIOS: {
   {
     id: 'IRON_CROWN_EUROPE',
     name: 'Guerra pela Coroa Continental',
-    description: 'Europa/Mediterrâneo, fortes densos, Dieta Imperial e disputa da Coroa.',
+    description: 'Europa com nove territórios, fortes densos, Dieta Imperial e disputa da Coroa.',
     mode: 'quick',
     theater: 'EUROPE',
     year: 1550,

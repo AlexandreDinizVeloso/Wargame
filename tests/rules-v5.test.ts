@@ -46,8 +46,8 @@ test('dividir e fundir são instantâneos, conservam tropas/treinamento e permit
     g,
     players: [a],
   } = setup();
-  province(g, 'castile').ownerId = a.id;
-  const u = army(g, a.id, 'portugal', { infantry: 10, cavalry: 2 });
+  province(g, 'france').ownerId = a.id;
+  const u = army(g, a.id, 'castile', { infantry: 10, cavalry: 2 });
   u.movementCredit = 0.5;
   const input = g;
   const original = structuredClone(g);
@@ -72,16 +72,16 @@ test('dividir e fundir são instantâneos, conservam tropas/treinamento e permit
   assert.equal(g.battalions.length, 1);
   assert.equal(unitCount(g.battalions[0]), 12);
   assert.equal(g.battalions[0].training, 1.2);
-  submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, targetProvinceId: 'castile' });
+  submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, targetProvinceId: 'france' });
   resolveTurn(g);
-  assert.equal(g.battalions[0].provinceId, 'castile');
+  assert.equal(g.battalions[0].provinceId, 'france');
 });
 test('turno travado bloqueia ações instantâneas até reabrir e não reinicia o prazo', () => {
   let {
     g,
     players: [a],
   } = setup();
-  const u = army(g, a.id, 'portugal', { infantry: 8 });
+  const u = army(g, a.id, 'castile', { infantry: 8 });
   g = executeCommand(g, a.id, { type: 'READY', ready: true }, 1000);
   assert.throws(() =>
     executeCommand(g, a.id, {
@@ -111,9 +111,9 @@ test('autoMerge reúne somente formações compatíveis que terminaram juntas', 
     g,
     players: [a],
   } = setup();
-  province(g, 'castile').ownerId = a.id;
-  const x = army(g, a.id, 'portugal', { infantry: 4 }),
-    y = army(g, a.id, 'castile', { infantry: 4 });
+  province(g, 'france').ownerId = a.id;
+  const x = army(g, a.id, 'castile', { infantry: 4 }),
+    y = army(g, a.id, 'france', { infantry: 4 });
   x.autoMerge = y.autoMerge = true;
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
@@ -130,10 +130,10 @@ test('guarnição local impede captura imediata de terra sem forte e cerco compl
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const u = army(g, a.id, 'portugal', { infantry: 5 });
-  submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, targetProvinceId: 'castile' });
+  const u = army(g, a.id, 'castile', { infantry: 5 });
+  submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, targetProvinceId: 'france' });
   let r = resolveTurn(g);
-  const p = province(g, 'castile');
+  const p = province(g, 'france');
   assert.equal(p.ownerId, b.id);
   assert.equal(p.occupierId, null);
   assert.equal(p.siege?.progress, 1);
@@ -151,15 +151,15 @@ test('defensor pode reagir recrutando na janela de um cerco e expulsar o sitiant
   } = setup();
   b.gold = 200;
   b.manpower = 50;
-  province(g, 'castile').barracksLevel = 2;
+  province(g, 'france').barracksLevel = 2;
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const u = army(g, a.id, 'portugal', { infantry: 3 });
-  submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, targetProvinceId: 'castile' });
+  const u = army(g, a.id, 'castile', { infantry: 3 });
+  submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, targetProvinceId: 'france' });
   resolveTurn(g);
-  submitOrder(g, b.id, { type: 'RECRUIT_BATTALION', provinceId: 'castile', infantry: 7 });
+  submitOrder(g, b.id, { type: 'RECRUIT_BATTALION', provinceId: 'france', infantry: 7 });
   resolveTurn(g);
-  assert.equal(province(g, 'castile').occupierId, null);
-  assert.equal(province(g, 'castile').siege, null);
+  assert.equal(province(g, 'france').occupierId, null);
+  assert.equal(province(g, 'france').siege, null);
 });
 test('artilharia, mestre de cerco, bombarda e bloqueio acumulam progresso em cerco fortificado', () => {
   const {
@@ -168,7 +168,7 @@ test('artilharia, mestre de cerco, bombarda e bloqueio acumulam progresso em cer
   } = setup();
   a.unlockedSkills = ['ART_T1', 'ART_T2A'];
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = province(g, 'castile');
+  const p = province(g, 'france');
   p.fortLevel = 3;
   const u = army(g, a.id, p.id, { infantry: 12, artillery: 3 }),
     c = recruitCommander(g, a.id, false, 'SIEGE_MASTER', undefined, true);
@@ -192,7 +192,7 @@ test('assaltar muralha adiciona três pontos, remove infantaria e reduz moral', 
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = province(g, 'castile');
+  const p = province(g, 'france');
   p.fortLevel = 2;
   const u = army(g, a.id, p.id, { infantry: 20 });
   beginSiege(g, u, p);
@@ -210,16 +210,16 @@ test('ZoC impede avanço a outra terra inimiga e permite recuo ou avanço após 
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
   declareWar(g, a.id, c.id, 'CONQUEST');
-  const p = province(g, 'castile');
+  const p = province(g, 'france');
   p.fortLevel = 1;
   const u = army(g, a.id, p.id);
-  assert.equal(unitPath(g, u, 'france')?.[0], 'portugal');
-  assert.deepEqual(unitPath(g, u, 'portugal'), ['portugal']);
+  assert.notDeepEqual(unitPath(g, u, 'germany'), ['germany']);
+  assert.deepEqual(unitPath(g, u, 'castile'), ['castile']);
   assert.throws(() =>
-    submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['france'] }),
+    submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['germany'] }),
   );
   p.occupierId = a.id;
-  assert.deepEqual(unitPath(g, u, 'france'), ['aquitaine', 'france']);
+  assert.deepEqual(unitPath(g, u, 'germany'), ['germany']);
 });
 test('cerco perde progresso se os sitiantes saem ou fazem paz', () => {
   const {
@@ -227,10 +227,10 @@ test('cerco perde progresso se os sitiantes saem ou fazem paz', () => {
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = province(g, 'castile'),
+  const p = province(g, 'france'),
     u = army(g, a.id, p.id);
   beginSiege(g, u, p);
-  u.provinceId = 'portugal';
+  u.provinceId = 'castile';
   g.turn = 2;
   advanceSieges(g, emptyTurnReport(2, g.diet));
   assert.equal(p.siege, null);
@@ -261,8 +261,8 @@ test('atribuir líder é instantâneo, exclusivo e respeita general versus almir
     g,
     players: [a, b],
   } = setup();
-  const x = army(g, a.id, 'portugal'),
-    y = army(g, a.id, 'portugal'),
+  const x = army(g, a.id, 'castile'),
+    y = army(g, a.id, 'castile'),
     c = recruitCommander(g, a.id, false, 'SIEGE_MASTER', undefined, true);
   instantArmyAction(g, a.id, { type: 'ASSIGN_LEADER', battalionId: x.id, commanderId: c.id });
   instantArmyAction(g, a.id, { type: 'ASSIGN_LEADER', battalionId: y.id, commanderId: c.id });
@@ -284,16 +284,16 @@ test('XP de batalha evolui líderes e concede experiência militar uma vez por n
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const x = army(g, a.id, 'castile', { infantry: 20 }),
+  const x = army(g, a.id, 'france', { infantry: 20 }),
     c = recruitCommander(g, a.id, false, 'SIEGE_MASTER', undefined, true);
   c.assignedBattalionId = x.id;
   c.xp = 30;
-  army(g, b.id, 'castile', { infantry: 3 });
-  resolveBattle(g, x, province(g, 'castile'), emptyTurnReport(1, g.diet));
+  army(g, b.id, 'france', { infantry: 3 });
+  resolveBattle(g, x, province(g, 'france'), emptyTurnReport(1, g.diet));
   assert.equal(c.xp, 50);
   assert.equal(c.stars, 2);
-  assert.equal(a.militaryXP, 15);
-  assert.equal(b.militaryXP, 15);
+  assert.equal(a.militaryXP, 1);
+  assert.equal(b.militaryXP, 1);
 });
 test('Bastião de Ferro protege a primeira derrota e dá defesa real', () => {
   const {
@@ -301,8 +301,8 @@ test('Bastião de Ferro protege a primeira derrota e dá defesa real', () => {
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const u = army(g, a.id, 'castile', { infantry: 5 }),
-    p = province(g, 'castile'),
+  const u = army(g, a.id, 'france', { infantry: 5 }),
+    p = province(g, 'france'),
     before = compositionPower(g, u, p, true),
     c = recruitCommander(g, a.id, false, 'IRON_WALL', undefined, true);
   c.assignedBattalionId = u.id;
@@ -319,7 +319,7 @@ test('Mestre da Emboscada e Vanguarda Relâmpago aplicam modificadores de terren
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = province(g, 'castile'),
+  const p = province(g, 'france'),
     u = army(g, a.id, p.id),
     base = compositionPower(g, u, p);
   const c = recruitCommander(g, a.id, false, 'FOREST_RANGER', undefined, true);
@@ -338,7 +338,7 @@ test('Intendente reduz manutenção e protege de atrito mesmo com pilha além do
     g,
     players: [a],
   } = setup();
-  const p = province(g, 'portugal');
+  const p = province(g, 'castile');
   p.baseSupplyLimit = 1;
   p.portLevel = 0;
   const u = army(g, a.id, p.id, { infantry: 40 }),
@@ -367,15 +367,16 @@ test('quatro árvores respeitam custos, pré-requisitos e exclusividade A/B', ()
   }
   assert.equal(a.unlockedSkills.length, 12);
 });
-test('treinar concede oito XP e a rodada dez XP', () => {
+test('treinar melhora a formação e a rodada concede só duas unidades de Autoridade', () => {
   const {
     g,
     players: [a],
   } = setup();
-  const u = army(g, a.id, 'portugal');
+  const u = army(g, a.id, 'castile');
   submitOrder(g, a.id, { type: 'TRAIN_BATTALION', battalionId: u.id });
   resolveTurn(g);
-  assert.equal(a.militaryXP, 18);
+  assert.equal(a.militaryXP, 2);
+  assert.ok(u.training > 1.2);
 });
 test('Falange anula choque e Mosqueteiros melhoram ataque; cavalaria e artilharia possuem bônus independentes', () => {
   const {
@@ -384,7 +385,7 @@ test('Falange anula choque e Mosqueteiros melhoram ataque; cavalaria e artilhari
   } = setup();
   a.faith = b.faith = 'ANCESTRAL';
   a.nationId = b.nationId = 'aurelia';
-  const p = province(g, 'castile');
+  const p = province(g, 'france');
   p.terrain = 'plains';
   const cav = army(g, a.id, p.id, { cavalry: 10 }),
     inf = army(g, b.id, p.id, { infantry: 10 }),
@@ -409,7 +410,7 @@ test('cidades têm dois slots, capitais/recursos três e upgrades usam o mesmo s
     g,
     players: [a],
   } = setup();
-  const p = province(g, 'portugal');
+  const p = province(g, 'castile');
   p.capitalOf = null;
   p.portLevel = 0;
   assert.equal(buildingSlots(p), 2);
@@ -435,7 +436,7 @@ test('demolição permite reespecializar e Kaldor tem fortaleza máxima três', 
   } = setup();
   a.gold = 1000;
   a.nationId = 'kaldor';
-  const p = province(g, 'portugal');
+  const p = province(g, 'castile');
   p.fortLevel = 2;
   submitOrder(g, a.id, { type: 'BUILD_BUILDING', provinceId: p.id, building: 'FORT' });
   resolveTurn(g);
@@ -453,13 +454,13 @@ test('quartéis treinam/reduzem recrutamento, fundição melhora equipamento e c
     g,
     players: [a],
   } = setup();
-  const p = province(g, 'portugal');
+  const p = province(g, 'castile');
   p.barracksLevel = 1;
   p.foundryLevel = 1;
   const cost = orderCost({ type: 'RECRUIT_BATTALION', provinceId: p.id, infantry: 10 }, p, a, g);
-  near(cost.gold, 25.5);
+  near(cost.gold, 68);
   const eco = realmEconomy(g, a.id);
-  assert.equal(eco.industry, 2);
+  assert.equal(eco.industry, 1);
   assert.equal(eco.buildingUpkeep, 1.5);
   submitOrder(g, a.id, { type: 'RECRUIT_BATTALION', provinceId: p.id, infantry: 3 });
   resolveTurn(g);
@@ -474,7 +475,7 @@ test('mercado gera comércio e templo pacifica, reduz revolta e gera Autoridade'
     g,
     players: [a],
   } = setup();
-  const p = province(g, 'portugal'),
+  const p = province(g, 'castile'),
     before = realmEconomy(g, a.id);
   p.marketLevel = 1;
   const market = realmEconomy(g, a.id);
@@ -488,7 +489,12 @@ test('mercado gera comércio e templo pacifica, reduz revolta e gera Autoridade'
   resolveTurn(g);
   assert.equal(p.pacification, 68.75);
   assert.equal(p.unrest, 15);
-  assert.equal(a.militaryXP, experience + 12);
+  assert.equal(a.militaryXP, experience + 2);
+  g.turn = 4;
+  a.lastDilemmaTurn = g.turn;
+  const beforeQuarter = a.militaryXP;
+  resolveTurn(g);
+  assert.equal(a.militaryXP, beforeQuarter + 3);
 });
 test('inflação e corrupção limitam rendimento marginal sem reduzir a taxa básica inicial', () => {
   const {
@@ -496,7 +502,7 @@ test('inflação e corrupção limitam rendimento marginal sem reduzir a taxa b�
     players: [a],
   } = setup();
   const lands = g.provinces.filter((p) => p.kind === 'LAND'),
-    p = province(g, 'portugal'),
+    p = province(g, 'castile'),
     o = { type: 'BUILD_BUILDING' as const, provinceId: p.id, building: 'MARKET' as const };
   const base = orderCost(o, p, a, g).gold;
   lands.slice(0, 8).forEach((q) => {
@@ -517,13 +523,13 @@ test('terra nunca nasce no mar e recuo terrestre filtra todas as zonas marítima
   } = setup();
   assert.throws(() => army(g, a.id, 'north-atlantic'));
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const u = army(g, a.id, 'castile');
-  const p = province(g, 'castile');
+  const u = army(g, a.id, 'france');
+  const p = province(g, 'france');
   p.neighbors = ['north-atlantic'];
   assert.equal(safestRetreat(g, u), undefined);
   u.morale = 50;
   retreatArmy(g, u, 1.2, emptyTurnReport(1, g.diet));
-  assert.equal(u.provinceId, 'castile');
+  assert.equal(u.provinceId, 'france');
   assert.equal(u.stranded, true);
 });
 test('fórmula naval pura ignora religiões, canhões, cavalaria, fortalezas e terreno terrestre', () => {
@@ -532,13 +538,15 @@ test('fórmula naval pura ignora religiões, canhões, cavalaria, fortalezas e t
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const f = createBattalion(g, a.id, 'baltic', compositionOf({ warships: 3, transports: 1 }), {
+  const f = createBattalion(g, a.id, 'north-sea', compositionOf({ warships: 3, transports: 1 }), {
       isFleet: true,
       training: 1,
       morale: 80,
     }),
-    enemy = createBattalion(g, b.id, 'baltic', compositionOf({ warships: 2 }), { isFleet: true });
-  const p = province(g, 'baltic');
+    enemy = createBattalion(g, b.id, 'north-sea', compositionOf({ warships: 2 }), {
+      isFleet: true,
+    });
+  const p = province(g, 'north-sea');
   p.fortLevel = 3;
   p.terrainDefenseBonus = 7;
   p.terrain = 'mountains';
@@ -561,11 +569,11 @@ test('Lobo do Mar concede 25% ataque naval e captura navios em sorteio determin�
       players: [a, b],
     } = setup(seed);
     declareWar(g, a.id, b.id, 'CONQUEST');
-    const f = createBattalion(g, a.id, 'baltic', compositionOf({ warships: 8 }), {
+    const f = createBattalion(g, a.id, 'north-sea', compositionOf({ warships: 8 }), {
         isFleet: true,
         morale: 80,
       }),
-      p = province(g, 'baltic'),
+      p = province(g, 'north-sea'),
       before = compositionPower(g, f, p),
       c = recruitCommander(g, a.id, true, 'SEA_WOLF', undefined, true);
     c.assignedBattalionId = f.id;
@@ -582,7 +590,7 @@ test('ponte naval cruza duas costas em uma rodada sem colocar o exército no mar
     g,
     players: [a],
   } = setup();
-  const u = army(g, a.id, 'portugal', { infantry: 6 }),
+  const u = army(g, a.id, 'castile', { infantry: 6 }),
     f = createBattalion(g, a.id, 'north-atlantic', compositionOf({ warships: 2, transports: 2 }), {
       isFleet: true,
     }),
@@ -599,7 +607,7 @@ test('ponte naval cruza duas costas em uma rodada sem colocar o exército no mar
     submitOrder(g, a.id, {
       type: 'MOVE_BATTALION',
       battalionId: f.id,
-      targetProvinceId: 'western-med',
+      targetProvinceId: 'mediterranean',
     }),
   );
   const r = resolveTurn(g);
@@ -615,8 +623,8 @@ test('ponte naval reserva capacidade e cancela travessia se frota for perdida', 
     g,
     players: [a],
   } = setup();
-  const u = army(g, a.id, 'portugal', { infantry: 3 }),
-    v = army(g, a.id, 'portugal', { infantry: 3 }),
+  const u = army(g, a.id, 'castile', { infantry: 3 }),
+    v = army(g, a.id, 'castile', { infantry: 3 }),
     f = createBattalion(g, a.id, 'north-atlantic', compositionOf({ transports: 1 }), {
       isFleet: true,
     });
@@ -636,7 +644,7 @@ test('ponte naval reserva capacidade e cancela travessia se frota for perdida', 
   );
   g.battalions = g.battalions.filter((b) => b.id !== f.id);
   resolveTurn(g);
-  assert.equal(u.provinceId, 'portugal');
+  assert.equal(u.provinceId, 'castile');
 });
 test('Domínio Oceânico cruza duas zonas e protege frota/carga de atrito', () => {
   const {
@@ -644,20 +652,20 @@ test('Domínio Oceânico cruza duas zonas e protege frota/carga de atrito', () =
     players: [a],
   } = setup();
   a.unlockedSkills = ['NAV_T1', 'NAV_T2B', 'NAV_T3'];
-  const u = army(g, a.id, 'portugal', { infantry: 6 }),
+  const u = army(g, a.id, 'castile', { infantry: 6 }),
     f = createBattalion(g, a.id, 'north-atlantic', compositionOf({ warships: 2, transports: 2 }), {
       isFleet: true,
     });
-  for (const id of ['north-atlantic', 'western-med', 'eastern-med'])
+  for (const id of ['north-atlantic', 'north-sea', 'arctic-ocean'])
     province(g, id).baseSupplyLimit = 1;
   submitOrder(g, a.id, { type: 'EMBARK_BATTALION', battalionId: u.id, fleetId: f.id });
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: f.id,
-    path: ['western-med', 'eastern-med'],
+    path: ['north-sea', 'arctic-ocean'],
   });
   const r = resolveTurn(g);
-  assert.equal(f.provinceId, 'eastern-med');
+  assert.equal(f.provinceId, 'arctic-ocean');
   assert.equal(u.provinceId, f.provinceId);
   assert.equal(u.embarkedOnId, f.id);
   assert.ok(!r.attritionLosses.some((l) => l.armyId === f.id || l.armyId === u.id));
@@ -668,7 +676,7 @@ test('corsários transferem renda bloqueada e Galeões aumentam navios e apoio c
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = province(g, 'castile'),
+  const p = province(g, 'france'),
     f = createBattalion(g, a.id, 'north-atlantic', compositionOf({ warships: 3 }), {
       isFleet: true,
     });
@@ -763,11 +771,11 @@ test('cartas escalam para continente e mundo; rivalidade exige a capital origina
     kind: 'RIVALRY' as const,
     name: 'Rival',
     rivalId: b.id,
-    capitalId: 'castile',
+    capitalId: 'france',
     requirements: [{ key: 'rival', label: 'Capital', target: 1 }],
   };
   assert.equal(objectiveProgress(g, a, card)[0].value, 0);
-  province(g, 'castile').occupierId = a.id;
+  province(g, 'france').occupierId = a.id;
   assert.equal(objectiveProgress(g, a, card)[0].value, 1);
 });
 test('objetivo secreto precisa de três rodadas, dispara aviso global e revela carta só no fim', () => {
@@ -812,7 +820,7 @@ test('migração v4 corrige terrestre solto no mar, introduz líderes e ajusta c
     g,
     players: [a],
   } = setup();
-  const u = army(g, a.id, 'portugal', { infantry: 9 });
+  const u = army(g, a.id, 'castile', { infantry: 9 });
   u.provinceId = 'north-atlantic';
   const raw = structuredClone(g) as unknown as { version: number; commanders?: unknown[] };
   raw.version = 4;
@@ -833,7 +841,7 @@ test('Guarda Veterana reduz baixas campais de infantaria em 25% e recupera dez d
     } = setup();
     declareWar(g, a.id, b.id, 'CONQUEST');
     a.unlockedSkills = guard ? ['INF_T1', 'INF_T2B', 'INF_T3'] : ['INF_T1', 'INF_T2B'];
-    const p = province(g, 'castile');
+    const p = province(g, 'france');
     p.terrainDefenseBonus = 1;
     const u = army(g, a.id, p.id, { infantry: 50 });
     army(g, b.id, p.id, { infantry: 25 });
@@ -856,7 +864,7 @@ test('Barragem Real reduz moral inicial em doze; Bateria protege canhões expost
     } = setup();
     declareWar(g, a.id, b.id, 'CONQUEST');
     a.unlockedSkills = skills;
-    const p = province(g, 'castile');
+    const p = province(g, 'france');
     const u = army(g, a.id, p.id, { infantry: 2, artillery: 10 });
     army(g, b.id, p.id, { infantry: 40 });
     const r = emptyTurnReport(1, g.diet);
@@ -878,23 +886,23 @@ test('Manobra Envolvente exige metade de cavalaria para ampliar alcance', () => 
       players: [a],
     } = setup();
     a.unlockedSkills = ['CAV_T1', 'CAV_T2B', 'CAV_T3'];
-    for (const id of ['castile', 'aquitaine']) {
+    for (const id of ['france', 'italy']) {
       province(g, id).ownerId = a.id;
       province(g, id).terrain = 'plains';
     }
     province(g, 'japan').ownerId = g.players[1].id;
     province(g, 'korea').ownerId = g.players[2].id;
-    const u = army(g, a.id, 'portugal', { infantry: 5, cavalry });
+    const u = army(g, a.id, 'castile', { infantry: 5, cavalry });
     submitOrder(g, a.id, {
       type: 'MOVE_BATTALION',
       battalionId: u.id,
-      path: ['castile', 'aquitaine'],
+      path: ['france', 'italy'],
     });
     resolveTurn(g);
     return u;
   };
-  assert.equal(run(5).provinceId, 'aquitaine');
-  assert.equal(run(4).provinceId, 'castile');
+  assert.equal(run(5).provinceId, 'italy');
+  assert.equal(run(4).provinceId, 'france');
 });
 test('ponte naval respeita zona de controle do forte de origem', () => {
   const {
@@ -902,7 +910,7 @@ test('ponte naval respeita zona de controle do forte de origem', () => {
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = province(g, 'castile');
+  const p = province(g, 'france');
   p.fortLevel = 1;
   const u = army(g, a.id, p.id),
     f = createBattalion(g, a.id, 'north-atlantic', compositionOf({ transports: 3, warships: 1 }), {
@@ -920,10 +928,10 @@ test('ponte naval respeita zona de controle do forte de origem', () => {
     type: 'NAVAL_BRIDGE',
     battalionId: u.id,
     fleetId: f.id,
-    targetProvinceId: 'portugal',
+    targetProvinceId: 'castile',
   });
   resolveTurn(g);
-  assert.equal(u.provinceId, 'portugal');
+  assert.equal(u.provinceId, 'castile');
 });
 test('Bombarda melhora o ponto de artilharia mesmo com apenas um canhão', () => {
   const {
@@ -931,7 +939,7 @@ test('Bombarda melhora o ponto de artilharia mesmo com apenas um canhão', () =>
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = province(g, 'castile');
+  const p = province(g, 'france');
   p.fortLevel = 3;
   a.unlockedSkills = ['ART_T1', 'ART_T2A'];
   const u = army(g, a.id, p.id, { infantry: 5, artillery: 1 });
@@ -966,7 +974,7 @@ test('Pax mantém três rodadas militares e depois três rodadas de condição c
     r.allied = true;
     r.trust = 50;
   }
-  army(g, a.id, 'portugal', { infantry: 20 });
+  army(g, a.id, 'castile', { infantry: 20 });
   a.secretObjectives = objectiveCards(g, a);
   a.selectedObjectiveId = a.secretObjectives.find((c) => c.kind === 'PAX')!.id;
   resolveTurn(g);
@@ -993,13 +1001,13 @@ test('bot negocia terras após capitulação em vez de depender do antigo atalho
     players: [a, b],
   } = setup();
   const w = declareWar(g, a.id, b.id, 'CONQUEST');
-  province(g, 'castile').occupierId = a.id;
+  province(g, 'france').occupierId = a.id;
   const { updateWarScores } = await import('../server/diplomacy');
   updateWarScores(g);
   assert.equal(w.warScore, 100);
   planBot(g, a);
   assert.equal(w.active, false);
-  assert.equal(province(g, 'castile').ownerId, a.id);
+  assert.equal(province(g, 'france').ownerId, a.id);
   assert.equal(b.subjectOfId, null);
 });
 
@@ -1008,35 +1016,39 @@ test('ponte cancela se a frota recuar mesmo para outro mar que banha as mesmas c
     g,
     players: [a, b, c],
   } = setup();
-  province(g, 'castile').ownerId = a.id;
-  province(g, 'western-med').baseSupplyLimit = 100;
+  b.faith = a.faith;
+  Object.assign(province(g, 'france'), {
+    ownerId: a.id,
+    religion: a.faith,
+    unrest: 0,
+    pacification: 100,
+    capitalOf: null,
+  });
+  province(g, 'north-atlantic').baseSupplyLimit = 100;
+  province(g, 'britain').ownerId = c.id;
   for (const p of g.provinces) p.portLevel = 0;
   province(g, 'japan').ownerId = b.id;
   declareWar(g, a.id, b.id, 'CONQUEST');
   declareWar(g, a.id, c.id, 'CONQUEST');
-  const u = army(g, a.id, 'castile', { infantry: 1 });
-  const f = createBattalion(
-    g,
-    a.id,
-    'north-atlantic',
-    compositionOf({ warships: 6, transports: 8 }),
-    { isFleet: true },
-  );
-  const enemy = createBattalion(g, b.id, 'north-atlantic', compositionOf({ warships: 10 }), {
+  const u = army(g, a.id, 'france', { infantry: 1 });
+  const f = createBattalion(g, a.id, 'north-sea', compositionOf({ warships: 6, transports: 8 }), {
+    isFleet: true,
+  });
+  const enemy = createBattalion(g, b.id, 'north-sea', compositionOf({ warships: 10 }), {
     isFleet: true,
   });
   submitOrder(g, a.id, {
     type: 'NAVAL_BRIDGE',
     battalionId: u.id,
     fleetId: f.id,
-    targetProvinceId: 'france',
+    targetProvinceId: 'britain',
   });
   // Combat forces the fleet out of its original sea while both coasts remain in reach.
-  assert.equal(enemy.provinceId, 'north-atlantic');
+  assert.equal(enemy.provinceId, 'north-sea');
   const r = resolveTurn(g);
   assert.ok(g.battalions.includes(f));
-  assert.equal(f.provinceId, 'western-med');
-  assert.equal(u.provinceId, 'castile');
+  assert.equal(f.provinceId, 'north-atlantic');
+  assert.equal(u.provinceId, 'france');
   assert.ok(r.events.some((e) => e.includes('ponte naval indisponível')));
 });
 test('frota com marcha persistente precisa cancelar sua rota antes de oferecer ponte', () => {
@@ -1044,11 +1056,11 @@ test('frota com marcha persistente precisa cancelar sua rota antes de oferecer p
     g,
     players: [a],
   } = setup();
-  const u = army(g, a.id, 'portugal', { infantry: 1 });
+  const u = army(g, a.id, 'castile', { infantry: 1 });
   const f = createBattalion(g, a.id, 'north-atlantic', compositionOf({ transports: 2 }), {
     isFleet: true,
   });
-  f.pathQueue = ['western-med'];
+  f.pathQueue = ['mediterranean'];
   assert.throws(() =>
     submitOrder(g, a.id, {
       type: 'NAVAL_BRIDGE',

@@ -1,30 +1,18 @@
 const project = ([lon, lat]: readonly number[]) => [(lon + 180) * 4, (85 - lat) * 4];
 export const riverCrossings: readonly (readonly [string, string])[] = [
-  ['france', 'rhineland'],
-  ['burgundy', 'rhineland'],
-  ['lowlands', 'rhineland'],
-  ['lowlands', 'germany'],
-  ['bavaria', 'alps'],
-  ['bohemia', 'alps'],
-  ['hungary', 'balkans'],
-  ['hungary', 'romania'],
-  ['balkans', 'romania'],
-  ['nile', 'nubia'],
-  ['levant', 'mesopotamia'],
-  ['arabia', 'mesopotamia'],
-  ['mesopotamia', 'persia'],
-  ['afghan', 'punjab'],
-  ['punjab', 'india-north'],
-  ['india-north', 'bengal'],
-  ['china-north', 'china-east'],
-  ['china-east', 'china-south'],
-  ['china-north', 'china-south'],
-  ['amazon', 'brazil-north'],
-  ['amazon', 'colombia'],
+  ['france', 'germany'],
+  ['germany', 'italy'],
+  ['germany', 'balkans'],
+  ['poland', 'balkans'],
+  ['anatolia', 'persia'],
+  ['arabia', 'persia'],
+  ['afghan', 'india-north'],
+  ['india-north', 'indochina'],
+  ['china-west', 'china-east'],
+  ['brazil', 'colombia'],
+  ['brazil', 'andes'],
   ['brazil', 'rioplata'],
-  ['sao-paulo', 'rioplata'],
-  ['great-plains', 'usa-east'],
-  ['great-plains', 'great-lakes'],
+  ['usa-west', 'usa-east'],
 ];
 export const hasRiverCrossing = (fromId: string, toId: string) =>
   fromId !== toId &&
@@ -33,7 +21,7 @@ export const WORLD_RIVERS = [
   {
     id: 'rhine',
     name: 'Reno',
-    provinces: ['france', 'burgundy', 'lowlands', 'rhineland'],
+    provinces: ['france', 'france', 'germany', 'germany'],
     points: [
       [8.5, 47],
       [7.6, 48.5],
@@ -45,7 +33,7 @@ export const WORLD_RIVERS = [
   {
     id: 'danube',
     name: 'Danúbio',
-    provinces: ['bavaria', 'alps', 'hungary', 'balkans', 'romania'],
+    provinces: ['germany', 'germany', 'germany', 'balkans', 'balkans'],
     points: [
       [9, 48],
       [13, 48.5],
@@ -59,7 +47,7 @@ export const WORLD_RIVERS = [
   {
     id: 'nile-river',
     name: 'Nilo',
-    provinces: ['nile', 'nubia'],
+    provinces: ['nile', 'nile'],
     points: [
       [31.1, 30.5],
       [31, 28],
@@ -73,7 +61,7 @@ export const WORLD_RIVERS = [
   {
     id: 'tigris',
     name: 'Tigre',
-    provinces: ['levant', 'mesopotamia', 'persia'],
+    provinces: ['arabia', 'persia', 'persia'],
     points: [
       [39, 38],
       [41, 37],
@@ -85,7 +73,7 @@ export const WORLD_RIVERS = [
   {
     id: 'euphrates',
     name: 'Eufrates',
-    provinces: ['levant', 'arabia', 'mesopotamia'],
+    provinces: ['arabia', 'arabia', 'persia'],
     points: [
       [39, 39],
       [38, 36],
@@ -97,7 +85,7 @@ export const WORLD_RIVERS = [
   {
     id: 'indus',
     name: 'Indo',
-    provinces: ['afghan', 'punjab'],
+    provinces: ['afghan', 'afghan'],
     points: [
       [76, 34],
       [72, 35],
@@ -110,7 +98,7 @@ export const WORLD_RIVERS = [
   {
     id: 'ganges',
     name: 'Ganges',
-    provinces: ['india-north', 'bengal'],
+    provinces: ['india-north', 'india-north'],
     points: [
       [79, 30],
       [80, 27],
@@ -123,7 +111,7 @@ export const WORLD_RIVERS = [
   {
     id: 'yangtze',
     name: 'Yangtzé',
-    provinces: ['china-west', 'china-north', 'china-east', 'china-south'],
+    provinces: ['china-west', 'china-east', 'china-east', 'china-east'],
     points: [
       [94, 33],
       [99, 29],
@@ -138,7 +126,7 @@ export const WORLD_RIVERS = [
   {
     id: 'amazon-river',
     name: 'Amazonas',
-    provinces: ['amazon', 'colombia', 'brazil-north'],
+    provinces: ['brazil', 'colombia', 'brazil'],
     points: [
       [-74, -5],
       [-70, -4],
@@ -152,7 +140,7 @@ export const WORLD_RIVERS = [
   {
     id: 'parana',
     name: 'Paraná',
-    provinces: ['brazil', 'sao-paulo', 'rioplata', 'bolivia'],
+    provinces: ['brazil', 'brazil', 'rioplata', 'andes'],
     points: [
       [-48, -19],
       [-51, -21],
@@ -165,7 +153,7 @@ export const WORLD_RIVERS = [
   {
     id: 'mississippi',
     name: 'Mississipi',
-    provinces: ['great-plains', 'great-lakes', 'usa-east'],
+    provinces: ['usa-west', 'usa-east', 'usa-east'],
     points: [
       [-95, 47],
       [-93, 45],
@@ -182,8 +170,8 @@ export const impassableFeatures = [
     id: 'himalaya',
     name: 'Cordilheira do Himalaia',
     kind: 'mountains' as const,
-    provinces: ['tibet', 'india-north', 'punjab', 'bengal'],
-    blocked: [['tibet', 'india-north']],
+    provinces: ['china-west', 'india-north', 'afghan', 'india-north'],
+    blocked: [['china-west', 'india-north']],
     points: [
       [75, 35],
       [80, 32],
@@ -196,11 +184,8 @@ export const impassableFeatures = [
     id: 'sahara',
     name: 'Saara Central',
     kind: 'desert' as const,
-    provinces: ['algiers', 'tripoli', 'central-africa', 'west-africa', 'nubia'],
-    blocked: [
-      ['algiers', 'central-africa'],
-      ['tripoli', 'central-africa'],
-    ],
+    provinces: ['maghreb', 'maghreb', 'central-africa', 'west-africa', 'nile'],
+    blocked: [['maghreb', 'central-africa']],
     points: [
       [-6, 25],
       [3, 24],
@@ -213,7 +198,7 @@ export const impassableFeatures = [
     id: 'andes-range',
     name: 'Cordilheira dos Andes',
     kind: 'mountains' as const,
-    provinces: ['andes', 'bolivia', 'chile'],
+    provinces: ['andes', 'andes', 'rioplata'],
     blocked: [],
     points: [
       [-75, -5],
@@ -227,7 +212,7 @@ export const impassableFeatures = [
     id: 'alpine-range',
     name: 'Passagens Alpinas',
     kind: 'mountains' as const,
-    provinces: ['alps', 'bavaria', 'italy', 'burgundy'],
+    provinces: ['germany', 'germany', 'italy', 'france'],
     blocked: [],
     points: [
       [6, 45],

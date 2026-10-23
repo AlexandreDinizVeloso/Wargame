@@ -1,3 +1,4 @@
+import { BALANCE } from '../shared/balance';
 import type { GameState } from '../shared/types';
 import { goldRules } from '../shared/factions';
 import { controller, compositionOf } from '../shared/rules';
@@ -30,7 +31,7 @@ export function applyScenario(g: GameState) {
           (a) => a.ownerId !== 'NEUTRAL' || a.provinceId !== next.id,
         );
       }
-      p.gold = 150;
+      p.gold = BALANCE.advancedScenarioGold;
       for (const q of owned()) {
         q.barracksLevel = 1;
         if (q.isCoastal) q.portLevel = 1;

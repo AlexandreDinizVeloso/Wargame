@@ -1,4 +1,4 @@
-import { realmLimits } from '../shared/economy';
+import { realmLimits, syncNationAuthority } from '../shared/economy';
 import { addPlayer, createGame, startGame } from '../server/game';
 import { createBattalion } from '../server/state';
 import { compositionOf } from '../shared/rules';
@@ -14,6 +14,12 @@ export function setup(seed = 42) {
   g.graceUntilTurn = 0;
   g.battalions = [];
   g.commanders = [];
+  const homes = ['castile', 'france', 'germany'];
+  g.provinces.sort((a, b) => {
+    const ai = homes.indexOf(a.id),
+      bi = homes.indexOf(b.id);
+    return (ai < 0 ? 3 : ai) - (bi < 0 ? 3 : bi);
+  });
   for (const p of g.provinces) {
     p.strategicResource = null;
     p.ownerId = null;
@@ -24,7 +30,7 @@ export function setup(seed = 42) {
     p.portLevel = 0;
     p.baseTax = 4;
   }
-  for (const [i, id] of ['portugal', 'castile', 'france'].entries()) {
+  for (const [i, id] of ['castile', 'france', 'germany'].entries()) {
     const p = g.provinces.find((p) => p.id === id)!;
     p.ownerId = players[i].id;
     players[i].originalCapitalId = id;
@@ -38,7 +44,13 @@ export function setup(seed = 42) {
     const l = realmLimits(g, a.id);
     a.armyCap = l.armyCap;
     a.manpowerCap = l.manpowerCap;
-    a.manpower = Math.min(a.manpower, l.manpowerCap);
+    // Mechanical scenarios fund their actions explicitly; fresh-game acceptance owns scarcity.
+    a.gold = 300;
+    a.manpower = l.manpowerCap;
+    a.influence = 40;
+    a.prestige = 10;
+    a.militaryXP = 0;
+    syncNationAuthority(a);
   }
   return { g, players };
 }

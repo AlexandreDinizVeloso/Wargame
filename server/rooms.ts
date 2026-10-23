@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { syncNationAuthority } from '../shared/economy';
 import { applyAfkRegency, restoreRegency, replaceableBot } from './regency';
 import { issueDilemmas } from './dilemmas';
@@ -29,7 +30,13 @@ import {
   startGame,
   viewFor,
 } from './game';
-import { readSnapshot, writeSnapshot } from './storage';
+import {
+  readSnapshot,
+  writeSnapshot,
+  readRoomArchive,
+  writeRoomArchive,
+  type SavedRoom,
+} from './storage';
 
 interface Session {
   tokenHash: string;
@@ -40,11 +47,23 @@ export interface Room {
   sessions: Map<string, Session>;
   touched: number;
   remainingMs: number;
+  lastHumanActivityAt: number;
 }
 interface Options {
   stateFile?: string | null;
   tickMs?: number;
+  archiveDir?: string;
   now?: () => number;
+}
+export const ROOM_INACTIVITY_MS = 15 * 60 * 1000;
+export const ROOM_CLEANUP_INTERVAL_MS = 60 * 1000;
+export class RoomSaveDownloadError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 const send = (ws: WebSocket, message: ServerMessage) => {
@@ -65,6 +84,11 @@ const nationOfMessage = (value: unknown): NationId | undefined => {
 export function attachRooms(server: Server, options: Options = {}) {
   const clock = options.now ?? Date.now,
     rooms = new Map<string, Room>();
+  const archiveDir =
+    options.archiveDir ??
+    (options.stateFile ? path.join(path.dirname(options.stateFile), 'archived-rooms') : null);
+  const memoryArchives = new Map<string, SavedRoom>();
+  let lastCleanupAt = clock();
   const lastPings = new WeakMap<Room, Map<string, number>>();
   let closed = false;
   if (options.stateFile)
@@ -83,6 +107,9 @@ export function attachRooms(server: Server, options: Options = {}) {
         game: saved.game,
         touched: saved.touched,
         remainingMs: saved.remainingMs,
+        lastHumanActivityAt:
+          saved.lastHumanActivityAt ??
+          (Number.isFinite(saved.touched) && saved.touched >= 0 ? saved.touched : clock()),
         sessions: new Map(
           saved.sessions.map((s) => [s.playerId, { tokenHash: s.tokenHash, socket: null }]),
         ),
@@ -100,11 +127,95 @@ export function attachRooms(server: Server, options: Options = {}) {
           tokenHash: s.tokenHash,
         })),
         touched: room.touched,
+        lastHumanActivityAt: room.lastHumanActivityAt,
         remainingMs:
           room.game.deadline === null ? room.remainingMs : Math.max(0, room.game.deadline - now),
       })),
       now,
     );
+  }
+  function savedRoom(room: Room): SavedRoom {
+    return {
+      game: structuredClone(room.game),
+      sessions: [...room.sessions.entries()].map(([playerId, session]) => ({
+        playerId,
+        tokenHash: session.tokenHash,
+      })),
+      touched: room.touched,
+      lastHumanActivityAt: room.lastHumanActivityAt,
+      remainingMs:
+        room.game.deadline === null ? room.remainingMs : Math.max(0, room.game.deadline - clock()),
+    };
+  }
+  function archivedRoom(code: string): SavedRoom | null {
+    if (!/^[A-Z0-9]{6}$/.test(code)) return null;
+    return (
+      memoryArchives.get(code) ??
+      (archiveDir ? readRoomArchive(path.join(archiveDir, `${code}.json`)) : null)
+    );
+  }
+  function hasSessionCredential(
+    saved: Pick<SavedRoom, 'sessions'>,
+    playerId: string,
+    token: string,
+  ): boolean {
+    const session = saved.sessions.find((s) => s.playerId === playerId);
+    const expected = Buffer.from(session?.tokenHash ?? '', 'hex');
+    const incoming = Buffer.from(hashToken(token), 'hex');
+    return (
+      token.length > 0 && incoming.length === expected.length && timingSafeEqual(incoming, expected)
+    );
+  }
+  function cleanupInactiveRooms(now = clock()): number {
+    if (closed) return 0;
+    let archived = 0;
+    lastCleanupAt = now;
+    for (const [code, room] of rooms) {
+      if (now - room.lastHumanActivityAt < ROOM_INACTIVITY_MS) continue;
+      try {
+        const snapshot = savedRoom(room);
+        if (archiveDir) writeRoomArchive(path.join(archiveDir, `${code}.json`), snapshot, now);
+        if (!archiveDir) memoryArchives.set(code, snapshot);
+        rooms.delete(code);
+        try {
+          persist();
+        } catch (error) {
+          rooms.set(code, room);
+          throw error;
+        }
+        for (const session of room.sessions.values())
+          if (session.socket) {
+            send(session.socket, {
+              type: 'error',
+              message:
+                'Sala arquivada após 15 minutos sem atividade humana. O progresso foi salvo; reconecte para retomar.',
+            });
+            session.socket.close(4004, 'Sala arquivada com progresso salvo.');
+          }
+        archived++;
+      } catch (error) {
+        console.error(
+          error instanceof Error
+            ? error.message
+            : 'Falha ao arquivar sala; estado ativo preservado.',
+        );
+      }
+    }
+    return archived;
+  }
+  function downloadSave(code: string, playerId = '', token = '') {
+    cleanupInactiveRooms();
+    const normalized = code.trim().toUpperCase();
+    const active = rooms.get(normalized);
+    const snapshot = active ? savedRoom(active) : archivedRoom(normalized);
+    if (!snapshot)
+      throw new RoomSaveDownloadError(404, 'Sala ou arquivo de campanha não encontrado.');
+    if (snapshot.game.hostId !== playerId || !hasSessionCredential(snapshot, playerId, token))
+      throw new RoomSaveDownloadError(
+        403,
+        'Somente o anfitrião com sua credencial privada pode baixar o save completo.',
+      );
+    return exportCampaign(snapshot.game, playerId);
   }
   const wss = new WebSocketServer({ noServer: true, maxPayload: 9 * 1024 * 1024 });
   const upgrade: Parameters<Server['on']>[1] = (
@@ -177,6 +288,7 @@ export function attachRooms(server: Server, options: Options = {}) {
       room.sessions.set(id, { tokenHash: hashToken(token), socket: ws });
       current = { room, playerId: id };
       room.touched = clock();
+      room.lastHumanActivityAt = clock();
       const resumed = room.game.players.find((p) => p.id === id)!;
       restoreRegency(resumed);
       syncNationAuthority(resumed);
@@ -213,7 +325,8 @@ export function attachRooms(server: Server, options: Options = {}) {
         if (msg.type === 'import_campaign') {
           assert(rooms.size < 200, 'Limite de salas atingido.');
           let code = randomBytes(3).toString('hex').toUpperCase();
-          while (rooms.has(code)) code = randomBytes(3).toString('hex').toUpperCase();
+          while (rooms.has(code) || archivedRoom(code))
+            code = randomBytes(3).toString('hex').toUpperCase();
           const imported = importCampaign(msg.save, code),
             g = imported.game;
           g.persistenceEnabled = !!options.stateFile;
@@ -221,6 +334,7 @@ export function attachRooms(server: Server, options: Options = {}) {
             game: g,
             sessions: new Map(),
             touched: clock(),
+            lastHumanActivityAt: clock(),
             remainingMs: g.turnSeconds * 1000,
           };
           const invites: import('../shared/types').SeatInvite[] = [];
@@ -237,7 +351,8 @@ export function attachRooms(server: Server, options: Options = {}) {
         if (msg.type === 'create') {
           assert(rooms.size < 200, 'Limite de salas atingido neste servidor.');
           let code = randomBytes(3).toString('hex').toUpperCase();
-          while (rooms.has(code)) code = randomBytes(3).toString('hex').toUpperCase();
+          while (rooms.has(code) || archivedRoom(code))
+            code = randomBytes(3).toString('hex').toUpperCase();
           assert(
             msg.tutorial === undefined || typeof msg.tutorial === 'boolean',
             'Opção de tutorial inválida.',
@@ -262,7 +377,7 @@ export function attachRooms(server: Server, options: Options = {}) {
             g.matchConfig.campaignId = randomBytes(16).toString('hex');
             g.matchConfig.ruleset = 'GOLD_098';
             g.matchConfig.scenarioId = scenario.id;
-            g.matchConfig.createdVersion = '1.0.0';
+            g.matchConfig.createdVersion = '1.0.1';
             g.matchConfig.verticalSlice = true;
           }
           g.roomName =
@@ -299,6 +414,7 @@ export function attachRooms(server: Server, options: Options = {}) {
             game: g,
             sessions: new Map(),
             touched: clock(),
+            lastHumanActivityAt: clock(),
             remainingMs: g.turnSeconds * 1000,
           };
           rooms.set(code, room);
@@ -353,9 +469,30 @@ export function attachRooms(server: Server, options: Options = {}) {
           return;
         }
         if (msg.type === 'resume') {
-          const room = rooms.get(String(msg.code)),
-            session = room?.sessions.get(String(msg.playerId)),
-            token = typeof msg.token === 'string' ? msg.token : '';
+          const resumeCode = String(msg.code).trim().toUpperCase();
+          let room = rooms.get(resumeCode);
+          const token = typeof msg.token === 'string' ? msg.token : '';
+          if (!room) {
+            const saved = archivedRoom(resumeCode);
+            if (saved && hasSessionCredential(saved, String(msg.playerId), token)) {
+              const game = structuredClone(saved.game);
+              game.paused = true;
+              game.deadline = null;
+              game.turnDeadlineAt = null;
+              for (const player of game.players) player.online = player.bot && !player.afkRegent;
+              room = {
+                game,
+                touched: clock(),
+                lastHumanActivityAt: clock(),
+                remainingMs: saved.remainingMs,
+                sessions: new Map(
+                  saved.sessions.map((s) => [s.playerId, { tokenHash: s.tokenHash, socket: null }]),
+                ),
+              };
+              rooms.set(resumeCode, room);
+            }
+          }
+          const session = room?.sessions.get(String(msg.playerId));
           const incoming = Buffer.from(hashToken(token), 'hex'),
             expected = Buffer.from(session?.tokenHash ?? '', 'hex');
           assert(
@@ -377,10 +514,16 @@ export function attachRooms(server: Server, options: Options = {}) {
         assert(current, 'Entre em uma sala primeiro.');
         const { room, playerId } = current;
         assert(
+          rooms.get(room.game.code) === room,
+          'Sala arquivada. Reconecte com sua credencial para retomar.',
+        );
+        assert(
           room.sessions.get(playerId)?.socket === ws,
           'Esta sessão está ativa em outra conexão.',
         );
         if (msg.type === 'export_campaign') {
+          room.lastHumanActivityAt = clock();
+          persist();
           send(ws, { type: 'campaign_export', save: exportCampaign(room.game, playerId) });
           return;
         }
@@ -394,6 +537,8 @@ export function attachRooms(server: Server, options: Options = {}) {
           const ping = createMapPing(room.game, playerId, msg.provinceId, msg.note, now);
           limits.set(playerId, now);
           lastPings.set(room, limits);
+          room.lastHumanActivityAt = now;
+          persist();
           for (const recipient of pingRecipients(room.game, playerId)) {
             const socket = room.sessions.get(recipient)?.socket;
             if (socket) send(socket, { type: 'map_ping', ping });
@@ -403,6 +548,7 @@ export function attachRooms(server: Server, options: Options = {}) {
         const command = readCommand(msg);
         const previous = room.game;
         const previousTouched = room.touched;
+        const previousActivity = room.lastHumanActivityAt;
         const replacedSession =
           command.type === 'REPLACE_WITH_BOT' ? room.sessions.get(command.playerId) : undefined;
         const input = structuredClone(previous);
@@ -416,12 +562,14 @@ export function attachRooms(server: Server, options: Options = {}) {
         }
         room.game = executeCommand(input, playerId, command, clock());
         room.touched = clock();
+        room.lastHumanActivityAt = clock();
         if (command.type === 'REPLACE_WITH_BOT') room.sessions.delete(command.playerId);
         try {
           persist();
         } catch (error) {
           room.game = previous;
           room.touched = previousTouched;
+          room.lastHumanActivityAt = previousActivity;
           if (command.type === 'REPLACE_WITH_BOT' && replacedSession)
             room.sessions.set(command.playerId, replacedSession);
           throw error;
@@ -447,8 +595,9 @@ export function attachRooms(server: Server, options: Options = {}) {
   });
   function tick() {
     if (closed) return;
+    if (clock() - lastCleanupAt >= ROOM_CLEANUP_INTERVAL_MS) cleanupInactiveRooms();
     let changed = false;
-    for (const [code, room] of rooms) {
+    for (const room of rooms.values()) {
       if (
         room.game.phase === 'planning' &&
         !room.game.paused &&
@@ -464,11 +613,15 @@ export function attachRooms(server: Server, options: Options = {}) {
           next.turnDeadlineAt = null;
         }
         room.game = next;
+        const previousActivity = room.lastHumanActivityAt;
+        if (previous.players.some((p) => !p.bot && p.online && p.ready))
+          room.lastHumanActivityAt = clock();
         try {
           persist();
           broadcast(room);
         } catch (error) {
           room.game = previous;
+          room.lastHumanActivityAt = previousActivity;
           room.game.paused = true;
           room.game.deadline = null;
           room.game.turnDeadlineAt = null;
@@ -480,14 +633,6 @@ export function attachRooms(server: Server, options: Options = {}) {
               });
           console.error(error instanceof Error ? error.message : 'Falha de persistência.');
         }
-        changed = true;
-      }
-      if (
-        room.game.phase !== 'planning' &&
-        clock() - room.touched > 24 * 60 * 60 * 1000 &&
-        ![...room.sessions.values()].some((s) => s.socket)
-      ) {
-        rooms.delete(code);
         changed = true;
       }
     }
@@ -503,10 +648,12 @@ export function attachRooms(server: Server, options: Options = {}) {
   timer.unref();
   return {
     rooms,
-    listPublicRooms: (onlyJoinable = false): PublicRoom[] =>
-      [...rooms.values()]
+    listPublicRooms: (onlyJoinable = false): PublicRoom[] => {
+      cleanupInactiveRooms();
+      return [...rooms.values()]
         .filter(
           (r) =>
+            clock() - r.lastHumanActivityAt < ROOM_INACTIVITY_MS &&
             r.game.isPublic &&
             r.game.phase !== 'finished' &&
             (!onlyJoinable ||
@@ -537,7 +684,11 @@ export function attachRooms(server: Server, options: Options = {}) {
           maxPlayers: 8,
           status: g.phase === 'lobby' ? 'LOBBY' : 'IN_GAME',
           turn: g.turn,
-        })),
+        }));
+    },
+    cleanupInactiveRooms,
+    downloadSave,
+    archiveDir,
     wss,
     persist,
     tick,

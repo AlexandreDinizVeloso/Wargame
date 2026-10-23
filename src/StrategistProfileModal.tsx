@@ -6,13 +6,23 @@ export default function StrategistProfileModal({
   profile,
   onChange,
   onClose,
+  active,
+  onActivate,
 }: {
   profile: StrategistProfile;
   onChange: (p: StrategistProfile) => void;
   onClose: () => void;
+  active?: boolean;
+  onActivate?: () => void;
 }) {
   return (
-    <TopBarModal id="strategist-profile" title="🏅 Perfil do Estrategista" onClose={onClose}>
+    <TopBarModal
+      id="strategist-profile"
+      title="🏅 Perfil do Estrategista"
+      onClose={onClose}
+      active={active}
+      onActivate={onActivate}
+    >
       <section className="strategist-profile">
         <div className="profile-emblem" style={{ color: profile.color }}>
           <CoatOfArms nationId={profile.favoriteNation} size={64} />

@@ -1,3 +1,6 @@
+import { ECONOMY_BALANCE } from '../shared/balance';
+import { syncNationAuthority } from '../shared/economy';
+import { continentBonuses } from '../shared/risk';
 import { goldReparationPayments } from '../shared/economy';
 import { realmEconomy } from '../shared/rules';
 import type { GameState, TurnResolutionReport } from '../shared/types';
@@ -61,4 +64,32 @@ export function recordGoldReparations(g: GameState, report: TurnResolutionReport
       text: `${payer.nation} pagou ${r.amount} ouro de reparações a ${recipient.nation}.`,
     });
   }
+}
+
+export function grantContinentAuthority(g: GameState, id: string) {
+  const bonus = continentBonuses(g, id);
+  const player = g.players.find((p) => p.id === id);
+  if (player) player.militaryXP += bonus.authority;
+  return bonus;
+}
+
+/** Military activity has one shared national cap, independent of army splitting. */
+export function earnMilitaryAuthority(g: GameState, id: string, amount: number) {
+  const player = g.players.find((p) => p.id === id);
+  if (!player) return 0;
+  if (player.authorityEarnedTurn !== g.turn) {
+    player.authorityEarnedTurn = g.turn;
+    player.authorityEarnedThisTurn = 0;
+  }
+  const gain = Math.max(
+    0,
+    Math.min(
+      Math.floor(amount),
+      ECONOMY_BALANCE.militaryAuthorityCapPerTurn - (player.authorityEarnedThisTurn ?? 0),
+    ),
+  );
+  player.authorityEarnedThisTurn = (player.authorityEarnedThisTurn ?? 0) + gain;
+  player.militaryXP += gain;
+  syncNationAuthority(player);
+  return gain;
 }

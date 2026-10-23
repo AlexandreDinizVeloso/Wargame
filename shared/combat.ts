@@ -1,3 +1,5 @@
+import { councilModifiers } from './councilEffects';
+import { DILEMMA_ATTACK_BONUS } from './dilemmas';
 import { hasRiverCrossing } from './map';
 import { goldRules, hasFoundry } from './factions';
 import type { Battalion, Province, GameState, GameView } from './types';
@@ -17,17 +19,32 @@ export function compositionPower(
 ) {
   const actor = g.players.find((p) => p.id === a.ownerId),
     nation = actor ? nationOf(actor.nationId) : null,
+    policy = councilModifiers(actor, g.turn, p.id),
     c = commanderFor(g, a),
-    veteran = 1 + 0.05 * ((c?.stars ?? 1) - 1);
+    veteran = 1 + 0.05 * ((c?.stars ?? 1) - 1),
+    councilBonus =
+      !defending &&
+      actor?.dilemmaAttackUntilTurn !== undefined &&
+      actor.dilemmaAttackUntilTurn >= g.turn
+        ? 1 + DILEMMA_ATTACK_BONUS
+        : 1;
   if (a.isFleet) {
     const morale = clamp(
-      a.morale * coalitionMorale(g, a.ownerId) * (hasSkill(g, a.ownerId, 'NAV_T1') ? 1.2 : 1),
+      (a.morale + policy.moraleBonus) *
+        coalitionMorale(g, a.ownerId) *
+        (hasSkill(g, a.ownerId, 'NAV_T1') ? 1.2 : 1),
+      0,
+      (a.moraleCap ?? 100) + Math.max(0, policy.moraleBonus),
     );
     const value =
       a.warships * 3 * (!defending && hasSkill(g, a.ownerId, 'NAV_T2B') ? 1.25 : 1) +
       a.transports * 0.5;
     return (
       value *
+      councilBonus *
+      (defending
+        ? policy.defenseMultiplier
+        : policy.attackMultiplier * policy.navalAttackMultiplier) *
       a.training *
       veteran *
       (0.5 + (0.5 * morale) / 100) *
@@ -40,12 +57,12 @@ export function compositionPower(
   const crusade = actor && hasReligiousWar(g, actor.id),
     zeal = actor?.nationId === 'sol_invicto' && crusade;
   const morale = clamp(
-    a.morale *
+    (a.morale + policy.moraleBonus) *
       coalitionMorale(g, a.ownerId) *
       (zeal ? 1.2 : 1) *
       (actor && actor.moraleBonusUntil >= g.turn ? 1.15 : 1),
     0,
-    a.moraleCap ?? 100,
+    (a.moraleCap ?? 100) + Math.max(0, policy.moraleBonus),
   );
   const flat = ['plains', 'coastal'].includes(p.terrain),
     rough = ['forest', 'hills', 'mountains'].includes(p.terrain),
@@ -57,7 +74,7 @@ export function compositionPower(
       : flat
         ? 1.4
         : rough
-          ? hasSkill(g, a.ownerId, 'CAV_T2B')
+          ? hasSkill(g, a.ownerId, 'CAV_T2B') || a.blitzUntilTurn === g.turn
             ? 1
             : 0.8
           : 1;
@@ -111,6 +128,8 @@ export function compositionPower(
     );
   return (
     value *
+    councilBonus *
+    (defending ? policy.defenseMultiplier : policy.attackMultiplier) *
     (goldRules(g) && actor?.nationId === 'veridia' && ['forest', 'mountains'].includes(p.terrain)
       ? 1.2
       : 1) *
@@ -164,6 +183,7 @@ export function combatPowers(
   const holy = !naval && attackers.some((a) => p.conversionInstigatorId === a.ownerId) ? 1.15 : 1;
   const crossing = (a: Battalion) =>
     !naval &&
+    a.blitzUntilTurn !== g.turn &&
     hasRiverCrossing(
       a.provinceId !== p.id
         ? a.provinceId
@@ -179,11 +199,12 @@ export function combatPowers(
   );
   const riverCrossingModifier = baseAttack > 0 ? crossedAttack / baseAttack : 1;
   const attackPower = crossedAttack * holy;
+  const ignoreTerrain = !naval && attackers.every((a) => a.blitzUntilTurn === g.turn);
   const defensePower =
     defenders.reduce((n, a) => n + compositionPower(g, a, p, true, attackers), 0) *
     (naval
       ? 1
-      : p.terrainDefenseBonus *
+      : (ignoreTerrain ? 1 : p.terrainDefenseBonus) *
         (goldRules(g) &&
         p.fortLevel > 0 &&
         g.players.find((q) => q.id === p.ownerId)?.nationId === 'sol_invicto'

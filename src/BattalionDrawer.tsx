@@ -1,3 +1,4 @@
+import SupremeCommandButtons from './SupremeCommandButtons';
 import { useState } from 'react';
 import { getNationAuthority, logisticsPosture } from '../shared/economy';
 import { goldRules } from '../shared/factions';
@@ -104,6 +105,16 @@ export default function BattalionDrawer({
     : (['infantry', 'cavalry', 'artillery'] as const);
   return (
     <div className="battalion-ledger">
+      <SupremeCommandButtons
+        game={game}
+        playerId={playerId}
+        command={command}
+        battalionId={army.id}
+        provinceId={army.provinceId}
+      />
+      {army.supplySabotagedUntilTurn === game.turn && (
+        <p className="warning-box">🔥 Suprimento sabotado nesta rodada.</p>
+      )}
       {isDisorganized(army) && (
         <p className="warning-box">
           ⛺ Desorganizado: ofensivas bloqueadas. Descanse uma rodada em território amigo sem mover,
@@ -591,7 +602,7 @@ export function TacticalBar({
         </button>
       </div>
       <span className="tactical-supply">
-        📦 {unitCount(army)}/{effectiveSupply(game, playerId, p)} suprimento ·{' '}
+        📦 {unitCount(army)}/{effectiveSupply(game, playerId, p, army)} suprimento ·{' '}
         {army.encircled ? 'linha cortada' : 'verifique as rotas de apoio'}
       </span>
       <Meter label="Moral" value={army.morale} />

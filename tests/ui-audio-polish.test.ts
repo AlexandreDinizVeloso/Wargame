@@ -20,9 +20,9 @@ test('prévia usa o mesmo cálculo puro do combate e respeita vizinhança, forte
     g,
     players: [a, b],
   } = setup();
-  const u = army(g, a.id, 'portugal', { infantry: 5, cavalry: 1, artillery: 1 });
-  const d = army(g, b.id, 'castile', { infantry: 3 });
-  const p = g.provinces.find((p) => p.id === 'castile')!;
+  const u = army(g, a.id, 'castile', { infantry: 5, cavalry: 1, artillery: 1 });
+  const d = army(g, b.id, 'france', { infantry: 3 });
+  const p = g.provinces.find((p) => p.id === 'france')!;
   p.fortLevel = 2;
   const powers = sharedPowers(g, [u], [d], p);
   assert.equal(sharedPowers, serverPowers);
@@ -60,7 +60,7 @@ test('prévia usa o mesmo cálculo puro do combate e respeita vizinhança, forte
     battlePreview(
       viewFor(g, a.id),
       u,
-      g.provinces.find((p) => p.id === 'portugal')!,
+      g.provinces.find((p) => p.id === 'castile')!,
     ),
     null,
   );
@@ -73,10 +73,10 @@ test('prévia não revela guarnições ocultas e sinaliza desorganização', () 
     g,
     players: [a, b],
   } = setup();
-  const u = army(g, a.id, 'portugal', { infantry: 8 });
-  const d = army(g, b.id, 'castile', { infantry: 20 });
+  const u = army(g, a.id, 'castile', { infantry: 8 });
+  const d = army(g, b.id, 'france', { infantry: 20 });
   b.nationId = 'veridia';
-  const target = g.provinces.find((p) => p.id === 'castile')!;
+  const target = g.provinces.find((p) => p.id === 'france')!;
   target.terrain = 'forest';
   // Visibility is always determined by viewFor, never by the preview.
   const view = viewFor(g, a.id),
@@ -96,15 +96,15 @@ test('sinal efêmero valida província, nota e remetente e seleciona apenas alia
   getRelation(g, a.id, b.id)!.allied = true;
   assert.deepEqual(pingRecipients(g, a.id), [a.id, b.id]);
   assert.ok(!pingRecipients(g, a.id).includes(c.id));
-  const ping = createMapPing(g, a.id, 'portugal', '  Atacar juntos!\n  ', 1000);
+  const ping = createMapPing(g, a.id, 'castile', '  Atacar juntos!\n  ', 1000);
   assert.equal(ping.playerId, a.id);
   assert.equal(ping.note, 'Atacar juntos!');
   assert.equal(ping.expiresAt, 7000);
   assert.throws(() => createMapPing(g, a.id, 'inexistente', 'oi', 0), /Província inválida/);
-  assert.throws(() => createMapPing(g, a.id, 'portugal', 'x'.repeat(81), 0), /80 caracteres/);
-  assert.throws(() => createMapPing(g, 'intruso', 'portugal', 'oi', 0), /nações ativas/);
-  assert.throws(() => createMapPing(g, a.id, 'portugal', {}, 0), /80 caracteres/);
-  assert.equal(createMapPing(g, a.id, 'portugal', undefined, 0).note, 'Atenção aqui!');
+  assert.throws(() => createMapPing(g, a.id, 'castile', 'x'.repeat(81), 0), /80 caracteres/);
+  assert.throws(() => createMapPing(g, 'intruso', 'castile', 'oi', 0), /nações ativas/);
+  assert.throws(() => createMapPing(g, a.id, 'castile', {}, 0), /80 caracteres/);
+  assert.equal(createMapPing(g, a.id, 'castile', undefined, 0).note, 'Atenção aqui!');
 });
 
 function waitMessage(ws: WebSocket, predicate: (message: ServerMessage) => boolean) {
@@ -167,7 +167,7 @@ test('WebSocket entrega sinais só a aliados, autentica e limita frequência inc
   const receiveAlly = waitMessage(b, (m) => m.type === 'map_ping');
   const own = await action(
     a,
-    { type: 'map_ping', provinceId: 'portugal', note: 'Juntos!' },
+    { type: 'map_ping', provinceId: 'castile', note: 'Juntos!' },
     'map_ping',
   );
   assert.equal(own.type, 'map_ping');
@@ -175,9 +175,9 @@ test('WebSocket entrega sinais só a aliados, autentica e limita frequência inc
   assert.deepEqual(await receiveAlly, own);
   assert.equal(own.ping.playerId, session.playerId);
   assert.ok(!('pings' in room.game));
-  const denied = await action(unauth, { type: 'map_ping', provinceId: 'portugal' }, 'error');
+  const denied = await action(unauth, { type: 'map_ping', provinceId: 'castile' }, 'error');
   assert.equal(denied.type, 'error');
-  const limited = await action(a, { type: 'map_ping', provinceId: 'portugal' }, 'error');
+  const limited = await action(a, { type: 'map_ping', provinceId: 'castile' }, 'error');
   assert.equal(limited.type, 'error');
   if (limited.type === 'error') assert.match(limited.message, /Aguarde/);
   const resumed = await connect();
@@ -186,15 +186,11 @@ test('WebSocket entrega sinais só a aliados, autentica e limita frequência inc
     { type: 'resume', code: session.code, playerId: session.playerId, token: session.token },
     'joined',
   );
-  const limitedResume = await action(
-    resumed,
-    { type: 'map_ping', provinceId: 'portugal' },
-    'error',
-  );
+  const limitedResume = await action(resumed, { type: 'map_ping', provinceId: 'castile' }, 'error');
   if (limitedResume.type === 'error') assert.match(limitedResume.message, /Aguarde/);
   now += 1600;
   getRelation(room.game, session.playerId, ally.playerId)!.allied = false;
-  await action(resumed, { type: 'map_ping', provinceId: 'portugal' }, 'map_ping');
+  await action(resumed, { type: 'map_ping', provinceId: 'castile' }, 'map_ping');
   assert.equal(others.filter((m) => m.type === 'map_ping').length, 0);
   assert.equal(delivered.filter((m) => m.type === 'map_ping').length, 1);
 });
@@ -204,7 +200,7 @@ test('declarar guerra pelo destino desembarca uma carga de forma atômica', () =
     g,
     players: [a, b],
   } = setup();
-  const target = g.provinces.find((p) => p.id === 'castile')!;
+  const target = g.provinces.find((p) => p.id === 'france')!;
   const sea = g.provinces.find((p) => p.kind === 'SEA_ZONE' && target.neighbors.includes(p.id))!;
   assert.ok(sea);
   const fleet = createBattalion(g, a.id, sea.id, compositionOf({ warships: 1, transports: 2 }), {
@@ -212,7 +208,7 @@ test('declarar guerra pelo destino desembarca uma carga de forma atômica', () =
     morale: 80,
     training: 1.2,
   });
-  const cargo = army(g, a.id, 'portugal', { infantry: 5 });
+  const cargo = army(g, a.id, 'castile', { infantry: 5 });
   cargo.provinceId = sea.id;
   cargo.embarkedOnId = fleet.id;
   fleet.embarkedArmyId = cargo.id;
@@ -230,7 +226,7 @@ test('declarar guerra pelo destino desembarca uma carga de forma atômica', () =
     battalionId: cargo.id,
     disembarkProvinceId: target.id,
   });
-  const invalid = g.provinces.find((p) => p.id === 'france')!;
+  const invalid = g.provinces.find((p) => p.id === 'germany')!;
   invalid.ownerId = b.id;
   invalid.isCoastal = false;
   assert.throws(

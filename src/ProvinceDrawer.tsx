@@ -1,3 +1,4 @@
+import SupremeCommandButtons from './SupremeCommandButtons';
 import {
   buildingLevel,
   buildingLimit,
@@ -191,6 +192,12 @@ export default function ProvinceDrawer({
     (!ruler || ruler.id === me.id || !getRelation(game, me.id, ruler.id)?.allied);
   return (
     <div className="province-ledger">
+      <SupremeCommandButtons
+        game={game}
+        playerId={playerId}
+        command={command}
+        provinceId={province.id}
+      />
       {verticalRules(game) && !computeVisibleProvinces(game, playerId).has(province.id) && (
         <p className="warning-box">
           Território sem reconhecimento. Tropas inimigas e cercos não revelados permanecem

@@ -1,3 +1,5 @@
+import { ECONOMY_BALANCE } from '../shared/balance';
+import { earnMilitaryAuthority } from './economy';
 import { goldRules, factionXP } from '../shared/factions';
 import { combatPowers } from '../shared/combat';
 export { compositionPower, combatPowers } from '../shared/combat';
@@ -374,10 +376,11 @@ export function resolveBattle(
   }
   for (const ownerId of new Set(fighters.map((f) => f.ownerId))) {
     const p = g.players.find((p) => p.id === ownerId);
-    if (p) p.militaryXP += factionXP(g, p.nationId, 15);
+    if (p) earnMilitaryAuthority(g, p.id, ECONOMY_BALANCE.authorityFromBattle);
   }
   for (const c of leaders) {
-    c.xp += 20;
+    const owner = g.players.find((p) => p.id === c.ownerId);
+    c.xp += owner ? factionXP(g, owner.nationId, 20) : 20;
     c.stars = c.xp >= 100 ? 3 : c.xp >= 40 ? 2 : 1;
   }
   for (const f of fighters)
@@ -407,7 +410,7 @@ export function resolveBattle(
   const winner = g.players.find((p) => p.id === battle.winnerId);
   if (winner) {
     winner.wonBattles++;
-    if (goldRules(g)) winner.prestige += g.turn >= 21 ? 4 : 2;
+    if (goldRules(g)) earnMilitaryAuthority(g, winner.id, ECONOMY_BALANCE.authorityFromVictory);
   }
   for (const war of g.wars.filter((w) => w.active)) {
     const aSide = war.attackerIds.includes(a.ownerId)
@@ -451,7 +454,7 @@ export function resolveBattle(
       const loot =
         Object.entries(battle.casualtiesByRealm)
           .filter(([enemy]) => enemy === 'NEUTRAL' || atWar(g, id, enemy))
-          .reduce((n, [, loss]) => n + loss, 0) * 8;
+          .reduce((n, [, loss]) => n + loss, 0) * ECONOMY_BALANCE.raiderGoldPerKill;
       p.gold += loot;
     }
   }

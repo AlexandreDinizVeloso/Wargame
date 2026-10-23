@@ -1,3 +1,4 @@
+import { ECONOMY_BALANCE } from '../shared/balance';
 import { goldRules } from '../shared/factions';
 import { goldWarScore, treatyCost } from '../shared/treaties';
 import { validateGoldPeace, enactGoldPeace } from './goldPeace';
@@ -352,9 +353,9 @@ export function applyPeace(
       g.orders[loser.id] = [];
     }
     if (t.type === 'HUMILIATE_DISARM') {
-      winner.prestige += 20;
+      winner.prestige += ECONOMY_BALANCE.authorityFromHumiliation;
       winner.moraleBonusUntil = g.turn + 3;
-      loser.prestige -= 20;
+      loser.prestige -= ECONOMY_BALANCE.authorityFromHumiliation;
       loser.disarmUntil = g.turn + 3;
       loser.armyCap = realmLimits(g, loser.id).armyCap;
 

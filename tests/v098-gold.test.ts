@@ -28,6 +28,7 @@ import {
 } from '../server/diplomacy';
 import { treatyCost } from '../shared/treaties';
 import { resolveBattle } from '../server/combat';
+import { recruitCommander } from '../server/armies';
 import { emptyTurnReport } from '../shared/types';
 import { emergencyLevy } from '../server/emergency';
 import { levyReason } from '../shared/emergency';
@@ -69,7 +70,7 @@ test('v098: Véspera reduz frete, amplia recrutamento e disputa nós com portos'
       g,
       players: [a, b],
     } = gold(),
-    p = g.provinces.find((p) => p.id === 'portugal')!;
+    p = g.provinces.find((p) => p.id === 'castile')!;
   p.marketLevel = 1;
   assert.equal(
     orderCost({ type: 'AUTO_TRANSPORT', battalionId: 'a', targetProvinceId: 'b' }, undefined, a, g)
@@ -101,7 +102,7 @@ test('v098: Aurélia pacifica 50% mais rápido e templos elevam moral máxima', 
   } = gold();
   a.nationId = 'aurelia';
   a.faith = 'SOLAR';
-  let p = g.provinces.find((p) => p.id === 'portugal')!;
+  let p = g.provinces.find((p) => p.id === 'castile')!;
   p.religion = 'SOLAR';
   p.pacification = 20;
   g = executeCommand(g, a.id, {
@@ -109,7 +110,7 @@ test('v098: Aurélia pacifica 50% mais rápido e templos elevam moral máxima', 
     order: { type: 'PACIFY', provinceId: p.id },
   });
   resolveTurn(g);
-  p = g.provinces.find((p) => p.id === 'portugal')!;
+  p = g.provinces.find((p) => p.id === 'castile')!;
   assert.equal(p.pacification, 72.5);
   const u = army(g, a.id, p.id);
   u.morale = 100;
@@ -127,12 +128,12 @@ test('v098: Kaldor reduz custos de artilharia e fundições melhoram tiro/cerco'
     players: [a],
   } = gold();
   a.nationId = 'kaldor';
-  const p = g.provinces.find((p) => p.id === 'portugal')!,
-    target = g.provinces.find((p) => p.id === 'castile')!,
+  const p = g.provinces.find((p) => p.id === 'castile')!,
+    target = g.provinces.find((p) => p.id === 'france')!,
     u = army(g, a.id, p.id, { infantry: 5, artillery: 2 });
   assert.equal(
     orderCost({ type: 'RECRUIT_BATTALION', provinceId: p.id, artillery: 1 }, p, a, g).gold,
-    6,
+    15,
   );
   assert.equal(maintenanceOf({ artillery: 1 }, a.nationId), 1.5);
   const old = combatPowers(g, [u], [], target).attackPower,
@@ -147,8 +148,8 @@ test('v098: Turan recruta cavalaria sem Quartel e maioria montada reduz consumo'
     players: [a],
   } = gold();
   a.nationId = 'turan';
-  const p = g.provinces.find((p) => p.id === 'portugal')!,
-    t = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'castile')!,
+    t = g.provinces.find((p) => p.id === 'france')!;
   p.barracksLevel = p.foundryLevel = 0;
   t.terrain = 'plains';
   assert.equal(
@@ -172,8 +173,8 @@ test('v098: Ferro-Norte é imune ao inverno e ganha choque no primeiro turno de 
     players: [a, b],
   } = gold();
   a.nationId = 'ferro_norte';
-  const p = g.provinces.find((p) => p.id === 'portugal')!,
-    target = g.provinces.find((p) => p.id === 'castile')!,
+  const p = g.provinces.find((p) => p.id === 'castile')!,
+    target = g.provinces.find((p) => p.id === 'france')!,
     u = army(g, a.id, p.id, { infantry: 5 });
   const summer = effectiveSupply(g, a.id, p);
   g.season = 'WINTER';
@@ -184,19 +185,22 @@ test('v098: Ferro-Norte é imune ao inverno e ganha choque no primeiro turno de 
   g.turn++;
   assert.equal(combatPowers(g, [u], [], target).attackPower, before);
 });
-test('v098: Sapiência recebe +35% XP de batalha e −15% construção', () => {
+test('v098: Sapiência mantém bônus de XP dos líderes, teto nacional e −15% construção', () => {
   const {
     g,
     players: [a, b],
   } = gold();
   a.nationId = 'sapiencia';
-  const p = g.provinces.find((p) => p.id === 'portugal')!,
-    target = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'castile')!,
+    target = g.provinces.find((p) => p.id === 'france')!;
   const u = army(g, a.id, p.id, { infantry: 12 });
+  const leader = recruitCommander(g, a.id, false, 'SIEGE_MASTER', undefined, true);
+  leader.assignedBattalionId = u.id;
   army(g, b.id, target.id, { infantry: 2 });
   declareWar(g, a.id, b.id, 'CONQUEST');
   resolveBattle(g, u, target, emptyTurnReport(g.turn, g.diet));
-  assert.equal(a.militaryXP, 20.25);
+  assert.equal(a.militaryXP, 2);
+  assert.equal(leader.xp, 27);
   const cost = orderCost(
     { type: 'BUILD_BUILDING', provinceId: p.id, building: 'MARKET' },
     p,
@@ -222,9 +226,9 @@ test('v098: Sol Invicto tem fortes 25% mais resistentes e defesa veterana com re
   } = gold();
   b.nationId = 'sol_invicto';
   b.gold = 100;
-  const p = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'france')!;
   p.fortLevel = 1;
-  const u = army(g, a.id, 'portugal'),
+  const u = army(g, a.id, 'castile'),
     d = army(g, b.id, p.id);
   const legacy = structuredClone(g);
   delete legacy.matchConfig.ruleset;
@@ -236,7 +240,7 @@ test('v098: Sol Invicto tem fortes 25% mais resistentes e defesa veterana com re
     ) < 0.001,
   );
   declareWar(g, a.id, b.id, 'CONQUEST');
-  b.lostProvinceIds = ['portugal'];
+  b.lostProvinceIds = ['castile'];
   emergencyLevy(g, b.id);
   const levy = g.battalions.find((a) => a.name === 'Defesa da Pátria')!;
   assert.equal(levy.morale, 100);
@@ -253,8 +257,8 @@ test('v098: Verídia recebe 20% em terreno e duplica atrito em terras pacificada
     players: [a, b],
   } = gold();
   a.nationId = 'veridia';
-  const p = g.provinces.find((p) => p.id === 'portugal')!,
-    target = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'castile')!,
+    target = g.provinces.find((p) => p.id === 'france')!;
   p.terrain = target.terrain = 'forest';
   const u = army(g, a.id, p.id);
   const legacy = structuredClone(g);
@@ -278,8 +282,8 @@ test('v098: eras têm fronteiras exatas, comércio, tecnologia e cerco modificad
     g,
     players: [a],
   } = gold();
-  const p = g.provinces.find((p) => p.id === 'castile')!,
-    u = army(g, a.id, 'portugal');
+  const p = g.provinces.find((p) => p.id === 'france')!,
+    u = army(g, a.id, 'castile');
   const base = siegeProgressPerTurn(g, a.id, [u], p);
   g.turn = 9;
   assert.equal(technologyCost(g, 2, 45), 40.5);
@@ -298,7 +302,7 @@ test('v098: War Score soma capital/comum, batalhas e bloqueios deterministicamen
     players: [a, b],
   } = gold();
   const w = declareWar(g, a.id, b.id, 'CONQUEST'),
-    capital = g.provinces.find((p) => p.id === 'castile')!,
+    capital = g.provinces.find((p) => p.id === 'france')!,
     common = g.provinces.find((p) => p.id === 'maghreb')!;
   capital.occupierId = a.id;
   common.ownerId = b.id;
@@ -356,7 +360,7 @@ test('v098: derrota pode propor reparações e ambas as partes veem o sentido co
     } = gold(),
     w = declareWar(g, a.id, b.id, 'CONQUEST');
   w.battleWins = -10;
-  g.provinces.find((p) => p.id === 'portugal')!.occupierId = b.id;
+  g.provinces.find((p) => p.id === 'castile')!.occupierId = b.id;
   offerPeace(g, a.id, w.id, [{ type: 'WAR_REPARATIONS', immediateTribute: 0 }], true);
   const offer = g.offers.find((o) => o.kind === 'peace')!;
   assert.equal(offer.concession, true);
@@ -375,7 +379,7 @@ test('v098: bot exausto envia concessões proativas sem spam no Conselho', () =>
   a.warExhaustion = 30;
   const w = declareWar(g, a.id, b.id, 'CONQUEST');
   w.battleWins = -10;
-  g.provinces.find((p) => p.id === 'portugal')!.occupierId = b.id;
+  g.provinces.find((p) => p.id === 'castile')!.occupierId = b.id;
   planBot(g, a);
   assert.ok(g.offers.some((o) => o.kind === 'peace' && o.from === a.id && o.concession));
   assert.ok(g.chat.filter((m) => m.turn === g.turn).length <= 1);
@@ -387,7 +391,7 @@ test('v098: quatro cenários criam estados válidos para oito nações', () => {
     if (id === 'SHATTERED_EMPIRES') {
       assert.equal(g.turn, 9);
       for (const p of g.players) {
-        assert.equal(p.gold, 150);
+        assert.equal(p.gold, 60);
         assert.equal(g.provinces.filter((q) => q.ownerId === p.id).length, 4);
       }
     }
@@ -421,7 +425,7 @@ test('v098: cinco lentes e outliner refletem relações, fome, ordens e constru�
       g,
       players: [a, b],
     } = gold(),
-    p = g.provinces.find((p) => p.id === 'portugal')!,
+    p = g.provinces.find((p) => p.id === 'castile')!,
     u = army(g, a.id, p.id, { infantry: 30 });
   const view = viewFor(g, a.id);
   assert.deepEqual(
@@ -433,7 +437,7 @@ test('v098: cinco lentes e outliner refletem relações, fome, ordens e constru�
   assert.equal(
     provinceLensColor(
       view,
-      view.provinces.find((p) => p.id === 'castile')!,
+      view.provinces.find((p) => p.id === 'france')!,
       'DIPLOMATIC',
       a.id,
     ),
@@ -514,14 +518,14 @@ test('v098: todas as 12 conquistas têm progresso funcional', () => {
     me.emergencyLevyTurn = 1;
     const report = emptyTurnReport(2, g.diet);
     const base = gold();
-    const attacker = army(base.g, base.players[0].id, 'portugal', { infantry: 12 });
-    army(base.g, base.players[1].id, 'castile', { infantry: 2 });
+    const attacker = army(base.g, base.players[0].id, 'castile', { infantry: 12 });
+    army(base.g, base.players[1].id, 'france', { infantry: 2 });
     declareWar(base.g, base.players[0].id, base.players[1].id, 'CONQUEST');
     const battleReport = emptyTurnReport(1, base.g.diet);
     resolveBattle(
       base.g,
       attacker,
-      base.g.provinces.find((p) => p.id === 'castile')!,
+      base.g.provinces.find((p) => p.id === 'france')!,
       battleReport,
     );
     report.battles = Array.from({ length: 25 }, (_, j) => ({

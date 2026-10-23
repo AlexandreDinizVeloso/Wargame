@@ -1,3 +1,5 @@
+import { ECONOMY_BALANCE } from '../shared/balance';
+import { earnMilitaryAuthority } from './economy';
 import { getNationAuthority, spendNationAuthority } from '../shared/economy';
 import { factionXP, goldRules } from '../shared/factions';
 import { commanderFor, skillBlock, SKILLS } from '../shared/military';
@@ -62,10 +64,11 @@ export function recruitCommander(
 }
 export function commanderXP(g: GameState, a: Battalion, amount: number, military = false) {
   const owner = g.players.find((p) => p.id === a.ownerId);
-  if (military && goldRules(g) && owner) owner.militaryXP += factionXP(g, owner.nationId, amount);
+  if (military && goldRules(g) && owner)
+    earnMilitaryAuthority(g, owner.id, ECONOMY_BALANCE.authorityFromSiege);
   const c = commanderFor(g, a);
   if (c) {
-    c.xp += amount;
+    c.xp += owner ? factionXP(g, owner.nationId, amount) : amount;
     c.stars = c.xp >= 100 ? 3 : c.xp >= 40 ? 2 : 1;
   }
 }
@@ -83,6 +86,10 @@ export function combine(g: GameState, target: Battalion, source: Battalion) {
   if ((source.lastMovedTurn ?? -1) > (target.lastMovedTurn ?? -1)) {
     target.lastMovedTurn = source.lastMovedTurn;
     target.previousProvinceId = source.previousProvinceId;
+  }
+  for (const key of ['blitzUntilTurn', 'supplySabotagedUntilTurn'] as const) {
+    const latest = Math.max(target[key] ?? -1, source[key] ?? -1);
+    if (latest >= 0) target[key] = latest;
   }
   target.movementCredit = Math.min(target.movementCredit, source.movementCredit);
   target.pathQueue = [];
@@ -134,6 +141,8 @@ export function instantArmyAction(g: GameState, id: string, action: InstantArmyA
       training: a.training,
       morale: a.morale,
     });
+    b.blitzUntilTurn = a.blitzUntilTurn;
+    b.supplySabotagedUntilTurn = a.supplySabotagedUntilTurn;
     b.lastMovedTurn = a.lastMovedTurn;
     b.previousProvinceId = a.previousProvinceId;
     b.movementCredit = a.movementCredit;

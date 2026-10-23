@@ -27,7 +27,7 @@ test('miniaturas terrestres usam escudo, composição, líder, moral e estado se
       g,
       players: [a],
     } = setup(),
-    u = army(g, a.id, 'portugal', { infantry: 3, artillery: 2 });
+    u = army(g, a.id, 'castile', { infantry: 3, artillery: 2 });
   u.morale = 18;
   u.disorganized = true;
   u.entrenched = true;
@@ -66,7 +66,7 @@ test('galeão e rosa dos ventos são silhuetas detalhadas, com carga e receita',
       g,
       players: [a],
     } = setup(),
-    u = army(g, a.id, 'portugal');
+    u = army(g, a.id, 'castile');
   u.isFleet = true;
   u.infantry = 0;
   u.warships = 3;
@@ -82,7 +82,7 @@ test('galeão e rosa dos ventos são silhuetas detalhadas, com carga e receita',
 });
 test('seis prédios têm miniaturas e cerco mantém fogo apenas durante replay', () => {
   const { g } = setup(),
-    p = g.provinces.find((p) => p.id === 'portugal')!;
+    p = g.provinces.find((p) => p.id === 'castile')!;
   p.fortLevel = p.portLevel = p.barracksLevel = p.marketLevel = p.foundryLevel = p.templeLevel = 1;
   p.siege = {
     attackerOwnerId: g.players[1].id,
@@ -113,8 +113,8 @@ test('novas rodadas gravam total militar, fortificação e domínio marítimo se
     g,
     players: [a, b],
   } = setup();
-  army(g, a.id, 'portugal', { infantry: 4, cavalry: 1 });
-  army(g, b.id, 'castile', { infantry: 3 });
+  army(g, a.id, 'castile', { infantry: 4, cavalry: 1 });
+  army(g, b.id, 'france', { infantry: 3 });
   const before = realmTurnAnalytics(g);
   assert.equal(before.find((p) => p.playerId === a.id)!.landTroops, 5);
   resolveTurn(g);
@@ -127,8 +127,8 @@ test('estatísticas não revelam totais militares adversários antes do resultad
     g,
     players: [a, b],
   } = setup();
-  army(g, a.id, 'portugal');
-  army(g, b.id, 'castile');
+  army(g, a.id, 'castile');
+  army(g, b.id, 'france');
   resolveTurn(g);
   const view = viewFor(g, a.id);
   assert.equal(view.history[0].analytics?.find((p) => p.playerId === a.id)!.landTroops, 5);
@@ -149,7 +149,7 @@ test('histórico anterior ao RC mantém lacunas militares, controle e economia r
     g,
     players: [a],
   } = setup();
-  army(g, a.id, 'portugal');
+  army(g, a.id, 'castile');
   resolveTurn(g);
   delete g.history[0].analytics;
   const series = buildCampaignSeries(viewFor(g, a.id), a.id).find((p) => p.id === a.id)!;
@@ -183,9 +183,9 @@ test('mesa de tutorial é privada, tem alvo acessível e não exige recrutar um 
   assert.equal(g.matchConfig.tutorial, true);
   assert.equal(g.isPublic, false);
   assert.equal(g.enableSecretObjectives, false);
-  assert.equal(a.gold, 180);
+  assert.equal(a.gold, 60);
   assert.ok(
-    g.battalions.some((u) => u.ownerId === a.id && u.provinceId === 'portugal' && u.infantry === 8),
+    g.battalions.some((u) => u.ownerId === a.id && u.provinceId === 'castile' && u.infantry === 8),
   );
   assert.ok(g.commanders.some((c) => c.ownerId === a.id && !c.assignedBattalionId));
   assert.equal(g.provinces.find((p) => p.id === 'maghreb')!.ownerId, null);

@@ -6,21 +6,27 @@ export function TopBarModal({
   children,
   onClose,
   footer,
+  active = true,
+  onActivate,
 }: {
   id: string;
   title: string;
   children: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
+  active?: boolean;
+  onActivate?: () => void;
 }) {
   const root = useRef<HTMLElement>(null),
-    close = useRef(onClose);
+    close = useRef(onClose),
+    isActive = useRef(active);
   close.current = onClose;
+  isActive.current = active;
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     root.current?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && isActive.current) {
         e.preventDefault();
         e.stopImmediatePropagation();
         close.current();
@@ -38,7 +44,7 @@ export function TopBarModal({
     };
   }, [id]);
   return (
-    <div className="strategy-backdrop" data-modal-backdrop>
+    <div className="strategy-backdrop" data-modal-backdrop style={{ zIndex: active ? 76 : 70 }}>
       <FloatingWindow
         id={id}
         title={title}
@@ -54,6 +60,8 @@ export function TopBarModal({
         bodyClassName="strategy-content"
         onClose={onClose}
         footer={footer}
+        active={active}
+        onActivate={onActivate}
       >
         <Suspense fallback={<p role="status">Abrindo conselho…</p>}>{children}</Suspense>
       </FloatingWindow>

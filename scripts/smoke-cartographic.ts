@@ -1,5 +1,7 @@
 import { getNationAuthority } from '../shared/economy';
-import { dilemmaDefinition } from '../shared/dilemmas';
+import { COUNCIL_CATEGORIES, dilemmaDefinition } from '../shared/dilemmas';
+import { councilModifiers } from '../shared/councilEffects';
+import { planMassRecruitment } from '../shared/massRecruitment';
 import { mapPoint, rightClickProvince } from './map-interactions';
 import assert from 'node:assert/strict';
 import { fork, type ChildProcess } from 'node:child_process';
@@ -9,7 +11,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Page } from 'playwright-core';
 import type { GameView } from '../shared/types';
-import { orderCost } from '../shared/rules';
+import { landCount, orderCost, realmEconomy } from '../shared/rules';
 import { seedBrowserFixtures, fixturePeer, type FixtureSession } from './browser-fixtures';
 const temp = await mkdtemp(path.join(os.tmpdir(), 'concordia-rc-'));
 const fixtures = seedBrowserFixtures(path.join(temp, 'rooms.json'));
@@ -134,7 +136,7 @@ try {
   const { page, until, get } = await open(fixtures.transport[0]);
   await page.locator('[data-interface="cartographic"]').waitFor();
   await viewport(page);
-  assert.equal(await page.locator('.province-relief').count(), 95);
+  assert.equal(await page.locator('.province-relief').count(), 42);
   assert.equal(await page.locator('[data-world-river]').count(), 11);
   assert.equal(await page.locator('[data-natural-feature]').count(), 4);
   const audioAssets = await page.request.get(`${base}/api/audio-assets`);
@@ -144,12 +146,12 @@ try {
     assert.equal(wav.status(), 200);
     assert.equal((await wav.body()).toString('ascii', 0, 4), 'RIFF');
   }
-  assert.equal(await page.locator('[data-miniature="compass"]').count(), 13);
+  assert.equal(await page.locator('[data-miniature="compass"]').count(), 10);
   assert.ok((await page.locator('[data-miniature="army"]').count()) > 0);
   assert.ok((await page.locator('[data-miniature="fleet"]').count()) > 0);
   assert.equal(await page.locator('[data-miniature] rect').count(), 0);
   assert.ok((await page.locator('[data-sea-route]').count()) > 0);
-  await page.locator('.province-shape[data-province="portugal"]').press('Enter');
+  await page.locator('.province-shape[data-province="castile"]').press('Enter');
   const card = page.getByRole('region', { name: 'Inspeção de Província', exact: true });
   await card.waitFor();
   assert.equal(
@@ -161,6 +163,34 @@ try {
   assert.equal(box.width, 480);
   assert.equal(box.height, 540);
   assert.equal(await card.evaluate((e) => e.scrollWidth > e.clientWidth), false);
+  await page.getByRole('button', { name: 'Crônica', exact: true }).click();
+  const concurrentReport = page.locator('[data-window="report"]');
+  await concurrentReport.waitFor();
+  const reportGeometry = await concurrentReport.boundingBox();
+  assert.equal(await card.count(), 1);
+  assert.equal(await card.getAttribute('class').then((v) => v?.includes('minimized')), false);
+  await page.locator('.province-shape[data-province="france"]').press('Enter');
+  assert.equal(await concurrentReport.count(), 1);
+  const inspectedArmy = get().battalions.find(
+    (a) => a.ownerId === fixtures.transport[0].playerId && !a.isFleet,
+  )!;
+  await page.locator(`[data-battalion="${inspectedArmy.id}"]`).press('Enter');
+  await page.getByRole('region', { name: 'Comando de Batalhão', exact: true }).waitFor();
+  assert.equal(await concurrentReport.count(), 1);
+  await page
+    .locator('.footer-tabs')
+    .getByRole('button', { name: /^Ordens/ })
+    .click();
+  assert.equal(
+    await page.getByRole('region', { name: 'Comando de Batalhão', exact: true }).count(),
+    1,
+  );
+  assert.equal(await concurrentReport.locator('.window-body').count(), 1);
+  assert.equal((await concurrentReport.getAttribute('class'))!.includes('minimized'), false);
+  assert.deepEqual(await concurrentReport.boundingBox(), reportGeometry);
+  await concurrentReport.getByRole('button', { name: /^Fechar / }).click();
+  await page.locator('.province-shape[data-province="castile"]').press('Enter');
+  await card.waitFor();
   assert.equal(await page.locator('.first-ready-banner').count(), 1);
   const header = card.locator('.window-title');
   let headerBox = (await header.boundingBox())!;
@@ -190,7 +220,7 @@ try {
   assert.ok(resized.width > moved.width + 70 && resized.height > moved.height);
   await page.reload();
   await page.locator('[data-interface="cartographic"]').waitFor();
-  await page.locator('.province-shape[data-province="portugal"]').press('Enter');
+  await page.locator('.province-shape[data-province="castile"]').press('Enter');
   const persisted = (await card.boundingBox())!;
   assert.ok(
     Math.abs(persisted.width - resized.width) <= 1 && Math.abs(persisted.x - resized.x) <= 1,
@@ -215,7 +245,7 @@ try {
   const build = planned.plannedOrders.find((o) => o.type === 'BUILD_BUILDING')!,
     buildGold = orderCost(
       build,
-      planned.provinces.find((p) => p.id === 'portugal'),
+      planned.provinces.find((p) => p.id === 'castile'),
       planned.players[0],
       planned,
     ).gold;
@@ -280,7 +310,7 @@ try {
     null,
     { timeout: 8000 },
   );
-  await page.locator('.province-shape[data-province="portugal"]').press('Enter');
+  await page.locator('.province-shape[data-province="castile"]').press('Enter');
   await card.getByLabel('Nota do sinal para aliados', { exact: true }).fill('Defender o porto');
   await card.getByRole('button', { name: '📍 Sinalizar no Mapa', exact: true }).click();
   await page.locator('[data-map-ping]').filter({ hasText: 'Defender o porto' }).waitFor();
@@ -302,7 +332,8 @@ try {
   await page.getByRole('button', { name: 'Crises & Coalizões', exact: true }).click();
   const center = page.locator('[data-window="strategy-center"]');
   await center.waitFor();
-  assert.equal(await page.locator('[data-context-panel]').count(), 0);
+  assert.equal(await page.locator('[data-context-panel]').count(), 1);
+  assert.equal(await page.locator('[data-context-panel] .window-body').count(), 1);
   await center.getByRole('heading', { name: 'Ameaça e contenção' }).waitFor();
   for (const name of [
     'Diplomacia',
@@ -351,7 +382,7 @@ try {
     assert.equal(crossed.battalions.find((a) => a.id === main.id)?.provinceId, 'brazil');
     const economy = crossed.lastReport!.economy.find((e) => e.playerId === main.ownerId)!;
     assert.ok(Math.abs(crossed.players[0].gold - (treasury - 15 - buildGold + economy.net)) < 0.02);
-    assert.equal(crossed.provinces.find((p) => p.id === 'portugal')!.barracksLevel, 1);
+    assert.equal(crossed.provinces.find((p) => p.id === 'castile')!.barracksLevel, 1);
     assert.ok(crossed.history[0].analytics?.length === 3);
   } finally {
     for (const peer of peers) peer.socket.close();
@@ -386,16 +417,39 @@ try {
   await menu.getByLabel('Seu nome', { exact: true }).fill('Capitã do Atlas');
   await menu.getByRole('button', { name: 'Salvar nome', exact: true }).click();
   await until((g) => g.players[0].name === 'Capitã do Atlas');
-  const musicSlider = menu.getByRole('slider', { name: 'Volume da música', exact: true });
-  await musicSlider.press('Home');
-  for (let i = 0; i < 8; i++) await musicSlider.press('ArrowRight');
-  assert.equal(await page.evaluate(() => localStorage.getItem('concordia-music-volume')), '0.4');
-  await menu.getByRole('button', { name: 'Silenciar música', exact: true }).click();
-  assert.equal(await page.evaluate(() => localStorage.getItem('concordia-music-volume')), '0');
-  const effectsSlider = menu.getByRole('slider', { name: 'Volume dos efeitos', exact: true });
-  await effectsSlider.press('Home');
-  for (let i = 0; i < 12; i++) await effectsSlider.press('ArrowRight');
-  assert.equal(await page.evaluate(() => localStorage.getItem('concordia-effects-volume')), '0.6');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: '🔊 Mixer de Som', exact: true }).click();
+  const mixer = page.getByRole('dialog', { name: '🔊 Mixer de Som', exact: true });
+  await mixer.waitFor();
+  assert.equal(await mixer.getByRole('slider').count(), 6);
+  const mixerFields = [
+    ['Volume geral', 'masterVolume', 'Geral'],
+    ['Volume da música', 'musicVolume', 'Música'],
+    ['Volume de combate', 'combatVolume', 'Combate'],
+    ['Volume de marcha', 'marchVolume', 'Marcha'],
+    ['Volume de navegação', 'sailVolume', 'Navegação'],
+    ['Volume da interface', 'uiVolume', 'Interface'],
+  ] as const;
+  for (const [label, key, testLabel] of mixerFields) {
+    const slider = mixer.getByRole('slider', { name: label, exact: true });
+    await slider.press('Home');
+    await slider.press('ArrowRight');
+    const value = Number(await slider.inputValue());
+    assert.ok(value > 0 && value <= 1);
+    assert.equal(
+      await page.evaluate(
+        (k) => JSON.parse(localStorage.getItem('concordia.audioMixer.v1')!)[k],
+        key,
+      ),
+      value,
+    );
+    await mixer.getByRole('button', { name: `Testar ${testLabel}`, exact: true }).click();
+  }
+  await mixer.getByRole('button', { name: 'Mutar Tudo', exact: true }).click();
+  await mixer.getByRole('button', { name: 'Ativar Todo o Som', exact: true }).click();
+  await mixer.getByRole('slider', { name: 'Volume da música', exact: true }).press('Home');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Abrir menu', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await viewport(page);
   const toggle = menu.getByRole('checkbox', { name: 'Relevo cartográfico 2,5D', exact: true });
@@ -417,14 +471,29 @@ try {
   await council.waitFor();
   const nation = visuals.get().players[0],
     choice = dilemmaDefinition(nation.activeDilemma!)!.options[1];
+  await council.locator('.council-category').getByText('Carta tática', { exact: true }).waitFor();
   await visuals.page.screenshot({ path: '.local/screenshots/v100-dilemma-geography.png' });
+  const upkeepBefore = realmEconomy(visuals.get(), nation.id).upkeep;
+  const upgradesBefore = visuals
+    .get()
+    .provinces.filter((p) => p.ownerId === nation.id)
+    .reduce((n, p) => n + p.fortLevel + p.marketLevel, 0);
   await council.getByRole('button').nth(1).click();
   const decided = await visuals.until((g) => !g.players[0].activeDilemma);
   assert.equal(decided.players[0].gold, nation.gold + choice.gold);
   assert.equal(
+    decided.provinces
+      .filter((p) => p.ownerId === nation.id)
+      .reduce((n, p) => n + p.fortLevel + p.marketLevel, 0),
+    upgradesBefore,
+  );
+  assert.equal(
     getNationAuthority(decided.players[0]),
     getNationAuthority(nation) + choice.authority,
   );
+  assert.equal(councilModifiers(decided.players[0], decided.turn).moraleBonus, 20);
+  assert.equal(councilModifiers(decided.players[0], decided.turn).upkeepMultiplier, 1.35);
+  assert.ok(Math.abs(realmEconomy(decided, nation.id).upkeep - upkeepBefore * 1.35) < 0.02);
   assert.equal(await council.count(), 0);
   assert.equal(await visuals.page.locator('.siege-flame').count(), 0);
   assert.ok((await visuals.page.locator('.siege-progress-label').count()) > 0);
@@ -436,6 +505,102 @@ try {
   assert.ok((await visuals.page.locator('.miniature-alert').count()) > 0);
   assert.equal(await visuals.page.locator('[data-miniature] rect').count(), 0);
   await visuals.page.screenshot({ path: '.local/screenshots/rc-miniatures-winter.png' });
+  for (const [session, index, category] of [
+    [fixtures.councilPolicy[0], 1, 'POLICY'],
+    [fixtures.councilCrisis[0], 0, 'CRISIS'],
+  ] as const) {
+    const councilFixture = await open(session),
+      before = councilFixture.get();
+    const player = before.players[0],
+      definition = dilemmaDefinition(player.activeDilemma!)!;
+    assert.equal(definition.category, category);
+    const card = councilFixture.page.getByRole('region', { name: 'Dilema Nacional', exact: true });
+    await card
+      .locator('.council-category')
+      .getByText(COUNCIL_CATEGORIES[category], { exact: true })
+      .waitFor();
+    const selected = definition.options[index];
+    await card.getByRole('button').nth(index).click();
+    const after = await councilFixture.until((state) => !state.players[0].activeDilemma);
+    assert.equal(after.players[0].gold, player.gold + selected.gold);
+    assert.equal(
+      getNationAuthority(after.players[0]),
+      getNationAuthority(player) + selected.authority,
+    );
+    assert.ok(
+      after.players[0].councilEffects?.some(
+        (effect) =>
+          effect.sourceId === definition.id &&
+          effect.expiresTurn === before.turn + selected.duration - 1,
+      ),
+    );
+    await councilFixture.page.getByRole('button', { name: /🔔 Minha Nação/ }).click();
+    await councilFixture.page
+      .getByRole('region', { name: 'Efeitos ativos do Conselho', exact: true })
+      .waitFor();
+    await councilFixture.page.screenshot({
+      path: `.local/screenshots/v101-council-${category.toLowerCase()}.png`,
+    });
+    await councilFixture.context.close();
+  }
+
+  const mass = await open(fixtures.recruitment[0]);
+  const massOwner = mass.get().players[0],
+    originalOrders = structuredClone(mass.get().plannedOrders);
+  await mass.page.locator('.province-shape[data-province="castile"]').press('Enter');
+  await mass.page.getByRole('button', { name: 'Crônica', exact: true }).click();
+  await mass.page.getByRole('button', { name: '⚡ Ações Rápidas', exact: true }).click();
+  const quick = mass.page.getByRole('dialog', { name: '⚡ Ações Rápidas', exact: true });
+  await quick.waitFor();
+  await quick.getByLabel('Infantarias para recrutar', { exact: true }).fill('6');
+  await quick.getByLabel('Cavalarias para recrutar', { exact: true }).fill('1');
+  await quick.getByLabel('Artilharias para recrutar', { exact: true }).fill('1');
+  const requested = { infantry: 6, cavalry: 1, artillery: 1 },
+    plan = planMassRecruitment(mass.get(), massOwner.id, requested);
+  assert.deepEqual(plan.allocated, { infantry: 4, cavalry: 0, artillery: 0 });
+  await mass.page.waitForFunction(
+    () => document.querySelector('[data-mass-recruitment-allocated]')?.textContent === '4',
+  );
+  assert.equal(await quick.locator('[data-mass-recruitment-city]').count(), 2);
+  assert.deepEqual(
+    await quick
+      .locator('[data-mass-recruitment-city]')
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-mass-recruitment-city'))),
+    plan.byProvince.map((row) => row.provinceId),
+  );
+  assert.equal(await mass.page.locator('[data-window="province"]').count(), 1);
+  assert.equal(await mass.page.locator('[data-window="report"]').count(), 1);
+  const troopsBefore = mass
+    .get()
+    .battalions.filter((army) => army.ownerId === massOwner.id && !army.isFleet)
+    .reduce((sum, army) => sum + landCount(army), 0);
+  await mass.page.screenshot({ path: '.local/screenshots/v101-mass-recruitment-preview.png' });
+  await quick.getByRole('button', { name: /^Recrutar em Massa/ }).click();
+  const queued = await mass.until(
+    (state) => state.plannedOrders.length === originalOrders.length + plan.orders.length,
+  );
+  assert.deepEqual(queued.plannedOrders, [...originalOrders, ...plan.orders]);
+  assert.equal(queued.players[0].gold, massOwner.gold);
+  await mass.page.screenshot({ path: '.local/screenshots/v101-mass-recruitment.png' });
+  await mass.page.keyboard.press('Escape');
+  assert.equal(await quick.count(), 0);
+  assert.equal(await mass.page.locator('[data-window="province"]').count(), 1);
+  assert.equal(await mass.page.locator('[data-window="report"]').count(), 1);
+  const massPeers = await Promise.all(
+    fixtures.recruitment.slice(1).map((session) => fixturePeer(base, session)),
+  );
+  await mass.page.getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
+  for (const peer of massPeers) peer.send({ type: 'READY', ready: true });
+  const recruited = await mass.until((state) => state.turn === 2);
+  assert.equal(
+    recruited.battalions
+      .filter((army) => army.ownerId === massOwner.id && !army.isFleet)
+      .reduce((sum, army) => sum + landCount(army), 0),
+    troopsBefore + 4,
+  );
+  assert.equal(recruited.provinces.find((province) => province.id === 'castile')!.marketLevel, 1);
+  for (const peer of massPeers) peer.socket.close();
+  await mass.context.close();
   const lesson = await open();
   await lesson.page
     .getByRole('button', { name: '🎓 Tutorial Rápido (5 Passos)', exact: true })
@@ -469,7 +634,7 @@ try {
   }
   await step(3);
   await lesson.page.keyboard.press('Escape');
-  await lesson.page.locator('.province-shape[data-province="portugal"]').press('Enter');
+  await lesson.page.locator('.province-shape[data-province="castile"]').press('Enter');
   await lesson.page.getByRole('button', { name: /Construir Quartel/ }).click();
   await lesson.until((g) => g.plannedOrders.some((o) => o.type === 'BUILD_BUILDING'));
   const afterBuild = lesson.get().turn + 1;
@@ -486,7 +651,7 @@ try {
     .getByLabel('Líder atribuído (instantâneo)', { exact: true })
     .selectOption(commander.id);
   await step(5);
-  for (const label of ['Diplomacia', 'Comércio & Mares', 'Objetivos']) {
+  for (const [index, label] of ['Diplomacia', 'Comércio & Mares', 'Objetivos'].entries()) {
     await lesson.page.getByRole('button', { name: label, exact: true }).click();
     await lesson.page
       .getByRole('dialog', {
@@ -497,6 +662,11 @@ try {
               ? '⚓ Comércio & Mares'
               : '🎯 Objetivos',
       })
+      .waitFor();
+    await lesson.page
+      .locator('[data-tutorial-step="5"]')
+      .locator('small')
+      .filter({ hasText: `${index + 1}/3` })
       .waitFor();
     await lesson.page.keyboard.press('Escape');
   }
@@ -517,7 +687,7 @@ try {
       (window as unknown as { foleyStats: { buffers: number; oscillatorTypes: string[] } })
         .foleyStats,
   );
-  assert.ok(soundStats.buffers >= 20, 'Marcha e combate devem usar camadas de buffers de ruído.');
+  assert.ok(soundStats.buffers >= 4, 'Marcha e combate devem tocar os buffers PCM carregados.');
   assert.ok(
     soundStats.oscillatorTypes.every((type) => type === 'sine'),
     'Efeitos sem osciladores sawtooth/square. Música desativada no smoke.',
@@ -644,6 +814,18 @@ try {
     roomUI.get().code,
   );
   const cinema = await open(fixtures.cinematic[0]);
+  const researchAuthority = getNationAuthority(cinema.get().players[0]);
+  await cinema.page.getByRole('button', { name: 'Árvore Militar', exact: true }).click();
+  await cinema.page
+    .locator('.skill-node')
+    .filter({ hasText: 'Formação de Escudos' })
+    .getByRole('button', { name: 'Desbloquear · 25 Autoridade', exact: true })
+    .click();
+  const researched = await cinema.until((game) =>
+    game.players[0].unlockedSkills.includes('INF_T1'),
+  );
+  assert.equal(getNationAuthority(researched.players[0]), researchAuthority - 25);
+  await cinema.page.keyboard.press('Escape');
   await cinema.page.locator('[data-interface="cartographic"]').waitFor();
   assert.equal(await cinema.page.locator('.top-resources .hud-stat').count(), 3);
   await cinema.page.locator('.webgl-map-backdrop[data-renderer="canvas2d"]').waitFor();
@@ -656,7 +838,12 @@ try {
   assert.ok(!cinema.get().battalions.some((a) => a.name === 'Exército secreto no Japão'));
   await cinema.page.getByRole('button', { name: '👁️ Névoa Oculta', exact: true }).click();
   await cinema.page.screenshot({ path: '.local/screenshots/v099-imperial-map.png' });
-  await cinema.page.getByRole('button', { name: 'Rever batalha em Portugal', exact: true }).click();
+  await cinema.page
+    .getByRole('button', {
+      name: `Rever batalha em ${cinema.get().provinces.find((p) => p.id === 'castile')!.name}`,
+      exact: true,
+    })
+    .click();
   const stage = cinema.page.getByRole('dialog', { name: 'Palco Tático de Batalha', exact: true });
   await stage.waitFor();
   assert.equal(await stage.locator('.combat-line').count(), 6);
@@ -704,7 +891,7 @@ try {
   await shader.context.close();
   assert.deepEqual(errors, []);
   console.log(
-    'v1.0 cartográfico passou: 95 terras, onze rios, quatro barreiras, dilema nacional e WAVs PCM; SVG sem caixas, seis construções, neve/cerco, inspeção 480×540, seleção/movimento/pan, janelas persistentes, sinais efêmeros, replay limitado a 4s, áudio Foley, contexto único, central exclusiva/teclado/mapa, fretamento multiplayer, alertas, volumes separados, celular, tutorial completo de cinco passos e gráficos/medalhas; cinco lentes F1–F5, outliner O/Tab, tratados Gold, time-lapse, perfil persistente, save portátil e Friend-Pass.',
+    'v1.01 cartográfico passou: 42 terras, dez mares, onze rios, quatro barreiras; Conselho com crises/táticas/políticas pagas e temporárias, recrutamento em massa parcial em várias cidades; seis canais PCM persistidos; inspetor e Crônica simultâneos, foco real entre janelas, navegação e fretamento multiplayer; tutorial completo, doutrinas com custo, tratados Gold, time-lapse, perfil, save portátil, Friend-Pass e celular.',
   );
 } catch (error) {
   await debugPage?.screenshot({ path: '.local/screenshots/rc-failure.png' }).catch(() => {});

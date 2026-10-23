@@ -39,7 +39,11 @@ export default function WebGLMapBackdrop({
   values.current = { camera, width, height, scale, season };
   const [fallback, setFallback] = useState(false),
     [backend, setBackend] = useState('initializing');
-  const lands = useMemo(() => provinces.filter((p) => p.kind === 'LAND'), [provinces]);
+  const geometryKey = provinces
+    .filter((p) => p.kind === 'LAND')
+    .map((p) => p.path)
+    .join('|');
+  const lands = useMemo(() => provinces.filter((p) => p.kind === 'LAND'), [geometryKey]);
   useEffect(() => {
     const canvas = ref.current;
     if (!canvas) return;
@@ -56,6 +60,7 @@ export default function WebGLMapBackdrop({
       if (!fallback)
         gl = canvas.getContext('webgl', {
           alpha: false,
+          preserveDrawingBuffer: false,
           antialias: false,
           powerPreference: 'low-power',
           failIfMajorPerformanceCaveat: !forceWebGL,
@@ -157,6 +162,15 @@ export default function WebGLMapBackdrop({
         return;
       }
     } else setBackend('canvas2d');
+    const size = { width: values.current.width, height: values.current.height };
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      if (rect && rect.width > 0 && rect.height > 0) {
+        size.width = rect.width;
+        size.height = rect.height;
+      }
+    });
+    observer.observe(canvas);
     let frame = 0,
       last = -1000,
       disposed = false;
@@ -169,8 +183,8 @@ export default function WebGLMapBackdrop({
       last = now;
       const v = values.current,
         dpr = Math.min(devicePixelRatio || 1, 1.5),
-        w = Math.max(1, Math.round(v.width * dpr)),
-        h = Math.max(1, Math.round(v.height * dpr));
+        w = Math.max(1, Math.round(size.width * dpr)),
+        h = Math.max(1, Math.round(size.height * dpr));
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
@@ -232,6 +246,7 @@ export default function WebGLMapBackdrop({
     frame = requestAnimationFrame(draw);
     return () => {
       disposed = true;
+      observer.disconnect();
       cancelAnimationFrame(frame);
       canvas.removeEventListener('webglcontextlost', lost);
       if (gl) {
@@ -249,6 +264,7 @@ export default function WebGLMapBackdrop({
       className="webgl-map-backdrop"
       data-renderer={backend}
       aria-hidden="true"
+      data-preserve-drawing-buffer="false"
     />
   );
 }

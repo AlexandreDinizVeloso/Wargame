@@ -1,3 +1,7 @@
+import { BALANCE, ECONOMY_BALANCE } from '../shared/balance';
+export { BALANCE } from '../shared/balance';
+import { executeSupremeCommand } from './supreme';
+import { executeMassRecruitment } from './massRecruitment';
 import { realmTurnAnalytics } from '../shared/campaignAnalytics';
 import {
   buildingLevel,
@@ -8,6 +12,7 @@ import {
 } from '../shared/development';
 import {
   getNationAuthority,
+  authorityIncome,
   integerEventText,
   moraleRecovery,
   realmLimits,
@@ -46,6 +51,7 @@ import {
   realmEconomy,
   reservedResources,
   roundMoney,
+  MONEY_EPSILON,
   shortestPath,
   UNIT_KEYS,
   unitCount,
@@ -111,15 +117,7 @@ import { prepareTransport, resolveBridges } from './transport';
 import { advanceWorld, coalitionWar, dealObjectives, endWorld, joinCoalition } from './world';
 export { assert, canAttack } from './state';
 export { parseCommand, parseOrder };
-export const BALANCE = {
-  baseUpkeep: 0.75,
-  initialGold: 75,
-  initialManpower: 18,
-  transportCapacity: 4,
-  exhaustionPerWarTurn: 4,
-  exhaustionCasualtyFactor: 10,
-  peaceRecovery: 12,
-};
+
 const ARCHETYPES: BotArchetype[] = ['Militarist', 'Merchant', 'Theocrat', 'Diplomat'];
 export function createGame(
   code: string,
@@ -161,10 +159,10 @@ export function createGame(
     matchConfig: {
       mode,
       theater,
-      mapId: mode === 'quick' ? `natural-earth-v100-${theater}` : 'natural-earth-v100-world',
+      mapId: mode === 'quick' ? `natural-earth-v101-${theater}` : 'natural-earth-v101-world',
       maxTurns,
       turnSeconds,
-      createdVersion: '1.0.0',
+      createdVersion: '1.0.1',
       allowBotSecretVictory: false,
       enableSecretObjectives: true,
     },
@@ -229,8 +227,8 @@ export function addPlayer(
     ready: bot,
     gold: BALANCE.initialGold,
     manpower: BALANCE.initialManpower,
-    influence: 8,
-    prestige: 10,
+    influence: BALANCE.initialAuthority,
+    prestige: 0,
     stability: 100,
     warExhaustion: 0,
     wonBattles: 0,
@@ -240,7 +238,7 @@ export function addPlayer(
     moraleBonusUntil: 0,
     disarmUntil: 0,
     armyCap: 12,
-    manpowerCap: 18,
+    manpowerCap: ECONOMY_BALANCE.manpowerCapacityBase,
     emergencyLevyTurn: null,
     homelandDefenseUntil: 0,
     lostProvinceIds: [],
@@ -319,10 +317,10 @@ export function startGame(g: GameState, _now = 0) {
                 aurelia: 'germany',
                 sol_invicto: 'italy',
                 kaldor: 'france',
-                vespera: 'portugal',
+                vespera: 'castile',
                 ferro_norte: 'scandinavia',
-                turan: 'hungary',
-                sapiencia: 'lowlands',
+                turan: 'muscovy',
+                sapiencia: 'poland',
                 veridia: 'balkans',
               }[p.nationId]) &&
         !reservedHomes.has(q.id),
@@ -381,6 +379,8 @@ export function startGame(g: GameState, _now = 0) {
     home.religion = p.faith;
     home.portLevel = home.isCoastal ? 1 : 0;
   }
+  const hasSupportTerritories =
+    g.provinces.filter((q) => q.kind === 'LAND').length >= g.players.length * 2;
   for (const p of g.players) {
     const nation = nationOf(p.nationId),
       home = homes.get(p.id)!;
@@ -398,11 +398,13 @@ export function startGame(g: GameState, _now = 0) {
             (shortestPath(g.provinces, home.id, a.id)?.length ?? 999) -
               (shortestPath(g.provinces, home.id, b.id)?.length ?? 999) || a.id.localeCompare(b.id),
         )[0];
-    assert(support, 'Mapa sem espaço para guarnições.');
-    support.ownerId = p.id;
-    support.pacification = 100;
-    support.unrest = 5;
-    support.religion = p.faith;
+    assert(!hasSupportTerritories || support, 'Mapa sem espaço para guarnições.');
+    if (hasSupportTerritories && support) {
+      support.ownerId = p.id;
+      support.pacification = 100;
+      support.unrest = 5;
+      support.religion = p.faith;
+    }
     createBattalion(
       g,
       p.id,
@@ -410,13 +412,14 @@ export function startGame(g: GameState, _now = 0) {
       { ...nation.initial, warships: 0, transports: 0 },
       { name: `Exército de ${home.name}`, morale: 80, training: 1.2 },
     );
-    createBattalion(
-      g,
-      p.id,
-      support.id,
-      { ...zeroComposition(), infantry: 3 },
-      { name: `Guarda de ${support.name}`, morale: 75, training: 1.15 },
-    );
+    if (hasSupportTerritories && support)
+      createBattalion(
+        g,
+        p.id,
+        support.id,
+        { ...zeroComposition(), infantry: 3 },
+        { name: `Guarda de ${support.name}`, morale: 75, training: 1.15 },
+      );
     if (home.portLevel)
       createBattalion(
         g,
@@ -459,7 +462,7 @@ export function startGame(g: GameState, _now = 0) {
     home.baseTax++;
     const delta = realmEconomy(g, p.id).net - before;
     home.baseTax = roundMoney(
-      Math.max(1, home.baseTax - 1 + (10 - before) / Math.max(0.01, delta)),
+      Math.max(1, home.baseTax - 1 + (BALANCE.openingNetTarget - before) / Math.max(0.01, delta)),
     );
   }
   for (const p of g.players) {
@@ -766,7 +769,7 @@ export function validateOrder(g: GameState, id: string, o: PlayerOrder) {
       o.type === 'RECRUIT_BATTALION' && o.isMercenary ? undefined : orderKey(o),
     );
   assert(
-    actor.gold - reserved.gold >= cost.gold &&
+    actor.gold - reserved.gold + MONEY_EPSILON >= cost.gold &&
       actor.manpower - reserved.manpower >= cost.manpower &&
       getNationAuthority(actor) - reserved.influence >= cost.influence,
     'Recursos livres insuficientes.',
@@ -891,8 +894,8 @@ function resolveLocal(
       if (crossBorder) p.unrest = clamp(p.unrest + 20);
       actor.conversions++;
       if (actor.nationId === 'sol_invicto') {
-        actor.gold = roundMoney(actor.gold + 25);
-        actor.militaryXP += 10;
+        actor.gold = roundMoney(actor.gold + ECONOMY_BALANCE.conversionGold);
+        actor.militaryXP += ECONOMY_BALANCE.authorityFromConversion;
       }
       report.conversions.push({
         provinceId: p.id,
@@ -921,9 +924,11 @@ function resolveLocal(
       q.razedTurn = g.turn;
       q.unrest = clamp(q.unrest + 40);
       q.pacification = 0;
-      actor.gold = roundMoney(actor.gold + 80);
+      actor.gold = roundMoney(actor.gold + ECONOMY_BALANCE.razeGold);
       if (actor.nationId === 'ferro_norte') a.morale = clamp(a.morale + 25);
-      report.events.push(`${actor.nation} arrasou ${q.name} e recebeu 80 ouro.`);
+      report.events.push(
+        `${actor.nation} arrasou ${q.name} e recebeu ${ECONOMY_BALANCE.razeGold} ouro.`,
+      );
     }
     if (o.type === 'ASSAULT_SIEGE') {
       moved.add(a.id);
@@ -931,7 +936,7 @@ function resolveLocal(
     }
     if (o.type === 'TRAIN_BATTALION') {
       moved.add(a.id);
-      actor.militaryXP += 8;
+      actor.militaryXP += ECONOMY_BALANCE.authorityFromTraining;
       a.training = Math.min(1.5, a.training + 0.1);
       a.morale = clamp(a.morale + 8);
       a.pathQueue = [];
@@ -1096,7 +1101,11 @@ function moveBattalions(g: GameState, report: TurnResolutionReport, moved: Set<s
     a.movementCredit = Math.min(
       Math.max(2, a.movementPoints),
       (a.movementCredit ?? 0) +
-        (a.isFleet && winterActive(g) && !immune && !hasSkill(g, a.ownerId, 'NAV_T3')
+        (a.isFleet &&
+        winterActive(g) &&
+        !immune &&
+        a.blitzUntilTurn !== g.turn &&
+        !hasSkill(g, a.ownerId, 'NAV_T3')
           ? 0.75
           : a.movementPoints),
     );
@@ -1119,6 +1128,7 @@ function moveBattalions(g: GameState, report: TurnResolutionReport, moved: Set<s
         !from.straitNeighbors.includes(target.id) &&
         !a.isFleet &&
         !immune &&
+        a.blitzUntilTurn !== g.turn &&
         commanderFor(g, a)?.trait !== 'BLITZ_VANGUARD'
           ? 1.5
           : 1;
@@ -1127,6 +1137,7 @@ function moveBattalions(g: GameState, report: TurnResolutionReport, moved: Set<s
         step > 0 &&
         !a.isFleet &&
         !hasSkill(g, a.ownerId, 'CAV_T3') &&
+        a.blitzUntilTurn !== g.turn &&
         (!['plains', 'coastal'].includes(from.terrain) ||
           !['plains', 'coastal'].includes(target.terrain) ||
           a.movementPoints < 2)
@@ -1199,6 +1210,25 @@ function stationaryClashes(g: GameState, report: TurnResolutionReport, moved: Se
 }
 function applySupply(g: GameState, report: TurnResolutionReport) {
   const starving = new Set<string>();
+  for (const a of [...g.battalions]) {
+    if (a.supplySabotagedUntilTurn !== g.turn || a.embarkedOnId || a.stranded) continue;
+    const before = unitCount(a),
+      losses = Math.max(1, Math.ceil(before * 0.1));
+    removeUnits(a, losses);
+    starving.add(a.id);
+    report.attritionLosses.push({
+      armyId: a.id,
+      ownerId: a.ownerId,
+      provinceId: a.provinceId,
+      troopsBefore: before,
+      supplyLimit: 0,
+      losses: before - unitCount(a),
+    });
+    report.events.push(
+      `${a.name}: suprimento sabotado, ${before - unitCount(a)} baixa(s) por desabastecimento.`,
+    );
+    if (!unitCount(a)) destroyBattalion(g, a);
+  }
   for (const p of g.provinces) {
     const armies = g.battalions.filter(
       (a) => a.provinceId === p.id && !a.embarkedOnId && !a.stranded,
@@ -1305,6 +1335,8 @@ export function resolveTurn(g: GameState, _now = 0) {
     .sort((a, b) => roll(g, orderKey(a.o) + a.id) - roll(g, orderKey(b.o) + b.id));
   for (const { id, o } of queued) resolveLocal(g, id, o, report, moved);
   moveBattalions(g, report, moved);
+  for (const a of g.battalions)
+    if (a.blitzUntilTurn === g.turn && moved.has(a.id)) a.movementCredit = 0;
   stationaryClashes(g, report, moved);
   resolveBombardments(g, report, moved, bridgeOrigins);
   resolveBridges(g, report, moved, bridgeOrigins);
@@ -1349,7 +1381,7 @@ export function resolveTurn(g: GameState, _now = 0) {
       .reduce((n, a) => n + unitCount(a), 0);
     if (p.templeLevel > 0) {
       p.unrest = clamp(p.unrest - 15 * p.templeLevel);
-      actor.militaryXP += 2 * p.templeLevel;
+
       actor.stability = clamp(
         actor.stability + (goldRules(g) && actor.nationId === 'aurelia' ? 4 : 2) * p.templeLevel,
       );
@@ -1486,9 +1518,14 @@ export function resolveTurn(g: GameState, _now = 0) {
     p.gold = roundMoney(Math.max(0, p.gold + eco.net));
     p.armyCap = eco.armyCap;
     p.manpowerCap = eco.manpowerCap;
-    p.manpower = Math.min(eco.manpowerCap, p.manpower + eco.manpower);
-    if (g.provinces.some((q) => q.ownerId === p.id)) p.militaryXP += 10;
-    p.influence = Math.min(50, p.influence + 2);
+    if (p.manpower < eco.manpowerCap)
+      p.manpower = Math.min(eco.manpowerCap, p.manpower + eco.manpower);
+    if (g.provinces.some((q) => q.ownerId === p.id)) {
+      const authorityDelta = authorityIncome(g, p.id);
+      if (authorityDelta >= 0) p.militaryXP += authorityDelta;
+      else if (!spendNationAuthority(p, -authorityDelta)) p.prestige += authorityDelta;
+    }
+
     p.tradeEarned = roundMoney(p.tradeEarned + eco.trade);
     for (const a of g.battalions.filter((a) => a.ownerId === p.id && !a.stranded)) {
       a.morale = clamp(
@@ -1704,6 +1741,12 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
   )
     assert(g.phase === 'planning', 'A campanha não está em andamento.');
   switch (command.type) {
+    case 'MASS_RECRUIT':
+      executeMassRecruitment(g, actorId, command.composition, submitOrder);
+      break;
+    case 'EXECUTE_SUPREME_COMMAND':
+      executeSupremeCommand(g, actorId, command);
+      break;
     case 'CHOOSE_DILEMMA':
       issueDilemmas(g);
       chooseDilemma(g, actorId, command.option);
@@ -1932,7 +1975,6 @@ export function executeCommand(input: GameState, actorId: string, raw: GameComma
     const l = realmLimits(g, p.id);
     p.armyCap = l.armyCap;
     p.manpowerCap = l.manpowerCap;
-    p.manpower = Math.min(p.manpower, l.manpowerCap);
   }
   return g;
 }

@@ -1,3 +1,6 @@
+import { DILEMMAS } from '../shared/dilemmas';
+import { ECONOMY_BALANCE } from '../shared/balance';
+import { neutralCouncilModifiers } from '../shared/councilEffects';
 import { siegeResistance } from '../shared/siege';
 import {
   closeSync,
@@ -23,11 +26,66 @@ export interface SavedRoom {
   sessions: { playerId: string; tokenHash: string }[];
   touched: number;
   remainingMs: number;
+  lastHumanActivityAt?: number;
 }
 interface Snapshot {
   schemaVersion: 7;
   savedAt: number;
   rooms: SavedRoom[];
+}
+const councilModifierNames = new Set(Object.keys(neutralCouncilModifiers()));
+function validCouncilEffects(value: unknown, provinceIds: Set<string>, turn: number): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length > 32) return false;
+  const seen = new Set<string>();
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
+    const effect = candidate as Record<string, unknown>;
+    if (
+      typeof effect.id !== 'string' ||
+      !effect.id.trim() ||
+      seen.has(effect.id) ||
+      typeof effect.sourceId !== 'string' ||
+      !DILEMMAS.some((dilemma) => dilemma.id === effect.sourceId) ||
+      typeof effect.label !== 'string' ||
+      !effect.label.trim() ||
+      !Number.isInteger(effect.startsTurn) ||
+      Number(effect.startsTurn) < 1 ||
+      Number(effect.startsTurn) > turn ||
+      !Number.isInteger(effect.expiresTurn) ||
+      Number(effect.expiresTurn) < Number(effect.startsTurn) ||
+      Number(effect.expiresTurn) - Number(effect.startsTurn) + 1 > 12 ||
+      (effect.provinceId !== undefined &&
+        (typeof effect.provinceId !== 'string' || !provinceIds.has(effect.provinceId))) ||
+      !effect.modifiers ||
+      typeof effect.modifiers !== 'object' ||
+      Array.isArray(effect.modifiers)
+    )
+      return false;
+    for (const [name, amount] of Object.entries(effect.modifiers)) {
+      if (!councilModifierNames.has(name) || typeof amount !== 'number' || !Number.isFinite(amount))
+        return false;
+      if (name.endsWith('Multiplier') ? amount < 0.1 || amount > 3 : amount < -100 || amount > 100)
+        return false;
+    }
+    seen.add(effect.id);
+  }
+  return true;
+}
+function validActiveDilemma(value: unknown, provinceIds: Set<string>, turn: number): boolean {
+  if (value === undefined || value === null) return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const active = value as Record<string, unknown>;
+  return (
+    typeof active.id === 'string' &&
+    DILEMMAS.some((dilemma) => dilemma.id === active.id) &&
+    Number.isInteger(active.turn) &&
+    Number(active.turn) >= 1 &&
+    active.turn === turn &&
+    (active.targetProvinceId === undefined ||
+      (typeof active.targetProvinceId === 'string' && provinceIds.has(active.targetProvinceId))) &&
+    (active.context === undefined || typeof active.context === 'string')
+  );
 }
 export function validGame(g: GameState): boolean {
   try {
@@ -97,9 +155,25 @@ export function validGame(g: GameState): boolean {
           p.manpowerCap,
           p.homelandDefenseUntil,
         ].every(Number.isFinite) ||
+        [
+          p.dilemmaAttackUntilTurn,
+          p.dilemmaBuildingCredits,
+          p.lastDilemmaTurn,
+          p.afkStreak,
+          p.authorityEarnedTurn,
+          p.authorityEarnedThisTurn,
+        ].some((v) => v !== undefined && (!Number.isInteger(v) || v < 0)) ||
+        (p.authorityEarnedTurn !== undefined && p.authorityEarnedTurn > g.turn) ||
+        (p.authorityEarnedThisTurn !== undefined &&
+          p.authorityEarnedThisTurn > ECONOMY_BALANCE.militaryAuthorityCapPerTurn) ||
+        !validCouncilEffects(p.councilEffects, provinceIds, g.turn) ||
+        !validActiveDilemma(p.activeDilemma, provinceIds, g.turn) ||
+        (p.lastDilemmaId !== undefined &&
+          !DILEMMAS.some((dilemma) => dilemma.id === p.lastDilemmaId)) ||
+        (p.authority !== undefined && (!Number.isInteger(p.authority) || p.authority < 0)) ||
+        (p.afkRegent !== undefined && typeof p.afkRegent !== 'boolean') ||
         p.armyCap < 12 ||
-        p.manpowerCap < 18 ||
-        p.manpower > p.manpowerCap + 1e-7 ||
+        p.manpowerCap < ECONOMY_BALANCE.manpowerCapacityBase ||
         (p.emergencyLevyTurn !== null &&
           (!Number.isInteger(p.emergencyLevyTurn) ||
             p.emergencyLevyTurn < 1 ||
@@ -243,6 +317,9 @@ export function validGame(g: GameState): boolean {
         !provinceIds.has(a.provinceId) ||
         UNIT_KEYS.some((k) => !Number.isInteger(a[k]) || a[k] < 0) ||
         unitCount(a) < 1 ||
+        [a.blitzUntilTurn, a.supplySabotagedUntilTurn].some(
+          (v) => v !== undefined && (!Number.isInteger(v) || v < 0),
+        ) ||
         !Number.isFinite(a.morale) ||
         a.morale < 0 ||
         a.morale > (g.matchConfig?.ruleset === 'GOLD_098' && a.moraleCap === 110 ? 110 : 100) ||
@@ -385,6 +462,8 @@ function decode(value: unknown): SavedRoom[] {
     if (
       !validGame(room.game) ||
       !Number.isFinite(room.touched) ||
+      (room.lastHumanActivityAt !== undefined &&
+        (!Number.isFinite(room.lastHumanActivityAt) || room.lastHumanActivityAt < 0)) ||
       !Number.isFinite(room.remainingMs) ||
       room.remainingMs < 0 ||
       !Array.isArray(room.sessions) ||
@@ -465,4 +544,42 @@ export function writeSnapshot(filename: string, rooms: SavedRoom[], now: number)
     copyFileSync(filename, intact ? `${filename}.bak` : `${filename}.corrupt-${now}`);
   }
   renameSync(temporary, filename);
+}
+
+export interface ArchivedRoom {
+  format: 'CONCORDIA_ROOM_ARCHIVE_101';
+  archivedAt: number;
+  closed: true;
+  room: SavedRoom;
+}
+export function writeRoomArchive(filename: string, room: SavedRoom, now: number) {
+  decode({ schemaVersion: 7, rooms: [room] });
+  const archive: ArchivedRoom = {
+    format: 'CONCORDIA_ROOM_ARCHIVE_101',
+    archivedAt: now,
+    closed: true,
+    room,
+  };
+  mkdirSync(path.dirname(filename), { recursive: true });
+  const temporary = `${filename}.tmp`;
+  const fd = openSync(temporary, 'w', 0o600);
+  try {
+    writeFileSync(fd, JSON.stringify(archive));
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(temporary, filename);
+}
+export function readRoomArchive(filename: string): SavedRoom | null {
+  if (!existsSync(filename)) return null;
+  const archive = JSON.parse(readFileSync(filename, 'utf8')) as Partial<ArchivedRoom>;
+  if (
+    archive.format !== 'CONCORDIA_ROOM_ARCHIVE_101' ||
+    archive.closed !== true ||
+    !Number.isFinite(archive.archivedAt) ||
+    !archive.room
+  )
+    throw new Error('Arquivo de sala arquivada inválido; o original foi preservado.');
+  return decode({ schemaVersion: 7, rooms: [archive.room] })[0];
 }

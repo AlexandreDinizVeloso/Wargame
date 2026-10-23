@@ -1,6 +1,19 @@
-# Concórdia — Atlas de Impérios · v1.0
+# Concórdia — Atlas de Impérios · v1.01
 
 Grand Strategy multiplayer para **3–8 jogadores**, com ordens simultâneas, **oito nações assimétricas**, guerras formais, recursos estratégicos, estações, crises e coalizões. Vitória por **75% das terras, com peso de 50% para vassalos**, eliminação dos rivais ou **objetivo secreto**. As partidas não têm limite de rodadas.
+
+## v1.01 · Risk-Paced Edition & Audio/UI Fix
+
+- **42 territórios terrestres e 10 mares**, Brasil unificado e bônus pelo domínio dos cinco continentes.
+- **Ações Rápidas** para recrutar em massa com distribuição automática e previsão de custos por cidade.
+- Economia escassa: 40 Ouro, 8 Recrutas e 8 Autoridade iniciais; crescimento reduzido e investimentos mais caros.
+- Cinco Comandos Supremos e Conselho com crises contextuais, cartas táticas e políticas temporárias a cada quatro rodadas.
+- Cinco SFX suaves, duas músicas instrumentais e mixer com seis canais independentes.
+- Inspetor e Crônica/Ordens simultâneos, móveis e redimensionáveis.
+- Arquivamento automático após 15 minutos, download de save pelo anfitrião e recuperação por código.
+- Testes numéricos de aceitação integrados ao build.
+
+Veja [regras, áudio, recuperação e compatibilidade v1.01](docs/V1_01.md). Saves existentes preservam seu mapa e credenciais; o novo tabuleiro vale para novas campanhas.
 
 ## v1.0 · Geografia, decisões e regência
 
@@ -126,7 +139,7 @@ Sem banco externo, chave de API ou assets remotos. No cloud com cache pessoal se
 | Sapiência   | Recruta com treinamento 1,20×; vê intenções inimigas em províncias adjacentes                                       |
 | Verídia     | Camuflagem em mata/colinas próprias; defesa local com +50% poder de emboscada                                       |
 
-As 95 terras e 13 zonas marítimas usam geometria Natural Earth incorporada, de domínio público. Os teatros Europa/Mediterrâneo, Américas e Ásia/Pérsia têm 34, 23 e 28 terras, respectivamente. As nações são ficcionais sobre geografia terrestre; o mapa não pretende reconstruir fronteiras de 1550. Quatro religiões fictícias mantêm doutrinas e cidades sagradas.
+As 42 terras e 10 zonas marítimas usam geometria Natural Earth incorporada, de domínio público. Os teatros Europa, Américas e Ásia têm 9, 11 e 13 terras, respectivamente. As nações são ficcionais sobre geografia terrestre; o mapa não pretende reconstruir fronteiras de 1550. Quatro religiões fictícias mantêm doutrinas e cidades sagradas.
 
 Trigo, ferro, cavalos, minas de ouro e relíquias aparecem no mapa e alteram recrutamento, ataque, suprimento, renda e moral. Primavera, verão, outono e inverno formam um ano. Uma crise a cada quatro rodadas dura duas rodadas; expansão excessiva permite coalizões de contenção.
 

@@ -1,10 +1,10 @@
 {
   "name": "concordia-desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
-  "description": "Conc\u00f3rdia desktop client and local multiplayer host",
+  "description": "Concórdia desktop client and local multiplayer host",
   "main": "main.cjs",
-  "author": "Conc\u00f3rdia",
+  "author": "Concórdia",
   "scripts": {
     "start": "electron .",
     "package": "electron-builder --dir"
@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "com.concordia.wargame",
-    "productName": "Conc\u00f3rdia",
+    "productName": "Concórdia",
     "directories": {
       "output": "../.local/desktop-build"
     },

@@ -1,3 +1,4 @@
+import { ECONOMY_BALANCE } from './balance';
 import type { BuildingType, CityOrder, GameState, Player, Province } from './types';
 import { controller } from './rules';
 export const BUILDINGS: Record<
@@ -12,40 +13,41 @@ export const BUILDINGS: Record<
 > = {
   MARKET: {
     name: 'Mercado / Bolsa',
-    description: '+3 comércio por nível.',
-    baseCost: 20,
+    description: '+2 comércio por nível.',
+    baseCost: ECONOMY_BALANCE.buildingGold.MARKET,
     field: 'marketLevel',
   },
   BARRACKS: {
     name: 'Quartel / Academia',
     description:
-      '+5 limite militar, +8 capacidade e +1,5 regeneração de reservas por nível; recruta 4/7 e libera armas avançadas.',
-    baseCost: 24,
+      '+5 limite militar, +4 capacidade e +0,5 regeneração de reservas por nível; recruta 4/7 e libera armas avançadas.',
+    baseCost: ECONOMY_BALANCE.buildingGold.BARRACKS,
     field: 'barracksLevel',
   },
   FORT: {
     name: 'Fortaleza / Cidadela',
     description: '+15% defesa, +2 resistência de cerco e zona de controle por nível.',
-    baseCost: 24,
+    baseCost: ECONOMY_BALANCE.buildingGold.FORT,
     field: 'fortLevel',
   },
   FOUNDRY: {
     name: 'Arsenal / Fundição',
     description:
-      '+10% equipamento de infantaria/artilharia e +2 indústria; 1,5 ouro de manutenção por nível, isento em ferro.',
-    baseCost: 30,
+      '+10% equipamento de infantaria/artilharia e +1 indústria; 1,5 ouro de manutenção por nível, isento em ferro.',
+    baseCost: ECONOMY_BALANCE.buildingGold.FOUNDRY,
     field: 'foundryLevel',
   },
   TEMPLE: {
     name: 'Templo / Catedral',
-    description: '−15 revolta, +25% pacificação e +2 Autoridade e estabilidade por nível.',
-    baseCost: 22,
+    description:
+      '−15 revolta, +25% pacificação e +1 Autoridade por nível a cada 4 rodadas e +2 estabilidade.',
+    baseCost: ECONOMY_BALANCE.buildingGold.TEMPLE,
     field: 'templeLevel',
   },
   PORT: {
     name: 'Estaleiro / Porto',
-    description: 'Recruta frotas; +2,5 comércio e +4 suprimento costeiro por nível.',
-    baseCost: 28,
+    description: 'Recruta frotas; +1,5 comércio e +4 suprimento costeiro por nível.',
+    baseCost: ECONOMY_BALANCE.buildingGold.PORT,
     field: 'portLevel',
   },
 };

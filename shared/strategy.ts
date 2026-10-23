@@ -1,3 +1,4 @@
+import { councilModifiers } from './councilEffects';
 import { goldRules } from './factions';
 import type {
   Battalion,
@@ -211,7 +212,9 @@ export function effectiveSupply(
   g: Pick<GameState, 'provinces' | 'players' | 'season' | 'globalEvent' | 'turn'>,
   id: string,
   p: import('./types').Province,
+  army?: import('./types').Battalion,
 ) {
+  if (army?.supplySabotagedUntilTurn === g.turn) return 0;
   const ironNorth = g.players.find((q) => q.id === id)?.nationId === 'ferro_norte';
   const local =
     p.baseSupplyLimit +
@@ -220,5 +223,15 @@ export function effectiveSupply(
     (p.isCoastal ? p.portLevel * 4 : 0) +
     (p.pacification >= 80 ? 2 : 0) +
     (ironNorth && p.terrain === 'forest' ? Math.max(0, 18 - p.baseSupplyLimit) : 0);
-  return (local + globalSupplyBonus(g, id)) * (winterActive(g) && !ironNorth ? 0.75 : 1);
+  return Math.max(
+    0,
+    (local +
+      globalSupplyBonus(g, id) +
+      councilModifiers(
+        g.players.find((player) => player.id === id),
+        g.turn,
+        p.id,
+      ).supplyBonus) *
+      (winterActive(g) && !ironNorth ? 0.75 : 1),
+  );
 }

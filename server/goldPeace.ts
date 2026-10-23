@@ -1,3 +1,4 @@
+import { ECONOMY_BALANCE } from '../shared/balance';
 import type { GameState, PeaceTerm, War } from '../shared/types';
 import { treatyCost, treatyPerspective } from '../shared/treaties';
 import { clamp, getRelation, peaceDescription } from '../shared/rules';
@@ -80,8 +81,8 @@ export function enactGoldPeace(
         untilTurn: g.turn + 4,
       });
     if (t.type === 'HUMILIATE_DEMILITARIZE') {
-      winner.prestige += 15;
-      loser.prestige -= 15;
+      winner.prestige += ECONOMY_BALANCE.authorityFromGoldHumiliation;
+      loser.prestige -= ECONOMY_BALANCE.authorityFromGoldHumiliation;
       loser.disarmUntil = g.turn + 4;
     }
     if (t.type === 'SUBJUGATE_VASSAL') {

@@ -124,7 +124,7 @@ test('servidor headless responde sem frontend e recupera a campanha após SIGKIL
   assert.equal(schema.impassableFeatures.length, 4);
   assert.equal(Object.keys(schema.commanderTraits).length, 6);
   assert.equal(Object.keys(schema.buildings).length, 6);
-  assert.equal(schema.map.filter((p) => p.terrain).length, 108);
+  assert.equal(schema.map.filter((p) => p.terrain).length, 52);
   assert.ok(schema.map.every((p) => p.terrain && p.path));
   assert.equal((await fetch(`http://127.0.0.1:${initial.port}/`)).status, 404);
   const socket = await connect(initial.port);

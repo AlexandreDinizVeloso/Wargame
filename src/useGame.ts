@@ -46,8 +46,10 @@ export function useGame() {
     session = useRef<Session | null>(null);
   const saveSession = (value: Session | null) => {
     try {
-      if (value) sessionStorage.setItem('concordia-session', JSON.stringify(value));
-      else sessionStorage.removeItem('concordia-session');
+      if (value) {
+        sessionStorage.setItem('concordia-session', JSON.stringify(value));
+        sessionStorage.setItem('concordia-recovery-session', JSON.stringify(value));
+      } else sessionStorage.removeItem('concordia-session');
     } catch {
       setError('O navegador não permitiu guardar a sessão. Mantenha esta aba aberta.');
     }
@@ -136,7 +138,10 @@ export function useGame() {
             break;
           case 'error':
             setError(data.message);
-            if (data.message.startsWith('Não foi possível recuperar')) {
+            if (
+              data.message.startsWith('Não foi possível recuperar') ||
+              data.message.startsWith('Sala arquivada')
+            ) {
               session.current = null;
               saveSession(null);
               setGame(null);
@@ -154,6 +159,15 @@ export function useGame() {
       ws.onclose = (event) => {
         if (stopped) return;
         setStatus('offline');
+        if (event.code === 4004) {
+          session.current = null;
+          saveSession(null);
+          setGame(null);
+          setPlayerId('');
+          setError(
+            'Sala arquivada com progresso salvo. Use Recuperar sala pelo código para retomar.',
+          );
+        }
         if (event.code === 4001) {
           setError('Esta sessão está ativa em outra conexão. Recarregue para recuperá-la.');
           return;

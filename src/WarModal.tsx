@@ -15,6 +15,8 @@ export default function WarModal({
   autoTransport,
   command,
   close,
+  active,
+  onActivate,
 }: {
   game: GameView;
   playerId: string;
@@ -46,7 +48,13 @@ export default function WarModal({
     game.phase !== 'planning' ||
     game.turn <= game.graceUntilTurn;
   return (
-    <TopBarModal id="war" title={`Ato de Guerra contra ${target.nation}`} onClose={close}>
+    <TopBarModal
+      id="war"
+      title={`Ato de Guerra contra ${target.nation}`}
+      onClose={close}
+      active={active}
+      onActivate={onActivate}
+    >
       <section className="war-modal popup-sheet">
         <h2>⚔️ Ato de Guerra contra {target.nation}</h2>
         <p>

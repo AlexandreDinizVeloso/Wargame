@@ -2,9 +2,11 @@ import { goldRules } from './factions';
 import type { Battalion, GameState } from './types';
 import { atWar, controller, getRelation, sameWarSide } from './rules';
 export function supplyConnected(
-  g: Pick<GameState, 'provinces' | 'battalions' | 'wars' | 'relations' | 'players'>,
+  g: Pick<GameState, 'provinces' | 'battalions' | 'wars' | 'relations' | 'players'> &
+    Partial<Pick<GameState, 'turn'>>,
   army: Battalion,
 ) {
+  if (g.turn !== undefined && army.supplySabotagedUntilTurn === g.turn) return false;
   const own = g.provinces.filter(
     (p) => p.kind === 'LAND' && p.ownerId === army.ownerId && !p.occupierId,
   );

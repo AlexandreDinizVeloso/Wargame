@@ -28,9 +28,6 @@ export function MiniatureDefs() {
         <stop offset=".5" stopColor="#f59e0b" />
         <stop offset="1" stopColor="#dc4825" />
       </radialGradient>
-      <filter id="miniature-drop-shadow" x="-70%" y="-60%" width="240%" height="240%">
-        <feDropShadow dx="1" dy="3" stdDeviation="1.7" floodColor="#02131c" floodOpacity=".7" />
-      </filter>
     </>
   );
 }
@@ -156,7 +153,6 @@ export function ArmyCrestToken({
         fill={`url(#${id})`}
         stroke="#785c18"
         strokeWidth="3.5"
-        filter="url(#miniature-drop-shadow)"
       />
       <path
         d="M0-20L16-14V4Q16 14 0 23Q-16 14-16 4V-14Z"
@@ -255,7 +251,7 @@ export function FleetShipToken({
       {selected && (
         <ellipse cy="3" rx="34" ry="32" fill="none" stroke="#ffdfa0" strokeDasharray="3 3" />
       )}
-      <g filter="url(#miniature-drop-shadow)">
+      <g>
         <path
           d="M-28 8Q-18 28 17 21L29 9L18 11L-25 6Z"
           fill="url(#miniature-wood)"

@@ -1,10 +1,14 @@
+import { CONTINENT_BONUSES } from '../shared/risk';
+import { SUPREME_COMMANDS } from '../shared/supreme';
+import { BALANCE, ECONOMY_BALANCE } from '../shared/balance';
+import { MAX_MASS_RECRUITMENT } from '../shared/massRecruitment';
 import { SKILLS, TRAITS } from '../shared/military';
 import { BUILDINGS } from '../shared/development';
 import http from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { attachRooms } from './rooms';
+import { attachRooms, RoomSaveDownloadError } from './rooms';
 import {
   makeMap,
   makeStaticMap,
@@ -40,6 +44,12 @@ const server = http.createServer((req, res) => {
     const files = ['cannon', 'march', 'sail', 'horn', 'coin']
       .flatMap((name) => ['wav', 'ogg', 'mp3'].map((ext) => `${name}.${ext}`))
       .filter((name) => existsSync(path.join(folder, name)));
+    const musicFolder = path.join(root, production ? 'dist' : 'public', 'assets', 'music');
+    files.push(
+      ...['bgm-peace.wav', 'bgm-war.wav'].filter((name) =>
+        existsSync(path.join(musicFolder, name)),
+      ),
+    );
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
     res.end(JSON.stringify(files));
     return;
@@ -50,7 +60,7 @@ const server = http.createServer((req, res) => {
       JSON.stringify({
         status: 'ok',
         game: 'concordia',
-        version: '1.0.0',
+        version: '1.0.1',
         protocolVersion: 7,
       }),
     );
@@ -64,6 +74,37 @@ const server = http.createServer((req, res) => {
     res.end(
       JSON.stringify(roomService.listPublicRooms(req.url?.split('?')[0] === '/api/rooms/public')),
     );
+    return;
+  }
+  const download = req.url?.split('?')[0].match(/^\/api\/rooms\/([A-Za-z0-9]{6})\/DownloadSave$/);
+  if (req.method === 'GET' && download) {
+    try {
+      const playerId =
+        typeof req.headers['x-concordia-player'] === 'string'
+          ? req.headers['x-concordia-player']
+          : '';
+      const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1] ?? '';
+      const save = roomService.downloadSave(download[1], playerId, token);
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Content-Disposition': `attachment; filename="concordia-save-${save.game.code}.json"`,
+      });
+      res.end(JSON.stringify(save));
+    } catch (error) {
+      res.writeHead(error instanceof RoomSaveDownloadError ? error.status : 500, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end(
+        JSON.stringify({
+          error:
+            error instanceof RoomSaveDownloadError
+              ? error.message
+              : 'Não foi possível ler o arquivo preservado da campanha.',
+        }),
+      );
+    }
     return;
   }
   if (req.url?.split('?')[0] === '/api/schema') {
@@ -92,6 +133,16 @@ const server = http.createServer((req, res) => {
         ),
         objectives: OBJECTIVES,
         dilemmas: DILEMMAS,
+        continentBonuses: CONTINENT_BONUSES,
+        supremeCommands: SUPREME_COMMANDS,
+        balance: { opening: BALANCE, economy: ECONOMY_BALANCE },
+        massRecruitment: {
+          command: 'MASS_RECRUIT',
+          units: ['infantry', 'cavalry', 'artillery'],
+          maximumRequest: MAX_MASS_RECRUITMENT,
+          preservesExistingOrders: true,
+          allowsPartialFulfillment: true,
+        },
         rivers: WORLD_RIVERS,
         riverCrossings,
         impassableFeatures,

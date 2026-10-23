@@ -1,3 +1,4 @@
+import { BALANCE } from '../shared/balance';
 import type { GameState } from '../shared/types';
 import { createBattalion } from './state';
 import { compositionOf } from '../shared/rules';
@@ -9,7 +10,7 @@ export function prepareTutorial(g: GameState, playerId: string) {
   g.isPublic = false;
   g.enableSecretObjectives = false;
   g.matchConfig.enableSecretObjectives = false;
-  player.gold = 180;
+  player.gold = BALANCE.tutorialGold;
   player.influence = 35;
   for (const c of g.commanders.filter((c) => c.ownerId === playerId)) c.assignedBattalionId = null;
   const target = g.provinces.find((p) => p.id === 'maghreb')!;
@@ -19,7 +20,7 @@ export function prepareTutorial(g: GameState, playerId: string) {
   target.siege = null;
   target.neutralDevelopmentLevel = 0;
   g.battalions = g.battalions.filter((a) => a.provinceId !== target.id && a.ownerId !== playerId);
-  createBattalion(g, playerId, 'portugal', compositionOf({ infantry: 8, cavalry: 1 }), {
+  createBattalion(g, playerId, 'castile', compositionOf({ infantry: 8, cavalry: 1 }), {
     name: 'Estandarte do Aprendiz',
     morale: 90,
     training: 1.3,

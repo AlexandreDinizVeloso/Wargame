@@ -1,3 +1,4 @@
+import { ECONOMY_BALANCE } from '../shared/balance';
 import type { GameState, TurnResolutionReport, Player } from '../shared/types';
 import { goldRules } from '../shared/factions';
 import { ERAS, campaignEra } from '../shared/world';
@@ -105,8 +106,9 @@ export function hegemonyWarning(g: GameState, report: TurnResolutionReport) {
         0,
         Math.min(100, g.diet.imperialAuthority + (g.wars.some((w) => w.active) ? -2 : 3)),
       );
-      emperor.prestige += 2;
-      if (g.diet.imperialAuthority >= 75) emperor.gold += 10;
+      if (g.turn % ECONOMY_BALANCE.imperialAuthorityPeriod === 0)
+        emperor.prestige += ECONOMY_BALANCE.imperialAuthorityGain;
+      if (g.diet.imperialAuthority >= 75) emperor.gold += ECONOMY_BALANCE.imperialGold;
     }
   }
 }

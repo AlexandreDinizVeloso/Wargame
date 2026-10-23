@@ -8,7 +8,8 @@ import { WebSocket } from 'ws';
 import { makeMap, WORLD_RIVERS, hasRiverCrossing, impassableFeatures } from '../shared/map';
 import { combatPowers } from '../shared/combat';
 import { getNationAuthority, logisticsPosture } from '../shared/economy';
-import { DILEMMAS, dilemmaFor, dilemmaDefinition } from '../shared/dilemmas';
+import { DILEMMAS, dilemmaFor } from '../shared/dilemmas';
+import { activeCouncilEffects, councilModifiers } from '../shared/councilEffects';
 import { emptyTurnReport, type ClientMessage, type ServerMessage } from '../shared/types';
 import { executeCommand, planBot, submitOrder, viewFor } from '../server/game';
 import { declareWar } from '../server/diplomacy';
@@ -18,37 +19,21 @@ import { applyAfkRegency, restoreRegency, replaceableBot } from '../server/regen
 import { attachRooms } from '../server/rooms';
 import { setup, army } from './fixtures';
 
-test('v100: 95 terras mantêm IDs clássicos, geometria finita, grafo simétrico e gargalos', () => {
+test('v101: 42 macroterritórios e dez mares têm geometria finita e grafo simétrico sem órfãos', () => {
   const map = makeMap('campaign');
-  assert.equal(map.filter((p) => p.kind === 'LAND').length, 95);
-  assert.equal(map.filter((p) => p.kind === 'SEA_ZONE').length, 13);
-  for (const id of [
-    'portugal',
-    'castile',
-    'france',
-    'germany',
-    'italy',
-    'muscovy',
-    'anatolia',
-    'persia',
-    'siberia',
-    'china-east',
-    'india-north',
-    'archipelago',
-    'alaska',
-    'mexico',
-    'guianas',
-    'brazil',
-    'rioplata',
-    'tibet',
-    'nubia',
-    'rhineland',
-    'great-plains',
-  ])
-    assert.ok(
-      map.some((p) => p.id === id),
-      id,
+  assert.equal(map.filter((p) => p.kind === 'LAND').length, 42);
+  assert.equal(map.filter((p) => p.kind === 'SEA_ZONE').length, 10);
+  const ids =
+    'brazil rioplata andes colombia alaska canada-west canada-east usa-west usa-east mexico central-america castile france britain germany italy scandinavia poland balkans muscovy maghreb nile west-africa central-africa east-africa south-africa anatolia arabia persia ural siberia central-asia afghan india-north india-south indochina china-west china-east mongolia korea japan archipelago'.split(
+      ' ',
     );
+  assert.deepEqual(
+    map
+      .filter((p) => p.kind === 'LAND')
+      .map((p) => p.id)
+      .sort(),
+    ids.sort(),
+  );
   for (const p of map) {
     assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y));
     assert.ok(
@@ -58,18 +43,6 @@ test('v100: 95 terras mantêm IDs clássicos, geometria finita, grafo simétrico
     for (const id of p.neighbors)
       assert.ok(map.find((q) => q.id === id)?.neighbors.includes(p.id), `${p.id}/${id}`);
   }
-  for (const [a, b] of [
-    ['tibet', 'india-north'],
-    ['algiers', 'central-africa'],
-    ['tripoli', 'central-africa'],
-  ])
-    assert.equal(map.find((p) => p.id === a)!.neighbors.includes(b), false);
-  for (const [a, b] of [
-    ['maghreb', 'west-africa'],
-    ['nile', 'nubia'],
-    ['afghan', 'punjab'],
-  ])
-    assert.ok(map.find((p) => p.id === a)!.neighbors.includes(b));
   assert.equal(WORLD_RIVERS.length, 11);
   assert.equal(impassableFeatures.length, 4);
   assert.ok(
@@ -83,7 +56,7 @@ test('v100: rio reduz exatamente 15% só das forças que atravessam e apenas na 
     g,
     players: [a, b],
   } = setup();
-  const p = g.provinces.find((p) => p.id === 'rhineland')!;
+  const p = g.provinces.find((p) => p.id === 'germany')!;
   const u = army(g, a.id, 'france', { infantry: 10 });
   const d = army(g, b.id, p.id, { infantry: 10 });
   assert.ok(hasRiverCrossing('france', p.id) && hasRiverCrossing(p.id, 'france'));
@@ -106,11 +79,11 @@ test('v100: guarnição custa metade e ordens de marcha entram na previsão de c
     g,
     players: [a],
   } = setup();
-  const u = army(g, a.id, 'portugal');
+  const u = army(g, a.id, 'castile');
   assert.equal(logisticsPosture(g, u).id, 'GARRISON');
   const cost = realmEconomy(g, a.id).upkeep;
-  g.provinces.find((p) => p.id === 'castile')!.ownerId = a.id;
-  submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['castile'] });
+  g.provinces.find((p) => p.id === 'france')!.ownerId = a.id;
+  submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['france'] });
   assert.equal(logisticsPosture(g, u).multiplier, 1);
   assert.ok(Math.abs(realmEconomy(g, a.id).upkeep - cost * 2) < 0.02);
   g.orders[a.id] = [];
@@ -118,24 +91,48 @@ test('v100: guarnição custa metade e ordens de marcha entram na previsão de c
   assert.equal(logisticsPosture(g, u).id, 'CAMPAIGN');
   g.turn++;
   assert.equal(logisticsPosture(g, u).id, 'GARRISON');
-  g.provinces.find((p) => p.id === 'portugal')!.pacification = 79;
+  g.provinces.find((p) => p.id === 'castile')!.pacification = 79;
   assert.equal(logisticsPosture(g, u).id, 'CAMPAIGN');
-  u.provinceId = 'france';
+  g.provinces.find((p) => p.id === 'japan')!.ownerId = g.players[1].id;
+  u.provinceId = 'japan';
   assert.equal(logisticsPosture(g, u).multiplier, 1.25);
 });
-test('v100: dez dilemas determinísticos, escolhas exclusivas, privacidade e autoridade sincronizada', () => {
+test('v101: Conselho sorteia crises, táticas e políticas contextuais com efeitos e custos distintos', () => {
   const {
     g,
     players: [a, b],
   } = setup();
   assert.equal(DILEMMAS.length, 10);
   assert.equal(new Set(DILEMMAS.map((d) => d.id)).size, 10);
+  assert.deepEqual(
+    new Set(DILEMMAS.map((d) => d.category)),
+    new Set(['CRISIS', 'TACTICAL', 'POLICY']),
+  );
+  assert.equal(new Set(DILEMMAS.flatMap((d) => d.options.map((o) => o.effect))).size, 20);
   for (const d of DILEMMAS) {
     assert.equal(d.options.length, 2);
-    assert.ok(d.options[0].gold > 0 && d.options[0].authority < 0);
-    assert.ok(d.options[1].gold < 0 && d.options[1].manpower > 0 && d.options[1].authority > 0);
+    assert.ok(
+      d.options[0].gold >= 0 && d.options[0].manpower >= 0 && d.options[0].authority >= 0,
+      `${d.id}: a decisão automática precisa ser financiável sem reservas.`,
+    );
+    assert.ok(
+      [d.options[1].gold, d.options[1].manpower, d.options[1].authority].some((v) => v < 0),
+      `${d.id}: a alternativa deve comprometer algum recurso.`,
+    );
+    for (const choice of d.options) {
+      assert.ok(choice.duration >= 2 && choice.duration <= 4);
+      assert.ok(Object.keys(choice.modifiers).length > 0);
+      assert.ok(Object.values(choice.modifiers).every(Number.isFinite));
+    }
   }
-  assert.deepEqual(dilemmaFor(g.seed, a.id, 4), dilemmaFor(g.seed, a.id, 4));
+  assert.deepEqual(dilemmaFor(g.seed, a.id, 4, g), dilemmaFor(g.seed, a.id, 4, g));
+  const observed = new Set(
+    Array.from(
+      { length: 256 },
+      (_, seed) => DILEMMAS.find((d) => d.id === dilemmaFor(seed, a.id, 4, g).id)!.category,
+    ),
+  );
+  assert.deepEqual(observed, new Set(['CRISIS', 'TACTICAL', 'POLICY']));
   g.turn = 3;
   issueDilemmas(g);
   assert.equal(a.activeDilemma, null);
@@ -143,47 +140,85 @@ test('v100: dez dilemas determinísticos, escolhas exclusivas, privacidade e aut
   issueDilemmas(g);
   assert.ok(a.activeDilemma && b.activeDilemma);
   assert.equal(viewFor(g, a.id).players.find((p) => p.id === b.id)!.activeDilemma, null);
-  const choice = dilemmaDefinition(a.activeDilemma)!.options[1];
-  a.gold = 100;
-  a.manpower = 0;
-  const authority = getNationAuthority(a);
+  const issued = g.players.find((p) => p.id === a.id)!.activeDilemma;
+  assert.ok(
+    issued?.targetProvinceId &&
+      g.provinces.some((p) => p.id === issued.targetProvinceId && p.ownerId === a.id),
+  );
+  a.activeDilemma = { id: 'military-council', turn: 4, targetProvinceId: 'castile' };
+  const authority = getNationAuthority(a),
+    gold = a.gold;
+  const before = structuredClone(g);
   const updated = executeCommand(g, a.id, { type: 'CHOOSE_DILEMMA', option: 1 });
-  assert.equal(updated.players.find((p) => p.id === a.id)!.gold, 100 + choice.gold);
-  assert.equal(a.gold, 100);
+  assert.deepEqual(g, before);
+  const decided = updated.players.find((p) => p.id === a.id)!;
+  assert.equal(getNationAuthority(decided), authority - 10);
+  assert.equal(decided.gold, gold);
+  assert.equal(updated.battalions.length, g.battalions.length);
+  assert.equal(councilModifiers(decided, 4).moraleBonus, 20);
+  assert.equal(councilModifiers(decided, 4).upkeepMultiplier, 1.35);
+  assert.equal(activeCouncilEffects(decided, 6).length, 1);
+  assert.equal(activeCouncilEffects(decided, 7).length, 0);
+  assert.equal(councilModifiers(decided, 7).moraleBonus, 0);
   chooseDilemma(g, a.id, 1);
-  assert.equal(a.gold, 100 + choice.gold);
-  assert.equal(a.manpower, Math.min(a.manpowerCap, choice.manpower));
-  assert.equal(a.authority, authority + choice.authority);
+  assert.equal(getNationAuthority(a), authority - 10);
   assert.throws(() => chooseDilemma(g, a.id, 0));
   issueDilemmas(g);
   assert.equal(a.activeDilemma, null);
   g.turn = 8;
   issueDilemmas(g);
   assert.equal(g.players.find((p) => p.id === a.id)!.activeDilemma?.turn, 8);
-  a.gold = 0;
-  assert.throws(() => chooseDilemma(g, a.id, 1));
-  assert.ok(a.activeDilemma);
 });
-test('v100: dilema não respondido aplica opção A uma única vez, mesmo com autoridade esgotada', () => {
+test('v101: Conselho não respondido aplica uma política custosa no tempo, uma única vez e sem tropas gratuitas', () => {
   const {
     g,
     players: [a],
   } = setup();
   g.turn = 4;
-  issueDilemmas(g);
-  a.influence = 0;
-  a.prestige = 0;
-  a.militaryXP = 0;
-  const choice = dilemmaDefinition(a.activeDilemma!)!.options[0],
-    before = a.gold;
+  for (const p of g.players) p.activeDilemma = null;
+  a.activeDilemma = { id: 'mint', turn: 4, targetProvinceId: 'castile' };
+  a.gold = a.manpower = a.influence = a.prestige = a.militaryXP = 0;
   const report = emptyTurnReport(g.turn, g.diet);
   resolveUnansweredDilemmas(g, report);
-  assert.equal(a.gold, before + choice.gold);
+  assert.equal(g.battalions.filter((b) => b.ownerId === a.id).length, 0);
+  assert.equal(a.gold, 20);
+  assert.equal(a.manpower, 0);
   assert.equal(a.authority, 0);
   assert.equal(a.activeDilemma, null);
+  const policy = councilModifiers(a, 4);
+  assert.equal(policy.goldPerTurn, -7);
+  assert.equal(policy.incomeMultiplier, 0.9);
+  assert.equal(policy.authorityGain, -1);
+  assert.equal(activeCouncilEffects(a, 7).length, 1);
+  assert.equal(activeCouncilEffects(a, 8).length, 0);
   resolveUnansweredDilemmas(g, report);
-  assert.equal(a.gold, before + choice.gold);
+  assert.equal(a.gold, 20);
+  assert.equal(a.councilEffects!.length, 1);
   assert.equal(report.events.filter((e) => e.startsWith(`${a.nation} —`)).length, 1);
+});
+test('v101: Conselho preserva ouro reservado e milícias consomem Recrutas e Autoridade reais', () => {
+  const {
+    g,
+    players: [a],
+  } = setup();
+  g.turn = 4;
+  a.activeDilemma = { id: 'arsenal', turn: 4, targetProvinceId: 'castile' };
+  a.gold = 30;
+  submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'castile' });
+  const before = structuredClone(g);
+  assert.throws(() => executeCommand(g, a.id, { type: 'CHOOSE_DILEMMA', option: 1 }), /Ouro livre/);
+  assert.deepEqual(g, before);
+  g.orders[a.id] = [];
+  a.activeDilemma = { id: 'barons', turn: 4, targetProvinceId: 'castile' };
+  a.manpower = 2;
+  assert.throws(() => chooseDilemma(g, a.id, 1), /Recrutas livres/);
+  a.manpower = 3;
+  const authority = getNationAuthority(a);
+  chooseDilemma(g, a.id, 1);
+  assert.equal(a.manpower, 0);
+  assert.equal(getNationAuthority(a), authority - 14);
+  assert.equal(g.battalions.find((b) => b.ownerId === a.id)!.infantry, 3);
+  assert.equal(g.battalions.find((b) => b.ownerId === a.id)!.artillery, 0);
 });
 test('v100: bot mantém defesa ameaçada da capital, cancela saída e recruta para enfrentar superioridade', () => {
   const {
@@ -193,11 +228,11 @@ test('v100: bot mantém defesa ameaçada da capital, cancela saída e recruta pa
   a.bot = true;
   a.gold = 500;
   a.manpower = 20;
-  const guard = army(g, a.id, 'portugal', { infantry: 6 });
-  army(g, b.id, 'castile', { infantry: 14 });
+  const guard = army(g, a.id, 'castile', { infantry: 6 });
+  army(g, b.id, 'france', { infantry: 14 });
   declareWar(g, b.id, a.id, 'CONQUEST');
-  guard.pathQueue = ['castile', 'aquitaine'];
-  assert.equal(computeProvinceThreat(g, 'portugal'), 14);
+  guard.pathQueue = ['france', 'italy'];
+  assert.equal(computeProvinceThreat(g, 'castile'), 14);
   assert.equal(canLeaveDefendedProvince(g, guard), false);
   planBot(g, a);
   assert.deepEqual(guard.pathQueue, []);
@@ -211,7 +246,7 @@ test('v100: bot mantém defesa ameaçada da capital, cancela saída e recruta pa
     false,
   );
   assert.ok(
-    g.orders[a.id].some((o) => o.type === 'RECRUIT_BATTALION' && o.provinceId === 'portugal'),
+    g.orders[a.id].some((o) => o.type === 'RECRUIT_BATTALION' && o.provinceId === 'castile'),
   );
 });
 test('v100: bot concentra destacamentos, atribui general e prioriza quartéis quando faltam recrutas', () => {
@@ -221,8 +256,10 @@ test('v100: bot concentra destacamentos, atribui general e prioriza quartéis qu
   } = setup();
   a.bot = true;
   a.gold = 500;
+  a.influence = 24;
+  a.prestige = 0;
   a.manpower = 3;
-  const capital = g.provinces.find((p) => p.id === 'portugal')!;
+  const capital = g.provinces.find((p) => p.id === 'castile')!;
   capital.barracksLevel = 0;
   army(g, a.id, capital.id, { infantry: 5, artillery: 1 });
   army(g, a.id, capital.id, { infantry: 5, artillery: 1 });
@@ -398,18 +435,18 @@ test('v100: dois exércitos principais concentram suas marchas no mesmo alvo neu
   a.bot = true;
   a.gold = 500;
   a.manpower = 20;
-  const rear = g.provinces.find((p) => p.id === 'aquitaine')!;
+  const rear = g.provinces.find((p) => p.id === 'italy')!;
   rear.ownerId = a.id;
   rear.pacification = 100;
-  g.provinces.find((p) => p.id === 'castile')!.ownerId = null;
-  army(g, a.id, 'portugal', { infantry: 10, artillery: 2 });
-  army(g, a.id, 'aquitaine', { infantry: 10, artillery: 2 });
+  g.provinces.find((p) => p.id === 'france')!.ownerId = null;
+  army(g, a.id, 'castile', { infantry: 10, artillery: 2 });
+  army(g, a.id, 'italy', { infantry: 10, artillery: 2 });
   planBot(g, a);
   const moves = g.orders[a.id].filter((o) => o.type === 'MOVE_BATTALION');
   assert.equal(moves.length, 2);
   for (const move of moves)
     assert.equal(move.targetProvinceId ?? move.path?.at(-1), a.botTargetProvinceId);
-  assert.equal(a.botTargetProvinceId, 'castile');
+  assert.equal(a.botTargetProvinceId, 'france');
 });
 test('v100: saldo líquido baixo prioriza mercado quando o quartel já atende o recrutamento', () => {
   const {
@@ -419,7 +456,7 @@ test('v100: saldo líquido baixo prioriza mercado quando o quartel já atende o 
   a.bot = true;
   a.gold = 500;
   a.manpower = 20;
-  const capital = g.provinces.find((p) => p.id === 'portugal')!;
+  const capital = g.provinces.find((p) => p.id === 'castile')!;
   capital.barracksLevel = 1;
   capital.marketLevel = 0;
   army(g, a.id, capital.id, { infantry: 10, artillery: 2 });
@@ -434,8 +471,8 @@ test('v100: dividir e fundir formações não apaga marcha nem concede desconto 
     g,
     players: [a],
   } = setup();
-  const unit = army(g, a.id, 'portugal', { infantry: 8 });
-  unit.previousProvinceId = 'castile';
+  const unit = army(g, a.id, 'castile', { infantry: 8 });
+  unit.previousProvinceId = 'france';
   unit.lastMovedTurn = g.turn;
   instantArmyAction(g, a.id, {
     type: 'SPLIT_BATTALION',
@@ -444,7 +481,7 @@ test('v100: dividir e fundir formações não apaga marcha nem concede desconto 
   });
   const split = g.battalions.find((b) => b.id !== unit.id)!;
   assert.equal(logisticsPosture(g, split).id, 'CAMPAIGN');
-  const stationary = army(g, a.id, 'portugal', { infantry: 1 });
+  const stationary = army(g, a.id, 'castile', { infantry: 1 });
   instantArmyAction(g, a.id, {
     type: 'MERGE_BATTALIONS',
     battalionId: split.id,

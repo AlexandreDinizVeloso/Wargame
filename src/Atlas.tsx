@@ -1,3 +1,4 @@
+import { layoutArmyMarkers, layoutProvinceLabels } from './atlasLayout';
 import WebGLMapBackdrop from './WebGLMapBackdrop';
 import { computeVisibleProvinces, verticalRules } from '../shared/fogOfWar';
 import {
@@ -244,6 +245,8 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
       return {
         EUROPE: '#a7af8b',
         AMERICAS: '#619c8d',
+        NORTH_AMERICA: '#6b9e92',
+        SOUTH_AMERICA: '#7b9c67',
         MENA_AFRICA: '#b69b6a',
         ASIA: '#8b91aa',
         SEA_ZONE: '#253d51',
@@ -292,6 +295,27 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     game?.battalions.filter(
       (a) => !a.embarkedOnId && (!fogActive || visible.has(a.provinceId) || a.ownerId === viewerId),
     ) ?? [];
+  const displayedArmies = armies.filter(
+    (a) =>
+      !cartographic ||
+      a.ownerId !== 'NEUTRAL' ||
+      camera.zoom > 2.2 ||
+      a.provinceId === selectedId ||
+      a.provinceId === hoveredId,
+  );
+  const markerPositions = layoutArmyMarkers(displayedArmies, provinces, scale);
+  const labelPositions = layoutProvinceLabels(
+    provinces.filter(
+      (p) =>
+        p.kind === 'LAND' &&
+        (preview ||
+          camera.zoom > (cartographic ? 2.2 : 1.2) ||
+          (cartographic && (p.id === selectedId || p.id === hoveredId || !!p.capitalOf)) ||
+          provinces.filter((p) => p.kind === 'LAND').length <= 16),
+    ),
+    markerPositions.values(),
+    scale,
+  );
   const routes = armies
     .filter((a) => a.ownerId === (viewerId ?? referenceId) || a.pathQueue.length > 0)
     .map((a) => {
@@ -514,16 +538,19 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             <path d="M0 0L10 5L0 10Z" fill="#e0c47c" />
           </marker>
         </defs>
-        <g
-          filter="url(#shoreline-glow)"
-          pointerEvents="none"
-          aria-hidden="true"
-          data-shoreline="double"
-        >
+        <g pointerEvents="none" aria-hidden="true" data-shoreline="double">
           {provinces
             .filter((p) => p.kind === 'LAND')
             .map((p) => (
-              <path key={p.id} d={p.path} fill="white" />
+              <path
+                key={p.id}
+                d={p.path}
+                fill="none"
+                fillRule="evenodd"
+                stroke="#8cae9d"
+                strokeOpacity=".4"
+                strokeWidth={3 / scale}
+              />
             ))}
         </g>
         {!preview &&
@@ -592,6 +619,8 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   className={`province-shape ${mode === 'LOGISTICS' && game && viewerId && provinceLogistics(game, p, viewerId).danger ? 'logistics-danger' : ''} ${destination ? `destination-${destination}` : ''}`}
                   data-destination={destination ?? undefined}
                   d={p.path}
+                  fillRule="evenodd"
+                  clipRule="evenodd"
                   data-province={p.id}
                   data-kind={p.kind}
                   tabIndex={preview ? -1 : 0}
@@ -599,7 +628,6 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   aria-label={`${p.name}, ${owner?.nation ?? 'terra independente'}`}
                   fill={color(p)}
                   fillOpacity={cartographic ? 0.94 : 0.88}
-                  filter={cartographic ? 'url(#province-relief)' : undefined}
                   data-fogged={fogActive && !visible.has(p.id) ? 'true' : undefined}
                   stroke={
                     destination === 'attack'
@@ -743,11 +771,12 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                 (preview ||
                   camera.zoom > (cartographic ? 2.2 : 1.2) ||
                   (cartographic && (selected || hoveredId === p.id || !!p.capitalOf)) ||
-                  provinces.filter((p) => p.kind === 'LAND').length <= 16) && (
+                  provinces.filter((p) => p.kind === 'LAND').length <= 16) &&
+                labelPositions.has(p.id) && (
                   <text
                     className="province-label"
-                    x={p.x}
-                    y={p.y - 12 / scale}
+                    x={labelPositions.get(p.id)!.x}
+                    y={labelPositions.get(p.id)!.y}
                     fontSize={Math.max(4, Math.min(11, 10 / scale))}
                     textAnchor="middle"
                     pointerEvents="none"
@@ -919,63 +948,72 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             </g>
           );
         })}
-        {!preview &&
-          armies
-            .filter(
-              (a) =>
-                !cartographic ||
-                a.ownerId !== 'NEUTRAL' ||
-                camera.zoom > 2.2 ||
-                a.provinceId === selectedId ||
-                a.provinceId === hoveredId,
-            )
-            .map((a) => {
-              const p = provinces.find((p) => p.id === a.provinceId);
-              if (!p) return null;
-              const local = armies.filter((b) => b.provinceId === p.id),
-                index = local.findIndex((b) => b.id === a.id),
-                offset = ((index - (local.length - 1) / 2) * 38) / scale;
-              const owner = players.find((p) => p.id === a.ownerId),
-                selected = a.id === selectedArmyId;
-              return (
-                <g
+        {!preview && (
+          <g className="army-leader-lines" pointerEvents="none" aria-hidden="true">
+            {displayedArmies.map((a) => {
+              const p = provinces.find((p) => p.id === a.provinceId),
+                point = markerPositions.get(a.id);
+              return p && point && Math.hypot(point.x - p.x, point.y - p.y) > 10 / scale ? (
+                <path
                   key={a.id}
-                  className={`army-token ${selected ? 'selected' : ''} ${a.stranded ? 'stranded' : ''}`}
-                  data-battalion={a.id}
-                  data-province={p.id}
-                  transform={`translate(${p.x + offset} ${p.y + 3 / scale}) scale(${0.7 / scale})`}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`${a.name}, ${unitCount(a)} ${a.isFleet ? 'navios' : 'tropas'}, ${owner?.nation ?? 'milícia local'}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (e.button === 0 && !dragged.current) {
-                      if (e.altKey) onPing?.(p);
-                      else pickArmy(a);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') pickArmy(a);
-                  }}
-                >
-                  {a.isFleet ? (
-                    <FleetShipToken
-                      army={a}
-                      color={owner?.color ?? '#839d90'}
-                      commander={game?.commanders.find((c) => c.assignedBattalionId === a.id)}
-                      selected={selected}
-                    />
-                  ) : (
-                    <ArmyCrestToken
-                      army={a}
-                      color={owner?.color ?? '#839d90'}
-                      commander={game?.commanders.find((c) => c.assignedBattalionId === a.id)}
-                      selected={selected}
-                    />
-                  )}
-                </g>
-              );
+                  d={`M${p.x} ${p.y}L${point.x} ${point.y}`}
+                  stroke="#e0c47c"
+                  strokeOpacity=".4"
+                  strokeWidth={0.7 / scale}
+                />
+              ) : null;
             })}
+          </g>
+        )}
+        {!preview &&
+          displayedArmies.map((a) => {
+            const p = provinces.find((p) => p.id === a.provinceId);
+            if (!p) return null;
+            const position = markerPositions.get(a.id);
+            if (!position) return null;
+            const owner = players.find((p) => p.id === a.ownerId),
+              selected = a.id === selectedArmyId;
+            return (
+              <g
+                key={a.id}
+                className={`army-token ${selected ? 'selected' : ''} ${a.stranded ? 'stranded' : ''}`}
+                data-battalion={a.id}
+                data-marker-x={position.x}
+                data-marker-y={position.y}
+                data-province={p.id}
+                transform={`translate(${position.x} ${position.y}) scale(${0.7 / scale})`}
+                tabIndex={0}
+                role="button"
+                aria-label={`${a.name}, ${unitCount(a)} ${a.isFleet ? 'navios' : 'tropas'}, ${owner?.nation ?? 'milícia local'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (e.button === 0 && !dragged.current) {
+                    if (e.altKey) onPing?.(p);
+                    else pickArmy(a);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') pickArmy(a);
+                }}
+              >
+                {a.isFleet ? (
+                  <FleetShipToken
+                    army={a}
+                    color={owner?.color ?? '#839d90'}
+                    commander={game?.commanders.find((c) => c.assignedBattalionId === a.id)}
+                    selected={selected}
+                  />
+                ) : (
+                  <ArmyCrestToken
+                    army={a}
+                    color={owner?.color ?? '#839d90'}
+                    commander={game?.commanders.find((c) => c.assignedBattalionId === a.id)}
+                    selected={selected}
+                  />
+                )}
+              </g>
+            );
+          })}
         {isTurnReplayPlaying && replay && (
           <g className="turn-replay" pointerEvents="none">
             {replay.report.movements.map((m, i) => {

@@ -1,18 +1,17 @@
+import {
+  defaultDockGeometry,
+  type WindowAnchor,
+  type WindowGeometry,
+} from '../shared/windowLayout';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Maximize2, Minus, X } from 'lucide-react';
-interface Geometry {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  minimized: boolean;
-}
+type Geometry = WindowGeometry;
 type GestureKind = 'drag' | 'right' | 'bottom' | 'corner';
 export interface WindowProps {
   id: string;
   title: string;
   icon?: ReactNode;
-  anchor?: 'left' | 'right' | 'bottom' | 'center';
+  anchor?: WindowAnchor;
   width?: number;
   height?: number;
   minWidth?: number;
@@ -54,25 +53,8 @@ export function FloatingWindow({
 }: WindowProps) {
   const key = `concordia-v095-window-${id}`;
   const [viewport, setViewport] = useState({ width: innerWidth, height: innerHeight });
-  const defaults = (): Geometry => {
-    const w = Math.min(width, innerWidth - 16);
-    const h = Math.min(height, innerHeight * (anchor === 'center' ? 0.8 : 0.72), innerHeight - 130);
-    return {
-      width: w,
-      height: h,
-      minimized: false,
-      x:
-        anchor === 'center' || anchor === 'bottom'
-          ? (innerWidth - w) / 2
-          : anchor === 'right'
-            ? innerWidth - w - 12
-            : 12,
-      y:
-        anchor === 'center'
-          ? Math.max(116, (innerHeight - h) / 2)
-          : Math.max(116, innerHeight - h - 54),
-    };
-  };
+  const defaults = (): Geometry =>
+    defaultDockGeometry({ width: innerWidth, height: innerHeight }, width, height, anchor);
   const [geometry, setGeometry] = useState<Geometry>(() => {
     try {
       const v = JSON.parse(localStorage.getItem(key) ?? 'null');

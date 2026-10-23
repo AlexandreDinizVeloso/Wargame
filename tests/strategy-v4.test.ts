@@ -95,11 +95,11 @@ test('ferro e cavalos acumulam ataque até os tetos e aplicam descontos', () => 
   close(
     orderCost({ type: 'RECRUIT_BATTALION', provinceId: p.id, infantry: 10, artillery: 10 }, p, a, g)
       .gold,
-    93.5,
+    238,
   );
-  close(orderCost({ type: 'RECRUIT_BATTALION', provinceId: p.id, cavalry: 10 }, p, a, g).gold, 48);
+  close(orderCost({ type: 'RECRUIT_BATTALION', provinceId: p.id, cavalry: 10 }, p, a, g).gold, 112);
 });
-test('relíquias geram 3 ouro e ouro recebe a crise de renda', () => {
+test('relíquias geram 1 ouro e ouro recebe a crise de renda', () => {
   const {
     g,
     players: [a],
@@ -107,7 +107,7 @@ test('relíquias geram 3 ouro e ouro recebe a crise de renda', () => {
   const p = g.provinces.find((p) => controller(p) === a.id)!;
   const before = realmEconomy(g, a.id).grossIncome;
   p.strategicResource = 'RELIC';
-  close(realmEconomy(g, a.id).grossIncome - before, 3);
+  close(realmEconomy(g, a.id).grossIncome - before, 1);
   p.strategicResource = 'GOLD_MINE';
   const standard = realmEconomy(g, a.id).grossIncome;
   g.globalEvent = { id: 'GOLD_RUSH', startedTurn: 1, endsTurn: 2 };
@@ -119,7 +119,7 @@ test('Véspera contrata instantaneamente sem reservas locais e combina descontos
     players: [a],
   } = setup();
   a.gold = 100;
-  const p = g.provinces.find((p) => p.id === 'portugal')!;
+  const p = g.provinces.find((p) => p.id === 'castile')!;
   p.pacification = 10;
   p.marketLevel = 1;
   p.portLevel = 0;
@@ -131,20 +131,20 @@ test('Véspera contrata instantaneamente sem reservas locais e combina descontos
     isMercenary: true,
   };
   const price = orderCost(o, p, a, g).gold;
-  close(price, 5.85);
+  close(price, 23.4);
   submitOrder(g, a.id, o);
   close(a.gold, 100 - price);
   assert.equal(a.manpower, 0);
   assert.equal(g.battalions.at(-1)?.infantry, 2);
   g.globalEvent = { id: 'MERCENARY_CRISIS', startedTurn: 1, endsTurn: 2 };
-  close(orderCost(o, p, a, g).gold, 3.51);
+  close(orderCost(o, p, a, g).gold, 14.04);
 });
 test('Véspera aumenta receita de portos e mercados em 30% e dobra subornos', () => {
   const {
     g,
     players: [a, b],
   } = setup();
-  const p = g.provinces.find((p) => p.id === 'portugal')!;
+  const p = g.provinces.find((p) => p.id === 'castile')!;
   p.marketLevel = 1;
   const boosted = realmEconomy(g, a.id);
   a.nationId = 'aurelia';
@@ -183,7 +183,7 @@ test('Aurélia recebe vassalagem consentida, renda e províncias de dominação'
   });
   assert.equal(victoryStatus(g)?.winnerId, a.id);
 });
-test('Ferro-Norte recebe oito ouro por baixa inimiga e recupera moral no saque', () => {
+test('Ferro-Norte recebe dois ouro por baixa inimiga e recupera moral no saque', () => {
   const {
     g,
     players: [a, b],
@@ -191,14 +191,14 @@ test('Ferro-Norte recebe oito ouro por baixa inimiga e recupera moral no saque',
   a.nationId = 'ferro_norte';
   b.nationId = 'aurelia';
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const unit = army(g, a.id, 'portugal', { infantry: 40 }),
-    target = g.provinces.find((p) => p.id === 'castile')!;
+  const unit = army(g, a.id, 'castile', { infantry: 40 }),
+    target = g.provinces.find((p) => p.id === 'france')!;
   target.isCoastal = true;
   army(g, b.id, target.id, { infantry: 3 });
   const before = a.gold;
   const report = emptyTurnReport(1, g.diet);
   resolveBattle(g, unit, target, report);
-  assert.equal(a.gold - before, (report.battles[0].casualtiesByRealm[b.id] ?? 0) * 8);
+  assert.equal(a.gold - before, (report.battles[0].casualtiesByRealm[b.id] ?? 0) * 2);
   assert.equal(target.occupierId, null);
   const afterBattle = unit.morale;
   unit.provinceId = target.id;
@@ -213,12 +213,12 @@ test('Ferro-Norte atravessa floresta em uma rodada e é imune ao inverno', () =>
     players: [a],
   } = setup();
   a.nationId = 'ferro_norte';
-  const target = g.provinces.find((p) => p.id === 'castile')!;
+  const target = g.provinces.find((p) => p.id === 'france')!;
   target.ownerId = a.id;
   target.terrain = 'forest';
   g.turn = 4;
   g.season = 'WINTER';
-  const unit = army(g, a.id, 'portugal', { infantry: 5 });
+  const unit = army(g, a.id, 'castile', { infantry: 5 });
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
@@ -227,7 +227,7 @@ test('Ferro-Norte atravessa floresta em uma rodada e é imune ao inverno', () =>
   resolveTurn(g);
   assert.equal(unit.provinceId, target.id);
 });
-test('Sol Invicto ganha ouro, Fervor e poder em guerra religiosa', () => {
+test('Sol Invicto ganha ouro, Autoridade e poder em guerra religiosa', () => {
   const {
     g,
     players: [a, b],
@@ -236,17 +236,18 @@ test('Sol Invicto ganha ouro, Fervor e poder em guerra religiosa', () => {
   a.faith = 'SOLAR';
   a.religiousPolicy = 'INQUISITION';
   b.faith = 'ANCESTRAL';
-  const p = g.provinces.find((p) => p.id === 'portugal')!;
+  const p = g.provinces.find((p) => p.id === 'castile')!;
   p.religion = 'ANCESTRAL';
   const unit = army(g, a.id, p.id),
     before = compositionPower(g, unit, p);
   declareWar(g, a.id, b.id, 'HOLY_WAR');
   assert.ok(compositionPower(g, unit, p) > before * 1.19);
+  const goldBefore = a.gold;
   submitOrder(g, a.id, { type: 'CONVERT', targetProvinceId: p.id });
   const r = resolveTurn(g);
-  assert.equal(a.militaryXP, 20);
+  assert.equal(a.militaryXP, 3);
   assert.ok(r.conversions.length === 1);
-  close(a.gold, 75 - 8 + 25 + r.economy.find((e) => e.playerId === a.id)!.net);
+  close(a.gold, goldBefore - 8 + 8 + r.economy.find((e) => e.playerId === a.id)!.net);
 });
 test('Kaldor possui fortes de nível 3, desconto e atrito de cerco de 15% uma vez', () => {
   const {
@@ -256,7 +257,7 @@ test('Kaldor possui fortes de nível 3, desconto e atrito de cerco de 15% uma ve
   a.nationId = 'aurelia';
   b.nationId = 'kaldor';
   b.gold = 1000;
-  const target = g.provinces.find((p) => p.id === 'castile')!;
+  const target = g.provinces.find((p) => p.id === 'france')!;
   target.fortLevel = 2;
   submitOrder(g, b.id, { type: 'BUILD_FORT', provinceId: target.id });
   resolveTurn(g);
@@ -265,7 +266,7 @@ test('Kaldor possui fortes de nível 3, desconto e atrito de cerco de 15% uma ve
   const normal = orderCost({ type: 'BUILD_FORT', provinceId: target.id }, target, a, g).gold;
   close(orderCost({ type: 'BUILD_FORT', provinceId: target.id }, target, b, g).gold, normal * 0.7);
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const unit = army(g, a.id, 'portugal', { infantry: 20 }),
+  const unit = army(g, a.id, 'castile', { infantry: 20 }),
     r = emptyTurnReport(g.turn, g.diet);
   resolveBattle(g, unit, target, r);
   assert.equal(r.attritionLosses[0].losses, 3);
@@ -285,7 +286,7 @@ test('Kaldor artilharia custa 25% menos e atira 25% mais', () => {
   close(compositionPower(g, u, p) / base, 1.25);
   close(
     orderCost({ type: 'RECRUIT_BATTALION', provinceId: p.id, artillery: 10 }, p, a, g).gold,
-    60,
+    150,
   );
 });
 test('Turan cavalaria pura percorre duas terras planas e arrasa uma conquista uma vez', () => {
@@ -296,21 +297,21 @@ test('Turan cavalaria pura percorre duas terras planas e arrasa uma conquista um
   a.nationId = 'turan';
   g.provinces.find((p) => p.id === 'japan')!.ownerId = g.players[1].id;
   g.provinces.find((p) => p.id === 'korea')!.ownerId = g.players[2].id;
-  for (const id of ['castile', 'aquitaine']) {
+  for (const id of ['france', 'italy']) {
     const p = g.provinces.find((p) => p.id === id)!;
     p.ownerId = a.id;
     p.terrain = 'plains';
   }
-  g.provinces.find((p) => p.id === 'portugal')!.terrain = 'plains';
-  const unit = army(g, a.id, 'portugal', { cavalry: 6 });
+  g.provinces.find((p) => p.id === 'castile')!.terrain = 'plains';
+  const unit = army(g, a.id, 'castile', { cavalry: 6 });
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
-    path: ['castile', 'aquitaine'],
+    path: ['france', 'italy'],
   });
   resolveTurn(g);
-  assert.equal(unit.provinceId, 'aquitaine');
-  const neutral = g.provinces.find((p) => p.id === 'burgundy')!;
+  assert.equal(unit.provinceId, 'italy');
+  const neutral = g.provinces.find((p) => p.id === 'germany')!;
   neutral.ownerId = null;
   neutral.fortLevel = 0;
   neutral.terrain = 'plains';
@@ -328,7 +329,7 @@ test('Turan cavalaria pura percorre duas terras planas e arrasa uma conquista um
   const before = a.gold;
   submitOrder(g, a.id, { type: 'RAZE_PROVINCE', battalionId: unit.id });
   const r = resolveTurn(g);
-  close(a.gold, before + 80 + r.economy.find((e) => e.playerId === a.id)!.net);
+  close(a.gold, before + 20 + r.economy.find((e) => e.playerId === a.id)!.net);
   assert.throws(() => submitOrder(g, a.id, { type: 'RAZE_PROVINCE', battalionId: unit.id }));
 });
 test('Sapiência recruta treinado e só recebe intenções inimigas adjacentes', () => {
@@ -337,20 +338,19 @@ test('Sapiência recruta treinado e só recebe intenções inimigas adjacentes',
     players: [a, b, c],
   } = setup();
   a.nationId = 'sapiencia';
-  const trained = createBattalion(g, a.id, 'portugal', compositionOf({ infantry: 2 }), {
+  const trained = createBattalion(g, a.id, 'castile', compositionOf({ infantry: 2 }), {
     training: 1,
   });
   assert.equal(trained.training, 1.2);
-  const enemy = army(g, b.id, 'castile');
+  const enemy = army(g, b.id, 'france');
   declareWar(g, b.id, c.id, 'CONQUEST');
   submitOrder(g, b.id, {
     type: 'MOVE_BATTALION',
     battalionId: enemy.id,
-    targetProvinceId: 'france',
+    targetProvinceId: 'germany',
   });
   assert.deepEqual(viewFor(g, a.id).battalions.find((a) => a.id === enemy.id)?.pathQueue, [
-    'aquitaine',
-    'france',
+    'germany',
   ]);
   a.nationId = 'aurelia';
   assert.deepEqual(viewFor(g, a.id).battalions.find((a) => a.id === enemy.id)?.pathQueue, []);
@@ -385,7 +385,7 @@ test('coalizão entra junta, aumenta moral, reduz manutenção e respeita trégu
   a.aggressiveExpansion = 60;
   joinCoalition(g, b.id, a.id);
   joinCoalition(g, c.id, a.id);
-  const unit = army(g, b.id, 'castile', { infantry: 4 });
+  const unit = army(g, b.id, 'france', { infantry: 4 });
   const normal = realmEconomy(g, b.id).upkeep;
   coalitionWar(g, b.id, a.id);
   assert.deepEqual(new Set(g.wars[0].attackerIds), new Set([b.id, c.id]));
@@ -494,7 +494,7 @@ test('declarar guerra e marchar é atômico, inclusive em destino inválido', ()
     g,
     players: [a, b],
   } = setup();
-  const u = army(g, a.id, 'portugal'),
+  const u = army(g, a.id, 'castile'),
     before = structuredClone(g);
   assert.throws(() =>
     executeCommand(g, a.id, {
@@ -511,7 +511,7 @@ test('declarar guerra e marchar é atômico, inclusive em destino inválido', ()
     targetRealmId: b.id,
     casusBelli: 'CONQUEST',
     battalionId: u.id,
-    targetProvinceId: 'castile',
+    targetProvinceId: 'france',
   });
   assert.ok(next.wars[0].active);
   assert.equal(next.orders[a.id][0].type, 'MOVE_BATTALION');
@@ -539,7 +539,7 @@ test('forte próprio ou aliado vazio não cria um cerco contra o próprio reino'
     g,
     players: [a, b],
   } = setup();
-  const p = g.provinces.find((p) => p.id === 'portugal')!;
+  const p = g.provinces.find((p) => p.id === 'castile')!;
   p.fortLevel = 3;
   const u = army(g, a.id, p.id, { infantry: 1 }),
     r = emptyTurnReport(1, g.diet);
@@ -557,13 +557,13 @@ test('suprimento nacional de trigo reduz atrito e dividir pilhas não aumenta pe
       g,
       players: [a],
     } = setup();
-    const p = g.provinces.find((p) => p.id === 'portugal')!;
+    const p = g.provinces.find((p) => p.id === 'castile')!;
     p.baseSupplyLimit = 18;
     p.portLevel = 0;
     g.turn = 2;
     g.season = 'SUMMER';
     if (grain) {
-      const q = g.provinces.find((p) => p.id === 'greece')!;
+      const q = g.provinces.find((p) => p.id === 'balkans')!;
       q.ownerId = a.id;
       q.strategicResource = 'GRAIN';
     }
@@ -584,7 +584,7 @@ test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas pe
     } = setup();
     a.nationId = immune ? 'ferro_norte' : 'aurelia';
     declareWar(g, a.id, b.id, 'CONQUEST');
-    const p = g.provinces.find((p) => p.id === 'castile')!;
+    const p = g.provinces.find((p) => p.id === 'france')!;
     p.baseSupplyLimit = 18;
     p.portLevel = 0;
     p.occupierId = a.id;
@@ -593,6 +593,10 @@ test('inverno dobra atrito em ocupação inimiga e Ferro-Norte ignora as duas pe
     p.religion = a.faith;
     const u = army(g, a.id, p.id, { infantry: 24 });
     g.turn = winter ? 4 : 2;
+    for (const nation of g.players) {
+      nation.activeDilemma = null;
+      nation.lastDilemmaTurn = g.turn;
+    }
     g.season = winter ? 'WINTER' : 'SUMMER';
     g.globalEvent = { id: 'GOLD_RUSH', startedTurn: g.turn, endsTurn: g.turn + 1 };
     const before = unitCount(u);
@@ -608,7 +612,7 @@ test('moral própria recupera rapidamente; outono amplia receitas de trigo', () 
     g,
     players: [a],
   } = setup();
-  const p = g.provinces.find((p) => p.id === 'portugal')!;
+  const p = g.provinces.find((p) => p.id === 'castile')!;
   p.strategicResource = 'RELIC';
   const u = army(g, a.id, p.id, { infantry: 3 });
   u.morale = 50;
