@@ -45,12 +45,15 @@ export const TERRAIN_LABELS: Record<Terrain, string> = {
   mountains: 'Montanhas',
 };
 export const CONTINENTS: Record<Continent, string> = {
+  SOUTH_AMERICA: 'América do Sul',
+  NORTH_AMERICA: 'América do Norte e Central',
   EUROPE: 'Europa',
+  MENA_AFRICA: 'África e Oriente Médio',
+  ASIA: 'Ásia e Oceania',
   AMERICAS: 'Américas',
-  MENA_AFRICA: 'MENA e África',
-  ASIA: 'Ásia e Pacífico',
 };
 export const THEATERS: Theater[] = ['EUROPE', 'AMERICAS', 'ASIA'];
+// Only used when loading old maps whose former sea shortcuts need migration.
 export const isLegacySeaShortcut = (a: string, b: string) =>
   (a === 'china-east' && b === 'japan') ||
   (b === 'china-east' && a === 'japan') ||
@@ -60,150 +63,104 @@ const SEAS: [string, string, number[], string[], string[]][] = [
   [
     'north-atlantic',
     'Atlântico Norte',
-    [-65, 30, -15, 65],
-    ['portugal', 'castile', 'france', 'britain', 'scandinavia', 'canada-east', 'usa-east'],
-    ['south-atlantic', 'caribbean-sea', 'western-med', 'arctic'],
+    [-65, 22, -15, 65],
+    [
+      'castile',
+      'france',
+      'britain',
+      'scandinavia',
+      'canada-east',
+      'usa-east',
+      'mexico',
+      'central-america',
+      'colombia',
+    ],
+    ['south-atlantic', 'mediterranean', 'north-sea', 'arctic-ocean', 'north-pacific'],
   ],
   [
     'south-atlantic',
     'Atlântico Sul',
-    [-38, -40, -5, 5],
-    ['brazil', 'amazon', 'rioplata', 'guianas', 'west-africa', 'central-africa', 'south-africa'],
-    ['north-atlantic', 'caribbean-sea', 'indian-west', 'south-pacific'],
+    [-38, -42, -5, 5],
+    ['brazil', 'rioplata', 'west-africa', 'central-africa', 'south-africa'],
+    ['north-atlantic', 'indian-ocean', 'south-pacific'],
   ],
   [
-    'caribbean-sea',
-    'Mar do Caribe',
-    [-90, 8, -60, 28],
-    ['usa-east', 'mexico', 'central-america', 'caribbean', 'colombia', 'guianas', 'amazon'],
-    ['north-atlantic', 'south-atlantic', 'north-pacific'],
+    'mediterranean',
+    'Mediterrâneo',
+    [-5, 30, 35, 43],
+    ['castile', 'france', 'italy', 'balkans', 'maghreb', 'nile', 'anatolia', 'arabia'],
+    ['north-atlantic', 'arabian-sea'],
+  ],
+  [
+    'north-sea',
+    'Mar do Norte',
+    [-5, 51, 25, 65],
+    ['britain', 'france', 'germany', 'scandinavia', 'poland', 'muscovy'],
+    ['north-atlantic', 'arctic-ocean'],
+  ],
+  [
+    'indian-ocean',
+    'Oceano Índico',
+    [55, -35, 98, 0],
+    ['east-africa', 'south-africa', 'india-north', 'india-south', 'indochina', 'archipelago'],
+    ['south-atlantic', 'arabian-sea', 'south-china-sea', 'south-pacific'],
+  ],
+  [
+    'arabian-sea',
+    'Mar Arábico',
+    [43, 3, 70, 25],
+    ['east-africa', 'arabia', 'persia', 'afghan', 'india-north', 'india-south'],
+    ['mediterranean', 'indian-ocean'],
+  ],
+  [
+    'south-china-sea',
+    'Mar da China Meridional',
+    [107, 0, 124, 23],
+    ['indochina', 'china-east', 'archipelago'],
+    ['indian-ocean', 'north-pacific', 'south-pacific'],
   ],
   [
     'north-pacific',
     'Pacífico Norte',
     [-165, 10, -130, 50],
-    ['alaska', 'canada-west', 'usa-west', 'mexico', 'japan', 'siberia'],
-    ['south-pacific', 'east-asian-sea', 'arctic', 'caribbean-sea'],
+    ['alaska', 'canada-west', 'usa-west', 'mexico', 'china-east', 'korea', 'japan', 'siberia'],
+    ['south-pacific', 'south-china-sea', 'arctic-ocean', 'north-atlantic'],
   ],
   [
     'south-pacific',
     'Pacífico Sul',
     [-150, -45, -90, 0],
-    ['andes', 'chile', 'rioplata', 'archipelago'],
-    ['north-pacific', 'south-atlantic', 'south-china-sea', 'indian-east'],
+    ['andes', 'rioplata', 'central-america', 'colombia', 'archipelago'],
+    ['north-pacific', 'south-atlantic', 'indian-ocean', 'south-china-sea'],
   ],
   [
-    'western-med',
-    'Mediterrâneo Ocidental',
-    [-2, 33, 14, 41],
-    ['portugal', 'castile', 'france', 'italy', 'maghreb'],
-    ['north-atlantic', 'eastern-med'],
-  ],
-  [
-    'eastern-med',
-    'Mediterrâneo Oriental',
-    [18, 31, 35, 38],
-    ['italy', 'balkans', 'greece', 'anatolia', 'nile', 'arabia'],
-    ['western-med', 'indian-west'],
-  ],
-  [
-    'baltic',
-    'Mar Báltico',
-    [12, 54, 28, 61],
-    ['germany', 'lowlands', 'scandinavia', 'poland', 'muscovy'],
-    ['north-atlantic', 'arctic'],
-  ],
-  [
-    'arctic',
+    'arctic-ocean',
     'Oceano Ártico',
-    [-15, 74, 110, 82],
-    ['scandinavia', 'muscovy', 'siberia', 'alaska', 'canada-west', 'canada-east'],
-    ['north-atlantic', 'north-pacific', 'baltic'],
-  ],
-  [
-    'indian-west',
-    'Índico Ocidental',
-    [45, -20, 70, 16],
-    ['south-africa', 'east-africa', 'horn', 'arabia', 'persia', 'afghan', 'india-south'],
-    ['indian-east', 'south-atlantic', 'eastern-med'],
-  ],
-  [
-    'indian-east',
-    'Índico Oriental',
-    [80, -20, 100, 15],
-    ['india-south', 'bengal', 'indochina', 'malaya', 'archipelago'],
-    ['indian-west', 'south-china-sea', 'south-pacific'],
-  ],
-  [
-    'south-china-sea',
-    'Mar da China Meridional',
-    [110, 0, 120, 20],
-    ['china-east', 'indochina', 'malaya', 'archipelago'],
-    ['indian-east', 'east-asian-sea', 'south-pacific'],
-  ],
-  [
-    'east-asian-sea',
-    'Mar do Japão',
-    [130, 28, 145, 45],
-    ['china-east', 'korea', 'japan', 'siberia'],
-    ['south-china-sea', 'north-pacific'],
+    [-80, 70, 60, 83],
+    ['alaska', 'canada-west', 'canada-east', 'scandinavia', 'muscovy', 'ural', 'siberia'],
+    ['north-atlantic', 'north-sea', 'north-pacific'],
   ],
 ];
-for (const [sea, ports] of Object.entries({
-  'north-atlantic': ['aquitaine', 'britain', 'scotland', 'ireland', 'denmark'],
-  'south-atlantic': ['brazil-north', 'sao-paulo', 'patagonia', 'gold-coast'],
-  'caribbean-sea': ['venezuela', 'yukatan'],
-  'north-pacific': ['yakutia'],
-  'south-pacific': ['patagonia', 'australia-east'],
-  'western-med': ['aragon', 'naples', 'algiers', 'tripoli'],
-  'eastern-med': ['naples', 'levant'],
-  baltic: ['denmark', 'lithuania'],
-  arctic: ['yakutia'],
-  'indian-west': ['nubia', 'zambezi', 'punjab', 'mesopotamia'],
-  'indian-east': ['burma', 'sumatra', 'java', 'australia-west'],
-  'south-china-sea': ['china-south', 'philippines'],
-  'east-asian-sea': ['china-north'],
-})) {
-  const entry = SEAS.find((s) => s[0] === sea);
-  if (entry) entry[3].push(...ports);
-}
 export const STRAITS: readonly [string, string, string][] = [
-  ['portugal', 'maghreb', 'western-med'],
-  ['britain', 'ireland', 'north-atlantic'],
-  ['scotland', 'ireland', 'north-atlantic'],
-  ['scandinavia', 'denmark', 'baltic'],
-  ['denmark', 'germany', 'baltic'],
-  ['malaya', 'sumatra', 'indian-east'],
-  ['sumatra', 'java', 'indian-east'],
-  ['java', 'archipelago', 'indian-east'],
-  ['archipelago', 'philippines', 'south-china-sea'],
-  ['alaska', 'yakutia', 'arctic'],
-  ['castile', 'maghreb', 'western-med'],
-  ['france', 'britain', 'north-atlantic'],
-  ['scandinavia', 'germany', 'baltic'],
-  ['scandinavia', 'lowlands', 'baltic'],
-  ['italy', 'maghreb', 'western-med'],
-  ['italy', 'balkans', 'eastern-med'],
-  ['italy', 'greece', 'eastern-med'],
-  ['greece', 'anatolia', 'eastern-med'],
-  ['balkans', 'anatolia', 'eastern-med'],
-  ['nile', 'arabia', 'eastern-med'],
-  ['arabia', 'horn', 'indian-west'],
-  ['malaya', 'archipelago', 'indian-east'],
-  ['korea', 'japan', 'east-asian-sea'],
-  ['caribbean', 'central-america', 'caribbean-sea'],
-  ['caribbean', 'usa-east', 'caribbean-sea'],
-  ['caribbean', 'colombia', 'caribbean-sea'],
+  ['britain', 'france', 'north-atlantic'],
+  ['castile', 'maghreb', 'mediterranean'],
+  ['scandinavia', 'germany', 'north-sea'],
+  ['italy', 'balkans', 'mediterranean'],
+  ['balkans', 'anatolia', 'mediterranean'],
+  ['arabia', 'east-africa', 'arabian-sea'],
+  ['indochina', 'archipelago', 'south-china-sea'],
+  ['korea', 'japan', 'north-pacific'],
+  ['alaska', 'siberia', 'arctic-ocean'],
 ];
 export const WORLD_STARTS = {
-  vespera: ['portugal', 'castile'],
+  vespera: ['castile', 'france'],
   ferro_norte: ['scandinavia', 'muscovy'],
   aurelia: ['nile', 'maghreb'],
   sol_invicto: ['arabia', 'persia'],
   kaldor: ['south-africa', 'east-africa'],
   turan: ['mongolia', 'siberia'],
   sapiencia: ['china-east', 'indochina'],
-  veridia: ['amazon', 'colombia'],
+  veridia: ['brazil', 'colombia'],
 } as const;
 const pathOf = (rings: number[][][]) =>
   rings.map((r) => `M${r.map((p) => p.join(',')).join('L')}Z`).join('');
@@ -213,42 +170,30 @@ export function makeStaticMap(
 ): ProvinceStaticData[] {
   const land: ProvinceStaticData[] = geometry.map((g, i) => {
     const isCoastal = SEAS.some((s) => s[3].includes(g.id));
-    const terrain: Terrain = [
-      'alps',
-      'andes',
-      'chile',
-      'afghan',
-      'china-west',
-      'anatolia',
-      'tibet',
-      'caucasus',
-      'bavaria',
-    ].includes(g.id)
+    const terrain: Terrain = ['andes', 'afghan', 'china-west', 'anatolia'].includes(g.id)
       ? 'mountains'
       : [
-            'amazon',
+            'brazil',
             'canada-east',
             'canada-west',
+            'ural',
             'siberia',
-            'yakutia',
             'central-africa',
-            'guianas',
-            'burma',
             'archipelago',
           ].includes(g.id)
         ? 'forest'
-        : ['bohemia', 'castile', 'inland', 'bolivia', 'mongolia'].includes(g.id)
+        : ['castile', 'mongolia', 'persia'].includes(g.id)
           ? 'hills'
           : isCoastal
             ? 'coastal'
             : 'plains';
-    const resource = (['grain', 'trade', 'iron', 'shrine'] as const)[i % 4];
     return {
       ...g,
+      neighbors: [...g.neighbors],
       kind: 'LAND',
+      continent: g.continent as Continent,
       straitNeighbors: [],
       straitSeaIds: {},
-      continent: g.continent as Continent,
       rings: g.rings,
       path: pathOf(g.rings),
       isCoastal,
@@ -260,7 +205,7 @@ export function makeStaticMap(
       )[i % 8],
       razedTurn: null,
       baseSupplyLimit: terrain === 'mountains' ? 10 : terrain === 'forest' ? 12 : 18,
-      resource,
+      resource: (['grain', 'trade', 'iron', 'shrine'] as const)[i % 4],
     };
   });
   const ids = new Set(
@@ -269,16 +214,14 @@ export function makeStaticMap(
         (p) =>
           mode === 'campaign' ||
           p.continent === theater ||
-          (theater === 'EUROPE' &&
-            ['anatolia', 'levant', 'nile', 'maghreb', 'algiers', 'tripoli'].includes(p.id)) ||
-          (theater === 'ASIA' && p.id === 'persia'),
+          (theater === 'AMERICAS' && ['SOUTH_AMERICA', 'NORTH_AMERICA'].includes(p.continent)),
       )
       .map((p) => p.id),
   );
   const seas: ProvinceStaticData[] = SEAS.filter((s) => s[3].some((id) => ids.has(id))).map(
     ([id, name, bounds, ports, links]) => {
-      const [w, s, e, n] = bounds;
-      const project = (lon: number, lat: number) => [(lon + 180) * 4, (85 - lat) * 4];
+      const [w, s, e, n] = bounds,
+        project = (lon: number, lat: number) => [(lon + 180) * 4, (85 - lat) * 4];
       const rings = [
         [
           project(w, n),
@@ -311,20 +254,20 @@ export function makeStaticMap(
       };
     },
   );
-  const all = [...land.filter((p) => ids.has(p.id)), ...seas];
-  const active = new Set(all.map((p) => p.id));
+  const all = [...land.filter((p) => ids.has(p.id)), ...seas],
+    active = new Set(all.map((p) => p.id));
   for (const p of all) {
     p.neighbors = p.neighbors.filter(
       (id) => active.has(id) && !isLegacySeaShortcut(p.id, id) && !isImpassableCrossing(p.id, id),
     );
     if (p.kind === 'LAND')
-      for (const s of seas) if (s.neighbors.includes(p.id)) p.neighbors.push(s.id);
+      for (const sea of seas) if (sea.neighbors.includes(p.id)) p.neighbors.push(sea.id);
     p.neighbors = [...new Set(p.neighbors)];
   }
   for (const p of all)
     for (const id of p.neighbors) {
-      const other = all.find((q) => q.id === id)!;
-      if (!other.neighbors.includes(p.id)) other.neighbors.push(p.id);
+      const q = all.find((q) => q.id === id)!;
+      if (!q.neighbors.includes(p.id)) q.neighbors.push(p.id);
     }
   for (const [a, b, sea] of STRAITS) {
     const from = all.find((p) => p.id === a),

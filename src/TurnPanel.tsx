@@ -1,3 +1,4 @@
+import { CouncilEffectsPanel } from './DilemmaCard';
 import { NotificationCard } from './Notifications';
 import { useEffect, useState } from 'react';
 import { ArrowRight, Coins, Play, ScrollText, Swords, X } from 'lucide-react';
@@ -32,6 +33,7 @@ export default function TurnPanel({
     <div className="turn-panel">
       {tab === 'personal' && (
         <section className="personal-inbox">
+          <CouncilEffectsPanel game={game} playerId={playerId} />
           {game.notifications
             .filter((n) => n.type !== 'WORLD' && n.involvesPlayerIds.includes(playerId))
             .slice()

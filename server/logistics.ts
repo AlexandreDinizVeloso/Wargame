@@ -7,7 +7,7 @@ import { destroyBattalion, removeUnits } from './state';
 import { notify } from './notifications';
 export function applyEncirclement(g: GameState, report: TurnResolutionReport) {
   for (const a of [...g.battalions]) {
-    a.encircled = false;
+    a.encircled = a.supplySabotagedUntilTurn === g.turn;
     if (a.isFleet || a.embarkedOnId || a.ownerId === 'NEUTRAL') continue;
     const p = g.provinces.find((p) => p.id === a.provinceId)!;
     const hostile = !!p.ownerId && p.ownerId !== a.ownerId && atWar(g, a.ownerId, p.ownerId);

@@ -11,7 +11,13 @@ import {
   submitOrder,
   viewFor,
 } from '../server/game';
-import { reservedResources, unitCount, victoryStatus } from '../shared/rules';
+import {
+  orderCost,
+  reservedResources,
+  roundMoney,
+  unitCount,
+  victoryStatus,
+} from '../shared/rules';
 import { declareWar } from '../server/diplomacy';
 import { setup, army } from './fixtures';
 
@@ -25,7 +31,7 @@ test('início exige 3–8 jogadores, nações únicas e territórios sem sobrepo
   for (let i = 2; i < 8; i++) addPlayer(g, String(i));
   assert.throws(() => addPlayer(g, 'Nove'));
   startGame(g);
-  assert.equal(g.provinces.filter((p) => p.ownerId).length, 16);
+  assert.equal(g.provinces.filter((p) => p.ownerId).length, 8);
   assert.equal(new Set(g.players.map((p) => p.nationId)).size, 8);
   assert.ok(g.battalions.every((a) => unitCount(a) > 0));
   assert.throws(() => setMode(g, 'campaign'));
@@ -35,24 +41,24 @@ test('troca de teatro no lobby reconstrói apenas o tabuleiro', () => {
   addPlayer(g, 'A');
   setMode(g, 'quick', 'ASIA');
   assert.equal(g.players.length, 1);
-  assert.equal(g.provinces.filter((p) => p.kind === 'LAND').length, 28);
+  assert.equal(g.provinces.filter((p) => p.kind === 'LAND').length, 13);
   assert.ok(g.provinces.some((p) => p.id === 'japan'));
   setMode(g, 'campaign');
-  assert.equal(g.provinces.filter((p) => p.kind === 'LAND').length, 95);
+  assert.equal(g.provinces.filter((p) => p.kind === 'LAND').length, 42);
 });
 test('cidade e batalhão têm filas independentes; substituição e cancelamento liberam reservas', () => {
   const {
       g,
       players: [a],
     } = setup(),
-    unit = army(g, a.id, 'portugal');
+    unit = army(g, a.id, 'castile');
   submitOrder(g, a.id, { type: 'TRAIN_BATTALION', battalionId: unit.id });
-  submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'portugal' });
+  submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'castile' });
   assert.equal(g.orders[a.id].length, 2);
-  assert.equal(reservedResources(g, a.id).gold, 26);
-  submitOrder(g, a.id, { type: 'PACIFY', provinceId: 'portugal' });
+  assert.equal(reservedResources(g, a.id).gold, 30);
+  submitOrder(g, a.id, { type: 'PACIFY', provinceId: 'castile' });
   assert.equal(reservedResources(g, a.id).gold, 14);
-  cancelOrder(g, a.id, 'city:portugal');
+  cancelOrder(g, a.id, 'city:castile');
   assert.equal(reservedResources(g, a.id).gold, 6);
 });
 test('comandos rejeitam batalhão alheio, rotas ilegais, NaN e valores fracionários', () => {
@@ -60,17 +66,17 @@ test('comandos rejeitam batalhão alheio, rotas ilegais, NaN e valores fracioná
       g,
       players: [a, b],
     } = setup(),
-    unit = army(g, a.id, 'portugal');
+    unit = army(g, a.id, 'castile');
   for (const command of [
     { type: 'TRAIN_BATTALION', battalionId: unit.id },
-    { type: 'MOVE_BATTALION', battalionId: unit.id, targetProvinceId: 'castile' },
+    { type: 'MOVE_BATTALION', battalionId: unit.id, targetProvinceId: 'france' },
   ] as const)
     assert.throws(() => submitOrder(g, b.id, command));
   assert.throws(() =>
-    submitOrder(g, a.id, { type: 'RECRUIT_BATTALION', provinceId: 'portugal', infantry: NaN }),
+    submitOrder(g, a.id, { type: 'RECRUIT_BATTALION', provinceId: 'castile', infantry: NaN }),
   );
   assert.throws(() =>
-    submitOrder(g, a.id, { type: 'RECRUIT_BATTALION', provinceId: 'portugal', infantry: 1.5 }),
+    submitOrder(g, a.id, { type: 'RECRUIT_BATTALION', provinceId: 'castile', infantry: 1.5 }),
   );
   assert.throws(() =>
     submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: unit.id, path: ['japan'] }),
@@ -81,25 +87,27 @@ test('mercenários imediatos respeitam ouro reservado, reserva humana e desconto
     g,
     players: [a],
   } = setup();
-  a.gold = 22;
-  submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'portugal' });
+  const province = g.provinces.find((p) => p.id === 'castile')!;
+  a.gold = orderCost({ type: 'BUILD_MARKET', provinceId: province.id }, province, a, g).gold + 2;
+  submitOrder(g, a.id, { type: 'BUILD_MARKET', provinceId: 'castile' });
   assert.throws(() =>
     submitOrder(g, a.id, {
       type: 'RECRUIT_BATTALION',
-      provinceId: 'portugal',
+      provinceId: 'castile',
       infantry: 1,
       isMercenary: true,
     }),
   );
-  cancelOrder(g, a.id, 'city:portugal');
-  const manpower = a.manpower;
+  cancelOrder(g, a.id, 'city:castile');
+  const manpower = a.manpower,
+    before = a.gold;
   submitOrder(g, a.id, {
     type: 'RECRUIT_BATTALION',
-    provinceId: 'portugal',
+    provinceId: 'castile',
     infantry: 2,
     isMercenary: true,
   });
-  assert.equal(a.gold, 16.15);
+  assert.equal(a.gold, roundMoney(before - 23.4));
   assert.equal(a.manpower, manpower);
   assert.equal(g.battalions[0].training, 1);
   assert.equal(g.battalions[0].isMercenary, true);
@@ -109,11 +117,11 @@ test('recrutamento de cidade reforça a entidade e dilui treinamento', () => {
       g,
       players: [a],
     } = setup(),
-    unit = army(g, a.id, 'portugal', { infantry: 3 });
+    unit = army(g, a.id, 'castile', { infantry: 3 });
   unit.training = 1.5;
   submitOrder(g, a.id, {
     type: 'RECRUIT_BATTALION',
-    provinceId: 'portugal',
+    provinceId: 'castile',
     battalionId: unit.id,
     infantry: 2,
   });
@@ -127,7 +135,7 @@ test('treinamento, divisão e fusão preservam composição, dono e quantidade',
       g,
       players: [a],
     } = setup(),
-    unit = army(g, a.id, 'portugal', { infantry: 6, cavalry: 2, artillery: 2 });
+    unit = army(g, a.id, 'castile', { infantry: 6, cavalry: 2, artillery: 2 });
   submitOrder(g, a.id, {
     type: 'SPLIT_BATTALION',
     battalionId: unit.id,
@@ -152,27 +160,27 @@ test('marcha continua uma aresta por rodada e atravessar fronteira exige guerra 
       g,
       players: [a, b],
     } = setup(),
-    unit = army(g, a.id, 'portugal', { infantry: 8 });
-  g.provinces.find((p) => p.id === 'aquitaine')!.ownerId = g.players[2].id;
+    unit = army(g, a.id, 'castile', { infantry: 8 });
+  g.provinces.find((p) => p.id === 'italy')!.ownerId = g.players[2].id;
   assert.throws(() =>
     submitOrder(g, a.id, {
       type: 'MOVE_BATTALION',
       battalionId: unit.id,
-      targetProvinceId: 'aquitaine',
+      targetProvinceId: 'italy',
     }),
   );
   declareWar(g, a.id, b.id, 'CONQUEST');
   g.provinces.find((p) => p.id === 'japan')!.ownerId = g.players[2].id;
-  g.provinces.find((p) => p.id === 'aquitaine')!.ownerId = a.id;
+  g.provinces.find((p) => p.id === 'italy')!.ownerId = a.id;
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
-    path: ['castile', 'aquitaine'],
+    path: ['france', 'italy'],
   });
   resolveTurn(g);
-  assert.equal(unit.provinceId, 'castile');
+  assert.equal(unit.provinceId, 'france');
   assert.deepEqual(unit.pathQueue, []);
-  const fort = g.provinces.find((p) => p.id === 'castile')!;
+  const fort = g.provinces.find((p) => p.id === 'france')!;
   assert.equal(fort.occupierId, null);
   assert.equal(fort.siege?.progress, 1);
   resolveTurn(g);
@@ -180,10 +188,10 @@ test('marcha continua uma aresta por rodada e atravessar fronteira exige guerra 
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
-    targetProvinceId: 'aquitaine',
+    targetProvinceId: 'italy',
   });
   resolveTurn(g);
-  assert.equal(unit.provinceId, 'aquitaine');
+  assert.equal(unit.provinceId, 'italy');
   assert.deepEqual(unit.pathQueue, []);
 });
 test('guarnição não é doada ao atravessar território com acesso militar', () => {
@@ -191,31 +199,31 @@ test('guarnição não é doada ao atravessar território com acesso militar', (
       g,
       players: [a, b],
     } = setup(),
-    unit = army(g, a.id, 'portugal');
+    unit = army(g, a.id, 'castile');
   g.relations.find((r) => r.a === a.id && r.b === b.id)!.militaryAccess.push(a.id);
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
-    targetProvinceId: 'castile',
+    targetProvinceId: 'france',
   });
   resolveTurn(g);
-  assert.equal(unit.provinceId, 'castile');
+  assert.equal(unit.provinceId, 'france');
   assert.equal(unit.ownerId, a.id);
-  assert.equal(g.provinces.find((p) => p.id === 'castile')!.ownerId, b.id);
-  assert.equal(g.provinces.find((p) => p.id === 'castile')!.occupierId, null);
+  assert.equal(g.provinces.find((p) => p.id === 'france')!.ownerId, b.id);
+  assert.equal(g.provinces.find((p) => p.id === 'france')!.occupierId, null);
 });
 test('entrancheiramento cancela rota e não usa a ordem da cidade', () => {
   const {
       g,
       players: [a],
     } = setup(),
-    unit = army(g, a.id, 'portugal');
-  unit.pathQueue = ['castile'];
+    unit = army(g, a.id, 'castile');
+  unit.pathQueue = ['france'];
   submitOrder(g, a.id, { type: 'ENTRENCH_BATTALION', battalionId: unit.id });
-  submitOrder(g, a.id, { type: 'BUILD_FORT', provinceId: 'portugal' });
+  submitOrder(g, a.id, { type: 'BUILD_FORT', provinceId: 'castile' });
   resolveTurn(g);
   assert.equal(unit.entrenched, true);
-  assert.equal(unit.provinceId, 'portugal');
+  assert.equal(unit.provinceId, 'castile');
   assert.equal(g.provinces[0].fortLevel, 1);
 });
 test('máquina de comandos não muda a entrada, inclusive em rejeições', () => {
@@ -223,7 +231,7 @@ test('máquina de comandos não muda a entrada, inclusive em rejeições', () =>
       g,
       players: [a],
     } = setup(),
-    unit = army(g, a.id, 'portugal'),
+    unit = army(g, a.id, 'castile'),
     before = structuredClone(g);
   const command = {
     type: 'SUBMIT_ORDER',
@@ -244,8 +252,8 @@ test('visões privadas escondem ordens, semente e caminhos adversários', () => 
       g,
       players: [a, b],
     } = setup(),
-    unit = army(g, a.id, 'portugal');
-  unit.pathQueue = ['castile'];
+    unit = army(g, a.id, 'castile');
+  unit.pathQueue = ['france'];
   submitOrder(g, a.id, { type: 'TRAIN_BATTALION', battalionId: unit.id });
   const own = viewFor(g, a.id),
     other = viewFor(g, b.id);

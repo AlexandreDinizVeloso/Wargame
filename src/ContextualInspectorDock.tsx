@@ -8,7 +8,7 @@ export function ContextualInspectorDock(props: WindowProps) {
       height={report ? 440 : 540}
       minWidth={400}
       maxWidth={report ? 1100 : 760}
-      anchor={report ? 'bottom' : 'left'}
+      anchor={report ? 'right' : 'left'}
       className={`inspector-dock ${report ? 'report-dock' : ''}`}
       bodyClassName="inspector-body"
       hudSurface

@@ -1,4 +1,4 @@
-# Concórdia na nuvem · v1.0
+# Concórdia na nuvem · v1.01
 
 Um processo Node atende o site, `/api/health` e `/ws` na mesma porta. Amigos acessam um link HTTPS; não precisam de Radmin, Node instalado ou IP público em casa. A imagem usa **Node 20 Alpine**, com versão mínima 20.19 para Vite, build em estágio separado, dependências de produção e usuário sem privilégios.
 
@@ -39,7 +39,7 @@ Uma VPS Linux com Docker Compose, aproximadamente **1 vCPU e 1 GB de RAM**, serv
 4. Clone a branch e execute:
 
 ```sh
-git clone --branch feat/v1.0-purge-geography-ai \
+git clone --branch feat/v1.01-risk-pacing-audio-fix \
   https://github.com/AlexandreDinizVeloso/Wargame.git
 cd Wargame
 export GAME_DOMAIN=play.seu-dominio.com
@@ -105,3 +105,5 @@ docker build --secret id=build_ca,src=/caminho/ca-corporativa.crt -t concordia:r
 ```
 
 `HTTP_PROXY`, `HTTPS_PROXY` e `NO_PROXY` podem ser passados como build args quando sua rede exigir. O deploy comum não precisa desse secret. Para conferir a imagem construída localmente, execute `npm run test:docker`; ele cria e remove apenas seu próprio contêiner/volume de teste e verifica a reconexão após reinício.
+
+Na v1.01, inclua a pasta `.local/archived-rooms/` no backup e no volume persistente. Salas inativas saem das listagens após 15 minutos, preservando credenciais em arquivos de campanha; os saves completos por HTTP exigem a sessão privada do anfitrião.

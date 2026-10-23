@@ -1,7 +1,8 @@
 import type { ProvinceStaticData } from './map';
 export type GameMode = 'quick' | 'campaign';
-export type Continent = 'EUROPE' | 'AMERICAS' | 'MENA_AFRICA' | 'ASIA';
-export type Theater = Exclude<Continent, 'MENA_AFRICA'>;
+export type Continent =
+  'EUROPE' | 'NORTH_AMERICA' | 'SOUTH_AMERICA' | 'MENA_AFRICA' | 'ASIA' | 'AMERICAS';
+export type Theater = 'EUROPE' | 'AMERICAS' | 'ASIA';
 export type ReligionId = 'SOLAR' | 'MERCHANT' | 'REFORMED' | 'ANCESTRAL';
 export type ReligiousPolicy = 'INQUISITION' | 'TOLERANCE';
 export type Objective = 'DOMINATION' | 'SECRET_OBJECTIVE';
@@ -30,7 +31,10 @@ export interface Composition {
   warships: number;
   transports: number;
 }
+export type RecruitmentComposition = Pick<Composition, 'infantry' | 'cavalry' | 'artillery'>;
 export interface Battalion extends Composition {
+  blitzUntilTurn?: number;
+  supplySabotagedUntilTurn?: number;
   lastMovedTurn?: number;
   previousProvinceId?: string;
   moraleCap?: 100 | 110;
@@ -239,8 +243,14 @@ export interface Player {
   objectiveStreak: number;
   originalCapitalId: string | null;
   authority?: number;
+  authorityEarnedTurn?: number;
+  authorityEarnedThisTurn?: number;
+  dilemmaAttackUntilTurn?: number;
   lastDilemmaTurn?: number;
+  lastDilemmaId?: string;
+  councilEffects?: import('./councilEffects').CouncilEffect[];
   activeDilemma?: import('./dilemmas').ActiveDilemma | null;
+  dilemmaBuildingCredits?: number;
   botTargetProvinceId?: string;
   afkStreak?: number;
   afkRegent?: boolean;
@@ -477,7 +487,7 @@ export interface MatchConfig {
   mapId: string;
   maxTurns: number;
   turnSeconds: number;
-  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0' | '0.99.0' | '1.0.0';
+  createdVersion: '0.7.0' | '0.9.0-rc.1' | '0.95.0' | '0.98.0' | '0.99.0' | '1.0.0' | '1.0.1';
   tutorial?: boolean;
   enableSecretObjectives: boolean;
   allowBotSecretVictory: boolean;
@@ -551,7 +561,17 @@ export type GameView = Omit<
   plannedOrders: PlayerOrder[];
   readNotificationIds: string[];
 };
+export type SupremeCommandId =
+  'BLITZ_MARCH' | 'WAR_BONDS' | 'ELITE_GUARD' | 'SIEGE_BREAKER' | 'SABOTAGE_SUPPLY';
+export interface SupremeCommandOrder {
+  type: 'EXECUTE_SUPREME_COMMAND';
+  command: SupremeCommandId;
+  battalionId?: string;
+  provinceId?: string;
+}
 export type GameCommand =
+  | SupremeCommandOrder
+  | { type: 'MASS_RECRUIT'; composition: RecruitmentComposition }
   | { type: 'CHOOSE_DILEMMA'; option: 0 | 1 }
   | { type: 'EMERGENCY_LEVY' }
   | { type: 'CAST_IMPERIAL_VOTE'; candidateId: string }

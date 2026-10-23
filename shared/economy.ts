@@ -1,3 +1,7 @@
+import { ECONOMY_BALANCE } from './balance';
+import { councilModifiers } from './councilEffects';
+import { continentBonuses } from './risk';
+export { continentBonuses } from './risk';
 import { goldRules } from './factions';
 import type { Battalion, Composition, GameState, Province, RecruitBattalionOrder } from './types';
 export const UNIT_UPKEEP: Composition = {
@@ -20,18 +24,34 @@ export const maintenanceOf = (a: Partial<Composition>, nation?: import('./types'
             : 1),
     0,
   );
-export function realmLimits(g: Pick<GameState, 'provinces' | 'players'>, id: string) {
+export function realmLimits(
+  g: Pick<GameState, 'provinces' | 'players'> & Partial<Pick<GameState, 'turn'>>,
+  id: string,
+) {
   const owned = g.provinces.filter((p) => p.kind === 'LAND' && (p.occupierId ?? p.ownerId) === id);
   const pacified = owned.filter(
     (p) => p.ownerId === id && p.pacification >= 80 && p.unrest < 50,
   ).length;
   const barracks = owned.reduce((n, p) => n + p.barracksLevel, 0);
+  const policy = councilModifiers(
+    g.players.find((p) => p.id === id),
+    g.turn ?? 0,
+  );
   return {
     armyCap: 12 + Math.floor(owned.length * 1.5) + barracks * 5,
-    manpowerCap: 18 + pacified * 1.5 + barracks * 8,
-    manpowerGain:
-      (1 + Math.floor(pacified * 0.25) + barracks * 1.5) *
-      ((g.players.find((p) => p.id === id)?.warExhaustion ?? 0) >= 25 ? 0.7 : 1),
+    manpowerCap:
+      ECONOMY_BALANCE.manpowerCapacityBase +
+      pacified * ECONOMY_BALANCE.manpowerCapacityPerPacified +
+      barracks * ECONOMY_BALANCE.manpowerCapacityPerBarracks,
+    manpowerGain: Math.max(
+      0,
+      (ECONOMY_BALANCE.manpowerBase +
+        Math.floor(pacified * 0.25) * ECONOMY_BALANCE.manpowerPerFourPacified +
+        barracks * ECONOMY_BALANCE.manpowerPerBarracks) *
+        ((g.players.find((p) => p.id === id)?.warExhaustion ?? 0) >= 25 ? 0.7 : 1) +
+        continentBonuses(g, id).manpower +
+        policy.manpowerGain,
+    ),
   };
 }
 export const provinceRecruitLimit = (
@@ -76,22 +96,27 @@ export function recruitmentBlock(
   return null;
 }
 export function moraleRecovery(
-  g: Pick<GameState, 'players' | 'relations' | 'wars' | 'provinces'>,
+  g: Pick<GameState, 'players' | 'relations' | 'wars' | 'provinces'> &
+    Partial<Pick<GameState, 'turn'>>,
   a: Battalion,
 ) {
   const p = g.provinces.find((p) => p.id === a.provinceId);
   if (!p) return 0;
+  const recoveryBonus = councilModifiers(
+    g.players.find((p) => p.id === a.ownerId),
+    g.turn ?? 0,
+  ).moraleRecovery;
   const c = p.occupierId ?? p.ownerId;
   if (p.ownerId === a.ownerId && c === a.ownerId && p.pacification >= 80)
-    return p.barracksLevel > 0 ? 45 : 35;
+    return Math.max(0, (p.barracksLevel > 0 ? 45 : 35) + recoveryBonus);
   if (
     c === a.ownerId ||
     g.relations.some(
       (r) => r.allied && ((r.a === a.ownerId && r.b === c) || (r.b === a.ownerId && r.a === c)),
     )
   )
-    return 20;
-  return 8;
+    return Math.max(0, 20 + recoveryBonus);
+  return Math.max(0, 8 + recoveryBonus);
 }
 
 export function goldReparationPayments(
@@ -119,7 +144,7 @@ export type AuthorityNation = Pick<
 export const integerValue = (value: number) =>
   Number.isFinite(value) ? Math.round(value) || 0 : 0;
 export function getNationAuthority(nation: AuthorityNation): number {
-  return Math.max(0, integerValue(nation.influence + nation.prestige + nation.militaryXP));
+  return Math.max(0, Math.floor(nation.influence + nation.prestige + nation.militaryXP + 1e-9));
 }
 export function spendNationAuthority(nation: AuthorityNation, cost: number): boolean {
   if (!Number.isFinite(cost) || cost < 0 || getNationAuthority(nation) < Math.ceil(cost))
@@ -184,4 +209,25 @@ export function logisticsPosture(
     multiplier: distant ? 1.25 : 1,
     label: distant ? '⚔️ Em Campanha (+25% logística distante)' : '⚔️ Em Campanha (Custo total)',
   };
+}
+
+export function authorityIncome(
+  g: Pick<GameState, 'provinces' | 'players' | 'turn'>,
+  id: string,
+): number {
+  const player = g.players.find((p) => p.id === id);
+  if (!player || !g.provinces.some((p) => p.kind === 'LAND' && p.ownerId === id)) return 0;
+  const templeLevels = g.provinces
+    .filter((p) => p.kind === 'LAND' && (p.occupierId ?? p.ownerId) === id)
+    .reduce((n, p) => n + p.templeLevel, 0);
+  const templeIncome =
+    g.turn % ECONOMY_BALANCE.templeAuthorityPeriod === 0
+      ? templeLevels * ECONOMY_BALANCE.templeAuthorityPerLevel
+      : 0;
+  return (
+    ECONOMY_BALANCE.authorityPerTurn +
+    templeIncome +
+    continentBonuses(g, id).authority +
+    Math.trunc(councilModifiers(player, g.turn).authorityGain)
+  );
 }

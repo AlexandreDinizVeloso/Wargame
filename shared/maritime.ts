@@ -6,17 +6,14 @@ export const BOMBARDMENT_COST = 6;
 export const SEA_TRADE_VALUE: Record<string, number> = {
   'north-atlantic': 6,
   'south-atlantic': 5,
-  'caribbean-sea': 4,
-  'north-pacific': 4,
-  'south-pacific': 3,
-  'western-med': 5,
-  'eastern-med': 5,
-  baltic: 4,
-  arctic: 3,
-  'indian-west': 6,
-  'indian-east': 5,
+  mediterranean: 5,
+  'north-sea': 4,
+  'indian-ocean': 5,
+  'arabian-sea': 6,
   'south-china-sea': 6,
-  'east-asian-sea': 5,
+  'north-pacific': 5,
+  'south-pacific': 3,
+  'arctic-ocean': 3,
 };
 type NavalWorld = Pick<GameState, 'provinces' | 'battalions' | 'players' | 'wars'> &
   Partial<Pick<GameState, 'turn' | 'matchConfig'>>;

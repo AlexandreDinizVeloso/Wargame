@@ -1,5 +1,6 @@
 import { createBattalion } from '../server/state';
 import { compositionOf } from '../shared/rules';
+import { syncNationAuthority } from '../shared/economy';
 import { createHash, randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { WebSocket } from 'ws';
@@ -25,14 +26,16 @@ export function seedBrowserFixtures(filename: string) {
   const alerts = make('ALERT6'),
     [host, attacker] = alerts.players;
   host.gold = 200;
+  host.influence = 40;
+  syncNationAuthority(host);
   const war = declareWar(alerts, attacker.id, host.id, 'CONQUEST');
   const invasion = alerts.battalions.find((a) => a.ownerId === attacker.id && !a.isFleet)!;
   invasion.infantry = 24;
-  invasion.provinceId = 'portugal';
+  invasion.provinceId = 'castile';
   resolveBattle(
     alerts,
     invasion,
-    alerts.provinces.find((p) => p.id === 'portugal')!,
+    alerts.provinces.find((p) => p.id === 'castile')!,
     emptyTurnReport(3, alerts.diet),
   );
   offerPeace(alerts, attacker.id, war.id, []);
@@ -59,6 +62,7 @@ export function seedBrowserFixtures(filename: string) {
   for (const n of ['vespera', 'ferro_norte', 'kaldor'] as const) addPlayer(transport, n, false, n);
   startGame(transport);
   transport.isPublic = false;
+  transport.players[0].gold = 100;
   const lobby = createGame('LOBBY6', 'campaign', false, 123);
   addPlayer(lobby, 'Anfitrião', false, 'vespera');
   addPlayer(lobby, 'Convidado', false, 'sol_invicto');
@@ -69,6 +73,46 @@ export function seedBrowserFixtures(filename: string) {
   visual.code = 'VISRC9';
   visual.turn = 4;
   visual.season = 'WINTER';
+  visual.players[0].influence = 30;
+  syncNationAuthority(visual.players[0]);
+  visual.players[0].activeDilemma = {
+    id: 'military-council',
+    turn: 4,
+    targetProvinceId: 'castile',
+  };
+  const councilPolicy = make('POL101'),
+    councilCrisis = make('CRS101');
+  for (const [game, card] of [
+    [councilPolicy, 'succession'],
+    [councilCrisis, 'mint'],
+  ] as const) {
+    game.turn = 4;
+    game.players[0].activeDilemma = { id: card, turn: 4, targetProvinceId: 'castile' };
+  }
+  const recruitment = make('MASS01');
+  recruitment.turn = 1;
+  recruitment.players[0].gold = 100;
+  recruitment.players[0].manpower = 10;
+  const recruitmentOwner = recruitment.players[0];
+  for (const id of ['castile', 'france', 'italy']) {
+    const province = recruitment.provinces.find((p) => p.id === id)!;
+    Object.assign(province, {
+      ownerId: recruitmentOwner.id,
+      occupierId: null,
+      siege: null,
+      barracksLevel: 0,
+      foundryLevel: 0,
+      marketLevel: 0,
+      pacification: 100,
+      unrest: 0,
+      religion: recruitmentOwner.faith,
+      strategicResource: null,
+    });
+    recruitment.battalions = recruitment.battalions.filter(
+      (a) => a.ownerId !== 'NEUTRAL' || a.provinceId !== id,
+    );
+  }
+  recruitment.orders[recruitmentOwner.id] = [{ type: 'BUILD_MARKET', provinceId: 'castile' }];
   const structures = [
     'fortLevel',
     'barracksLevel',
@@ -101,15 +145,15 @@ export function seedBrowserFixtures(filename: string) {
   const navy = createBattalion(
     visual,
     owner,
-    'western-med',
+    'mediterranean',
     compositionOf({ warships: 3, transports: 2 }),
     { name: 'Galeões Reais', morale: 80, isFleet: true },
   );
-  const cargo = createBattalion(visual, owner, 'portugal', compositionOf({ infantry: 4 }), {
+  const cargo = createBattalion(visual, owner, 'castile', compositionOf({ infantry: 4 }), {
     name: 'Fuzileiros embarcados',
     morale: 80,
   });
-  cargo.provinceId = 'western-med';
+  cargo.provinceId = 'mediterranean';
   navy.embarkedArmyId = cargo.id;
   cargo.embarkedOnId = navy.id;
   const general = visual.commanders.find((c) => c.ownerId === owner && !c.isAdmiral);
@@ -149,7 +193,7 @@ export function seedBrowserFixtures(filename: string) {
   const clash = createBattalion(
     cinematic,
     cinEnemy.id,
-    'portugal',
+    'castile',
     compositionOf({ infantry: 14, cavalry: 2, artillery: 1 }),
     { morale: 90, training: 1.2, name: 'Coluna de Invasão' },
   );
@@ -157,7 +201,7 @@ export function seedBrowserFixtures(filename: string) {
   resolveBattle(
     cinematic,
     clash,
-    cinematic.provinces.find((p) => p.id === 'portugal')!,
+    cinematic.provinces.find((p) => p.id === 'castile')!,
     cinematicReport,
   );
   cinematic.lastReport = cinematicReport;
@@ -176,28 +220,40 @@ export function seedBrowserFixtures(filename: string) {
     morale: 80,
     name: 'Exército secreto no Japão',
   });
-  const rooms = [alerts, sandbox, transport, lobby, visual, gold, cinematic].map(
-    (game: GameState) => {
-      const auth = game.players.map((p) => ({
-        code: game.code,
-        playerId: p.id,
-        token: randomBytes(24).toString('hex'),
-      }));
-      sessions.set(game.code, auth);
-      return {
-        game,
-        touched: Date.now(),
-        remainingMs: 60000,
-        sessions: auth.map((s) => ({
-          playerId: s.playerId,
-          tokenHash: createHash('sha256').update(s.token).digest('hex'),
-        })),
-      };
-    },
-  );
+  const rooms = [
+    alerts,
+    sandbox,
+    transport,
+    lobby,
+    visual,
+    gold,
+    cinematic,
+    councilPolicy,
+    councilCrisis,
+    recruitment,
+  ].map((game: GameState) => {
+    const auth = game.players.map((p) => ({
+      code: game.code,
+      playerId: p.id,
+      token: randomBytes(24).toString('hex'),
+    }));
+    sessions.set(game.code, auth);
+    return {
+      game,
+      touched: Date.now(),
+      remainingMs: 60000,
+      sessions: auth.map((s) => ({
+        playerId: s.playerId,
+        tokenHash: createHash('sha256').update(s.token).digest('hex'),
+      })),
+    };
+  });
   writeSnapshot(filename, rooms, Date.now());
   return {
     cinematic: sessions.get('VERT99')!,
+    councilPolicy: sessions.get('POL101')!,
+    councilCrisis: sessions.get('CRS101')!,
+    recruitment: sessions.get('MASS01')!,
     gold: sessions.get('GOLD98')!,
     visual: sessions.get('VISRC9')!,
     lobby: sessions.get('LOBBY6')!,

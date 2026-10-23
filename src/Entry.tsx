@@ -1,3 +1,4 @@
+import ArchivedRoomControls from './ArchivedRoomControls';
 import { SCENARIOS, type ScenarioId } from '../shared/scenarios';
 import CampaignSaveControls, { inviteUrl } from './CampaignSaveControls';
 import type { SeatInvite } from '../shared/types';
@@ -118,7 +119,7 @@ export function Entry({
       <header className="entry-header">
         <Brand />
         <span className="edition">
-          GOLD CANDIDATE <i /> 0.98
+          RISK-PACED EDITION <i /> 1.01
         </span>
         <button className="quiet-button" onClick={onProfile}>
           🏅 Perfil do Estrategista
@@ -129,6 +130,7 @@ export function Entry({
       </header>
       <div className="entry-save-tools">
         <CampaignSaveControls send={send} />
+        <ArchivedRoomControls send={send} />
       </div>
       <div className={`entry-content ${form ? 'with-form' : ''}`}>
         <section className="hero-copy">

@@ -1,7 +1,10 @@
+import { SUPREME_COMMANDS } from '../shared/supreme';
+import { MAX_MASS_RECRUITMENT } from '../shared/massRecruitment';
 import { BUILDINGS } from '../shared/development';
 import { SKILLS, TRAITS } from '../shared/military';
 import type {
   Composition,
+  SupremeCommandId,
   GameCommand,
   PeaceTerm,
   PlayerOrder,
@@ -174,6 +177,21 @@ export function parseTerms(value: unknown): PeaceTerm[] {
 export function parseCommand(value: unknown): GameCommand {
   const c = object(value),
     type = string(c.type);
+  if (type === 'MASS_RECRUIT') {
+    const raw = object(c.composition);
+    const composition = {
+      infantry: integer(raw.infantry, 0, MAX_MASS_RECRUITMENT),
+      cavalry: integer(raw.cavalry, 0, MAX_MASS_RECRUITMENT),
+      artillery: integer(raw.artillery, 0, MAX_MASS_RECRUITMENT),
+    };
+    const total = composition.infantry + composition.cavalry + composition.artillery;
+    assert(total > 0 && total <= MAX_MASS_RECRUITMENT, 'Recrute entre 1 e 240 tropas.');
+    assert(
+      !raw.warships && !raw.transports && !raw.isMercenary,
+      'Recrutamento em massa aceita apenas tropas terrestres regulares.',
+    );
+    return { type, composition };
+  }
   if (type === 'CAST_IMPERIAL_VOTE') return { type, candidateId: string(c.candidateId) };
   if (type === 'ASSIGN_LEADER')
     return {
@@ -262,6 +280,18 @@ export function parseCommand(value: unknown): GameCommand {
   if (type === 'SET_RELIGIOUS_POLICY') {
     assert(c.policy === 'INQUISITION' || c.policy === 'TOLERANCE', 'Política inválida.');
     return { type, policy: c.policy };
+  }
+  if (type === 'EXECUTE_SUPREME_COMMAND') {
+    assert(
+      SUPREME_COMMANDS.some((definition) => definition.id === c.command),
+      'Comando Supremo inválido.',
+    );
+    return {
+      type,
+      command: c.command as SupremeCommandId,
+      ...(c.battalionId !== undefined ? { battalionId: string(c.battalionId) } : {}),
+      ...(c.provinceId !== undefined ? { provinceId: string(c.provinceId) } : {}),
+    };
   }
   if (type === 'CHOOSE_DILEMMA') return { type, option: integer(c.option, 0, 1) as 0 | 1 };
   if (type === 'EMERGENCY_LEVY' || type === 'CONTINUE_SANDBOX') return { type };

@@ -6,7 +6,7 @@
 
 | Rota              | Retorno                                                                                     |
 | ----------------- | ------------------------------------------------------------------------------------------- |
-| `GET /api/health` | `status: ok`, `version: 1.0.0`, `protocolVersion: 7`                                        |
+| `GET /api/health` | `status: ok`, `version: 1.0.1`, `protocolVersion: 7`                                        |
 | `GET /api/schema` | Nações, mapas, recursos, crises, crenças, ordens, `skills`, `commanderTraits` e `buildings` |
 | `GET /api/rooms`  | Array de salas públicas não encerradas, sem sessão ou cartas privadas                       |
 | `/ws`             | WebSocket de mensagens JSON                                                                 |
@@ -208,3 +208,15 @@ Na v0.99, `matchConfig.verticalSlice: true` ativava Autoridade e névoa nas nova
 - `GET /api/audio-assets` inclui os cinco arquivos WAV PCM. `GET /api/schema` retorna o mapa expandido; saves carregados conservam a geometria armazenada.
 
 As regras novas de Autoridade, logística, dilemas e regência valem independentemente de `verticalSlice`. Esse campo continua controlando névoa e apresentação histórica. Consulte [v1.0](V1_0.md).
+
+## Extensões v1.01 (protocolo 7)
+
+`EXECUTE_SUPREME_COMMAND` recebe `command: BLITZ_MARCH|WAR_BONDS|ELITE_GUARD|SIEGE_BREAKER|SABOTAGE_SUPPLY` e, conforme o caso, `battalionId` ou `provinceId`. Custos e alvos são descritos por `supremeCommands` no schema. `continentBonuses` publica os cinco conjuntos de IDs e seus ganhos. O mapa padrão passa a 42 terras + 10 mares; saves conservam a geometria original.
+
+`MASS_RECRUIT` recebe `composition: {infantry,cavalry,artillery}`, com inteiros não negativos e soma entre 1 e 240. O planejador compartilhado `planMassRecruitment` retorna ordens, quantidades solicitadas/atendidas/restantes, custo e distribuição por cidade. O servidor recalcula a distribuição, preserva ordens existentes e reserva recursos através das ordens regulares. Pedidos parcialmente atendidos são aceitos e notificados; zero atendimento é rejeitado.
+
+`blitzUntilTurn`, `supplySabotagedUntilTurn`, `dilemmaAttackUntilTurn` e `dilemmaBuildingCredits` são campos opcionais validados em disco. Os dois últimos permanecem para compatibilidade de saves antigos. As cartas usam `CHOOSE_DILEMMA`; `activeDilemma` também pode conter `targetProvinceId` e `context`. `councilEffects` guarda efeitos com início, expiração, origem, modificadores e região opcional. `lastDilemmaId` evita repetição frequente. `authorityEarnedTurn` e `authorityEarnedThisTurn` registram o limite de ganhos militares. Consulte os custos, a economia escassa e o Conselho em [v1.01](V1_01.md).
+
+`lastHumanActivityAt` é persistido por sala. Listagens fazem limpeza de entradas com 900000 ms de inatividade; arquivos ficam em `archived-rooms`. `GET /api/rooms/:code/DownloadSave` funciona em salas ativas ou arquivadas com `Authorization: Bearer TOKEN` e `X-Concordia-Player: PLAYER_ID` do anfitrião. A resposta é `CONCORDIA_SAVE_098` sem hashes de sessão. Um `resume` autenticado pode reabrir sala arquivada com as credenciais originais. O código WebSocket 4004 informa arquivamento e impede reconexão automática da aba AFK.
+
+O manifesto `/api/audio-assets` inclui as músicas de 16 segundos. O mixer é local ao navegador, não participa do estado autoritativo.

@@ -37,7 +37,7 @@ test('v099: visibilidade alcança somente um salto a partir de território e uni
     g,
     players: [me],
   } = vertical();
-  const source = g.provinces.find((p) => p.id === 'portugal')!;
+  const source = g.provinces.find((p) => p.id === 'castile')!;
   const seen = computeVisibleProvinces(g, me.id);
   assert.ok(seen.has(source.id));
   for (const n of source.neighbors) assert.ok(seen.has(n));
@@ -126,7 +126,7 @@ test('v099: autoridade soma componentes e gasto não duplica nem deixa saldo neg
   assert.equal(spendNationAuthority(p, 10), false);
   assert.deepEqual(p, before);
   assert.equal(spendNationAuthority(p, -1), false);
-  assert.equal(getNationAuthority({ influence: 1.2, prestige: 2.4, militaryXP: 0 }), 4);
+  assert.equal(getNationAuthority({ influence: 1.2, prestige: 2.4, militaryXP: 0 }), 3);
 });
 test('v099: doutrina usa autoridade mesmo sem XP também em partidas anteriores', () => {
   const {
@@ -180,8 +180,8 @@ test('v099: batalha registra composição original sem inferir tropas a partir d
     g,
     players: [a, b],
   } = vertical();
-  army(g, b.id, 'castile', { infantry: 5, cavalry: 1 });
-  const attacker = army(g, a.id, 'castile', { infantry: 8, cavalry: 2, artillery: 1 });
+  army(g, b.id, 'france', { infantry: 5, cavalry: 1 });
+  const attacker = army(g, a.id, 'france', { infantry: 8, cavalry: 2, artillery: 1 });
   g.turn = 3;
   g.relations.find((r) => r.a === a.id && r.b === b.id)!.atWar = true;
   // Guerra formal para participação defensiva.
@@ -190,7 +190,7 @@ test('v099: batalha registra composição original sem inferir tropas a partir d
   resolveBattle(
     g,
     attacker,
-    g.provinces.find((p) => p.id === 'castile')!,
+    g.provinces.find((p) => p.id === 'france')!,
     report,
   );
   assert.equal(report.battles[0].attackerCompositionBefore?.infantry, 8);

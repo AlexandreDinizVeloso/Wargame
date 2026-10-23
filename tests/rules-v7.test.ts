@@ -34,27 +34,27 @@ test('moral <25 bloqueia ofensiva neutra/inimiga, permitindo terra amiga', () =>
       g,
       players: [a],
     } = fixture(),
-    u = army(g, a.id, 'portugal');
+    u = army(g, a.id, 'castile');
   u.morale = 24;
   assert.match(offensiveBlock(g, u, p(g, 'maghreb'))!, /desorganizada/);
-  assert.equal(offensiveBlock(g, u, p(g, 'portugal')), null);
+  assert.equal(offensiveBlock(g, u, p(g, 'castile')), null);
   assert.throws(
-    () => submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['castile'] }),
+    () => submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['france'] }),
     /desorganizada/,
   );
   u.morale = 25;
-  assert.equal(offensiveBlock(g, u, p(g, 'castile')), null);
+  assert.equal(offensiveBlock(g, u, p(g, 'france')), null);
 });
 test('marcha já enviada é revalidada, descanso completo em casa reorganiza', () => {
   const {
       g,
       players: [a],
     } = fixture(),
-    u = army(g, a.id, 'portugal');
+    u = army(g, a.id, 'castile');
   submitOrder(g, a.id, { type: 'MOVE_BATTALION', battalionId: u.id, path: ['maghreb'] });
   u.morale = 20;
   const r = resolveTurn(g);
-  assert.equal(u.provinceId, 'portugal');
+  assert.equal(u.provinceId, 'castile');
   assert.equal(r.battles.length, 0);
   assert.equal(u.pathQueue.length, 0);
   assert.equal(isDisorganized(u), false);
@@ -64,7 +64,7 @@ test('treinamento eleva moral sem substituir a rodada de reorganização', () =>
       g,
       players: [a],
     } = fixture(),
-    u = army(g, a.id, 'portugal');
+    u = army(g, a.id, 'castile');
   u.morale = 20;
   submitOrder(g, a.id, { type: 'TRAIN_BATTALION', battalionId: u.id });
   resolveTurn(g);
@@ -87,7 +87,7 @@ test('divisão e fusão preservam desorganização mesmo com moral média alta',
       g,
       players: [a],
     } = fixture(),
-    u = army(g, a.id, 'portugal', { infantry: 6 });
+    u = army(g, a.id, 'castile', { infantry: 6 });
   u.morale = 40;
   u.disorganized = true;
   instantArmyAction(g, a.id, {
@@ -97,7 +97,7 @@ test('divisão e fusão preservam desorganização mesmo com moral média alta',
   });
   const split = g.battalions.find((v) => v.id !== u.id)!;
   assert.equal(split.disorganized, true);
-  const fresh = army(g, a.id, 'portugal', { infantry: 8 });
+  const fresh = army(g, a.id, 'castile', { infantry: 8 });
   mergeBattalions(fresh, u);
   assert.ok(fresh.morale > 25);
   assert.equal(fresh.disorganized, true);
@@ -120,10 +120,10 @@ test('atrito agrega formações do mesmo dono e divisão não evita perdas', () 
       g,
       players: [a],
     } = fixture();
-    p(g, 'portugal').baseSupplyLimit = 10;
-    p(g, 'portugal').portLevel = 0;
-    army(g, a.id, 'portugal', { infantry: split ? 15 : 30 });
-    if (split) army(g, a.id, 'portugal', { infantry: 15 });
+    p(g, 'castile').baseSupplyLimit = 10;
+    p(g, 'castile').portLevel = 0;
+    army(g, a.id, 'castile', { infantry: split ? 15 : 30 });
+    if (split) army(g, a.id, 'castile', { infantry: 15 });
     const r = resolveTurn(g);
     const losses = r.attritionLosses.reduce((n, e) => n + e.losses, 0);
     assert.ok(losses > 0);
@@ -193,8 +193,8 @@ test('nó marítimo exige guerra+transporte e soma navios sem multiplicar renda'
   cargo.embarkedArmyId = undefined;
   const eco = realmEconomy(g, a.id);
   g.battalions = [];
-  assert.equal(eco.maritimeTrade, 6);
-  assert.ok(Math.abs(eco.trade - realmEconomy(g, a.id).trade - 6) < 0.001);
+  assert.equal(eco.maritimeTrade, 3);
+  assert.ok(Math.abs(eco.trade - realmEconomy(g, a.id).trade - 3) < 0.001);
 });
 test('empate ou navio inimigo interrompe comércio; perder terra impede renda fantasma', () => {
   const {
@@ -209,7 +209,7 @@ test('empate ou navio inimigo interrompe comércio; perder terra impede renda fa
   declareWar(g, a.id, b.id, 'CONQUEST');
   assert.equal(maritimeIncome(g, a.id), 0);
   g.battalions = g.battalions.filter((u) => u.ownerId === a.id);
-  p(g, 'portugal').ownerId = null;
+  p(g, 'castile').ownerId = null;
   assert.equal(maritimeIncome(g, a.id), 0);
 });
 test('receita naval nacional tem teto de doze', () => {
@@ -217,7 +217,7 @@ test('receita naval nacional tem teto de doze', () => {
     g,
     players: [a],
   } = fixture();
-  for (const sea of ['north-atlantic', 'south-atlantic', 'western-med']) fleet(g, a.id, sea);
+  for (const sea of ['north-atlantic', 'south-atlantic', 'mediterranean']) fleet(g, a.id, sea);
   assert.equal(maritimeIncome(g, a.id), 12);
 });
 test('bombardeio cobra seis uma vez, reduz forte e vale até a rodada seguinte', () => {
@@ -225,7 +225,7 @@ test('bombardeio cobra seis uma vez, reduz forte e vale até a rodada seguinte',
       g,
       players: [a],
     } = fixture(),
-    f = fleet(g, a.id, 'western-med'),
+    f = fleet(g, a.id, 'mediterranean'),
     city = p(g, 'italy');
   city.fortLevel = 2;
   const before = a.gold;
@@ -243,7 +243,7 @@ test('bombardeio revalida frota, bloqueia repetição na costa e inimigo no mar'
       g,
       players: [a, b],
     } = fixture(),
-    f = fleet(g, a.id, 'western-med'),
+    f = fleet(g, a.id, 'mediterranean'),
     city = p(g, 'italy');
   f.warships = 2;
   assert.match(bombardmentBlock(g, f, city)!, /três navios/);
@@ -254,14 +254,14 @@ test('bombardeio revalida frota, bloqueia repetição na costa e inimigo no mar'
   f.provinceId = 'north-atlantic';
   resolveBombardments(g, r, new Set(), origins);
   assert.equal(r.bombardments.length, 0);
-  f.provinceId = 'western-med';
+  f.provinceId = 'mediterranean';
   resolveBombardments(g, r, new Set(), origins);
   assert.equal(r.bombardments.length, 1);
   resolveBombardments(g, r, new Set(), origins);
   assert.equal(r.bombardments.length, 1);
   city.coastalBombardment = null;
   declareWar(g, a.id, b.id, 'CONQUEST');
-  fleet(g, b.id, 'western-med', 1, 0);
+  fleet(g, b.id, 'mediterranean', 1, 0);
   assert.match(bombardmentBlock(g, f, city)!, /frota hostil/);
 });
 test('apoio costeiro afeta só o atacante indicado e expira', () => {
@@ -285,12 +285,12 @@ test('migração v6 mantém recursos e tropas, cancela ofensivas e inicializa no
       g,
       players: [a],
     } = fixture(),
-    u = army(g, a.id, 'portugal');
+    u = army(g, a.id, 'castile');
   g.turn = 159;
   u.morale = 20;
   a.ready = true;
   g.orders[a.id] = [
-    { type: 'MOVE_BATTALION', battalionId: u.id, path: ['castile'] },
+    { type: 'MOVE_BATTALION', battalionId: u.id, path: ['france'] },
     { type: 'TRAIN_BATTALION', battalionId: u.id },
   ];
   const old = structuredClone(g) as unknown as Record<string, unknown>;

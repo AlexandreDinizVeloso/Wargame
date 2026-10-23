@@ -1,3 +1,4 @@
+import { ECONOMY_BALANCE } from '../shared/balance';
 import { useState } from 'react';
 import type { GameView, PeaceTerm } from '../shared/types';
 import { treatyCost, treatyPerspective } from '../shared/treaties';
@@ -119,8 +120,8 @@ export default function PeaceTreatyTable({
           checked={humiliate}
           onChange={(e) => setHumiliate(e.target.checked)}
         />
-        Desmilitarização & Humilhação · 30 pontos — 15 Autoridade, quatro rodadas desarmado e seis
-        de trégua
+        Desmilitarização & Humilhação · 30 pontos — {ECONOMY_BALANCE.authorityFromGoldHumiliation}{' '}
+        Autoridade, quatro rodadas desarmado e seis de trégua
       </label>
       <label className="check-label">
         <input type="checkbox" checked={vassal} onChange={(e) => setVassal(e.target.checked)} />

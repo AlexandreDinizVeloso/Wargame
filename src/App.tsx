@@ -1,8 +1,13 @@
-import { getNationAuthority } from '../shared/economy';
+import { goldNumber, manpowerNumber } from './resourceNumbers';
+import { authorityIncome, getNationAuthority } from '../shared/economy';
 import { FACTION_TRAITS, goldRules } from '../shared/factions';
 import { verticalRules } from '../shared/fogOfWar';
 import { ERAS, campaignEra } from '../shared/world';
 import CampaignSaveControls from './CampaignSaveControls';
+import { CONTINENT_BONUSES } from '../shared/risk';
+import SupremeCommandButtons from './SupremeCommandButtons';
+const AudioSettingsModal = lazy(() => import('./AudioSettingsModal'));
+const QuickActionsPanel = lazy(() => import('./QuickActionsPanel'));
 import DilemmaCard from './DilemmaCard';
 import MapLensSelector from './MapLensSelector';
 import { MaritimeOverview } from './MaritimePanel';
@@ -59,7 +64,6 @@ import { SEASONS } from '../shared/strategy';
 import type { Battalion, GameView, MapMode, Province, TurnResolutionReport } from '../shared/types';
 import { OBJECTIVES } from '../shared/types';
 import Atlas, { MAP_MODES, type CameraHandle } from './Atlas';
-import { AudioControls } from './AudioControls';
 import BattalionDrawer, { CommanderPanel, TacticalBar } from './BattalionDrawer';
 import CampaignPanel from './CampaignPanel';
 import { Entry, Lobby } from './Entry';
@@ -91,9 +95,23 @@ function download(game: GameView, format: 'json' | 'txt') {
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-function Manual({ close }: { close: () => void; active?: boolean; onActivate?: () => void }) {
+function Manual({
+  close,
+  active,
+  onActivate,
+}: {
+  close: () => void;
+  active?: boolean;
+  onActivate?: () => void;
+}) {
   return (
-    <TopBarModal id="manual" title="Manual de campanha" onClose={close}>
+    <TopBarModal
+      id="manual"
+      title="Manual de campanha"
+      onClose={close}
+      active={active}
+      onActivate={onActivate}
+    >
       <section className="manual-modal popup-sheet">
         <span className="eyebrow">A ARTE DE GOVERNAR</span>
         <h2>Um mundo. Dois legados.</h2>
@@ -215,12 +233,17 @@ export default function App() {
     useGame();
   const { profile, setProfile, toast: achievementToast } = useStrategistProfile(game, playerId);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [audioSettingsOpen, setAudioSettingsOpen] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [focusedWindow, setFocusedWindow] = useState('');
   const profileModal = profileOpen && (
     <Suspense fallback={<p role="status">Abrindo perfil…</p>}>
       <StrategistProfileModal
         profile={profile}
         onChange={setProfile}
         onClose={() => setProfileOpen(false)}
+        active={focusedWindow === 'strategist-profile'}
+        onActivate={() => setFocusedWindow('strategist-profile')}
       />
     </Suspense>
   );
@@ -241,10 +264,9 @@ export default function App() {
   } | null>(null);
   const announcedTurn = useRef('');
   const tutorialRoom = useRef('');
-  const [focusedWindow, setFocusedWindow] = useState('');
   const openMenu = () => {
     setProfileOpen(false);
-    setPanels([]);
+    setPanels((v) => v.filter((p) => p === 'province' || p === 'battalion' || p === 'report'));
     setManual(false);
     setWarRequest(null);
     setEndOpen(false);
@@ -269,7 +291,7 @@ export default function App() {
   };
   const openManual = () => {
     setProfileOpen(false);
-    setPanels([]);
+    setPanels((v) => v.filter((p) => p === 'province' || p === 'battalion' || p === 'report'));
     setMenu(false);
     setWarRequest(null);
     setEndOpen(false);
@@ -400,6 +422,7 @@ export default function App() {
       audio.play('alert');
     }
   }, [game?.code, game?.turn, game?.firstReadyPlayerName]);
+  useEffect(() => audio.subscribe(() => setMuted(audio.muted)), []);
   const seenWars = useRef(new Set<string>()),
     seenWinner = useRef('');
   const open = (panel: Panel) => {
@@ -409,8 +432,21 @@ export default function App() {
     setManual(false);
     setWarRequest(null);
     setEndOpen(false);
-    setPanels([panel]);
+    setPanels((current) => {
+      const context = panel === 'province' || panel === 'battalion';
+      return [
+        ...current.filter((p) =>
+          context
+            ? p !== 'province' && p !== 'battalion'
+            : panel === 'report'
+              ? p !== 'report'
+              : !GLOBAL_PANELS.includes(p),
+        ),
+        panel,
+      ];
+    });
   };
+  const activeGlobalPanel = panels.find((p) => GLOBAL_PANELS.includes(p));
   const close = (panel: Panel) => {
     if (focusedWindow === panel) focusRemaining(panel);
     if (panel === 'battalion') setArmy('');
@@ -424,6 +460,7 @@ export default function App() {
         ...(menu ? ['council-menu'] : []),
         ...(warRequest ? ['war'] : []),
         ...(endOpen ? ['result'] : []),
+        ...(quickActionsOpen ? ['quick-actions'] : []),
       ]
         .filter((id) => id !== excluded)
         .at(-1) ?? '',
@@ -439,7 +476,7 @@ export default function App() {
   useEffect(() => {
     if (warRequest) {
       setFocusedWindow('war');
-      setPanels([]);
+      setPanels((v) => v.filter((p) => p === 'province' || p === 'battalion' || p === 'report'));
       setMenu(false);
       setManual(false);
       setEndOpen(false);
@@ -448,7 +485,7 @@ export default function App() {
   useEffect(() => {
     if (endOpen) {
       setFocusedWindow('result');
-      setPanels([]);
+      setPanels((v) => v.filter((p) => p === 'province' || p === 'battalion' || p === 'report'));
       setMenu(false);
       setManual(false);
       setWarRequest(null);
@@ -544,7 +581,10 @@ export default function App() {
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (focusedWindow === 'war' && warRequest) closeWar();
+        if (focusedWindow === 'quick-actions' && quickActionsOpen) {
+          setQuickActionsOpen(false);
+          focusRemaining('quick-actions');
+        } else if (focusedWindow === 'war' && warRequest) closeWar();
         else if (focusedWindow === 'result' && endOpen) closeResult();
         else if (focusedWindow === 'manual' && manual) closeManual();
         else if (focusedWindow === 'council-menu' && menu) closeMenu();
@@ -566,7 +606,7 @@ export default function App() {
     };
     window.addEventListener('keydown', listener);
     return () => window.removeEventListener('keydown', listener);
-  }, [manual, menu, endOpen, warRequest, panels, focusedWindow]);
+  }, [manual, menu, endOpen, warRequest, panels, focusedWindow, quickActionsOpen]);
   const currentCode = game?.code;
   useEffect(() => {
     setPanels([]);
@@ -575,6 +615,7 @@ export default function App() {
     setReference('');
     setReplay(null);
     setTacticalBattle(null);
+    setQuickActionsOpen(false);
   }, [currentCode]);
   const rootClick = (event: React.MouseEvent) => {
     if (event.target instanceof Element && event.target.closest('button')) {
@@ -590,7 +631,10 @@ export default function App() {
           online={status === 'online'}
           onHelp={openManual}
           onTutorial={startTutorial}
-          onProfile={() => setProfileOpen(true)}
+          onProfile={() => {
+            setProfileOpen(true);
+            setFocusedWindow('strategist-profile');
+          }}
         />
         {manual && (
           <Manual
@@ -623,6 +667,7 @@ export default function App() {
   const selected = game.provinces.find((p) => p.id === provinceId),
     selectedArmy = game.battalions.find((a) => a.id === armyId),
     eco = realmEconomy(game, playerId),
+    authorityGain = authorityIncome(game, playerId),
     alive = livingPlayers(game),
     land = landProvinces(game),
     owned = land.filter(
@@ -786,6 +831,37 @@ export default function App() {
         onPing={signal}
       />
       <DilemmaCard game={game} playerId={playerId} command={command} />
+      {audioSettingsOpen && (
+        <Suspense fallback={<p role="status">Abrindo mixer…</p>}>
+          <AudioSettingsModal onClose={() => setAudioSettingsOpen(false)} />
+        </Suspense>
+      )}
+      <details className="continent-bonus-legend framed-panel" data-hud-surface>
+        <summary>🌍 Bônus dos Continentes</summary>
+        <div>
+          {Object.entries(CONTINENT_BONUSES).map(([id, bonus]) => (
+            <p
+              key={id}
+              data-continent-bonus={id}
+              data-controlled={eco.controlledContinents.includes(
+                id as keyof typeof CONTINENT_BONUSES,
+              )}
+            >
+              <strong>
+                {eco.controlledContinents.includes(id as keyof typeof CONTINENT_BONUSES)
+                  ? '✓ '
+                  : ''}
+                {bonus.name}
+              </strong>
+              <span>
+                +{bonus.gold} 🪙 · +{bonus.manpower} ⛺
+                {bonus.authority ? ` · +${bonus.authority} 👑` : ''}/rod.
+              </span>
+            </p>
+          ))}
+        </div>
+        <small>Controle todos os territórios do continente para receber o bônus.</small>
+      </details>
       <MapLensSelector
         mode={mode}
         onChange={setMode}
@@ -825,16 +901,16 @@ export default function App() {
         <div className="top-resources">
           <div
             className="hud-stat"
-            title={`Impostos ${number(eco.taxes, 1)}, comércio ${number(eco.trade, 1)}, dízimos ${number(eco.tithes, 1)}, nós marítimos ${number(eco.maritimeTrade, 1)} (incluídos no comércio); manutenção ${number(eco.upkeep, 1)}.`}
+            title={`Impostos ${number(eco.taxes, 1)}, comércio ${number(eco.trade, 1)}, dízimos ${number(eco.tithes, 1)}, nós marítimos ${number(eco.maritimeTrade, 1)} (incluídos no comércio); continentes ${goldNumber(eco.continentGold)}; compromissos do Conselho ${goldNumber(eco.councilCashflow)}; manutenção ${number(eco.upkeep, 1)}.`}
           >
             <Coins size={16} />
             <span>
-              <strong data-testid="treasury">{number(me.gold)}</strong>
+              <strong data-testid="treasury">{goldNumber(me.gold)}</strong>
               <small>
                 OURO{' '}
                 <b className={eco.net >= 0 ? 'positive' : 'danger'}>
                   {eco.net >= 0 ? '+' : ''}
-                  {number(eco.net, 1)}/rod.
+                  {goldNumber(eco.net)}/rod.
                 </b>
               </small>
             </span>
@@ -846,10 +922,14 @@ export default function App() {
             <Users size={18} />
             <span>
               <strong>
-                {number(me.manpower)} / {number(eco.manpowerCap)}
+                {manpowerNumber(me.manpower)} / {manpowerNumber(eco.manpowerCap)}
               </strong>
               <small>
-                RECRUTAS <b className="positive">+{number(eco.manpower)}/rod.</b>
+                RECRUTAS{' '}
+                <b className={eco.manpower >= 0 ? 'positive' : 'danger'}>
+                  {eco.manpower >= 0 ? '+' : ''}
+                  {manpowerNumber(eco.manpower)}/rod.
+                </b>
               </small>
             </span>
           </div>
@@ -862,11 +942,9 @@ export default function App() {
               <strong data-testid="authority">{getNationAuthority(me)}</strong>
               <small>
                 AUTORIDADE{' '}
-                <b className="positive">
-                  +
-                  {number(
-                    Math.max(0, Math.min(2, 50 - me.influence)) + (eco.owned.length ? 10 : 0),
-                  )}
+                <b className={authorityGain >= 0 ? 'positive' : 'danger'}>
+                  {authorityGain >= 0 ? '+' : ''}
+                  {number(authorityGain)}
                   /rod.
                 </b>
               </small>
@@ -919,13 +997,27 @@ export default function App() {
         </button>
         <div className="top-tools">
           <button
+            className="quick-actions-trigger"
+            aria-label="⚡ Ações Rápidas"
+            title="⚡ Ações Rápidas · recrutar em várias cidades"
+            onClick={() => {
+              setQuickActionsOpen(true);
+              setFocusedWindow('quick-actions');
+            }}
+          >
+            ⚡
+          </button>
+          <button
             aria-label="Perfil do Estrategista"
             title={profile.title}
             onClick={() => {
-              setPanels([]);
+              setPanels((v) =>
+                v.filter((p) => p === 'province' || p === 'battalion' || p === 'report'),
+              );
               setMenu(false);
               setManual(false);
               setProfileOpen(true);
+              setFocusedWindow('strategist-profile');
             }}
           >
             🏅
@@ -952,11 +1044,47 @@ export default function App() {
           >
             {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
           </button>
+          <button
+            className="audio-mixer-trigger"
+            aria-label="🔊 Mixer de Som"
+            title="🔊 Mixer de Som"
+            onClick={() => {
+              audio.unlock();
+              setAudioSettingsOpen(true);
+            }}
+          >
+            🔊<span>Mixer de Som</span>
+          </button>
           <button aria-label="Abrir menu" onClick={openMenu}>
             <Menu size={19} />
           </button>
         </div>
       </header>
+      {quickActionsOpen && (
+        <Suspense fallback={<p role="status">Abrindo ações rápidas…</p>}>
+          <QuickActionsPanel
+            game={game}
+            playerId={playerId}
+            command={command}
+            onClose={() => {
+              setQuickActionsOpen(false);
+              focusRemaining('quick-actions');
+            }}
+            active={focusedWindow === 'quick-actions'}
+            onActivate={() => setFocusedWindow('quick-actions')}
+          />
+        </Suspense>
+      )}
+      <nav className="supreme-quickbar framed-panel" aria-label="Comando Supremo" data-hud-surface>
+        <SupremeCommandButtons
+          game={game}
+          playerId={playerId}
+          command={command}
+          battalionId={selectedArmy?.id}
+          provinceId={selected?.id}
+          compact
+        />
+      </nav>
       {game.sandboxContinued && (
         <div className="sandbox-banner" data-hud-surface>
           ⚔️ Dominação Livre · vitória original preservada na rodada {game.victoryRecord?.turn}
@@ -1087,10 +1215,14 @@ export default function App() {
       {panels.some((p) => GLOBAL_PANELS.includes(p)) && (
         <TopBarModal
           id="strategy-center"
-          title={STRATEGY_TITLES[panels[0]] ?? 'Conselho Estratégico'}
-          onClose={() => setPanels([])}
+          title={STRATEGY_TITLES[activeGlobalPanel!] ?? 'Conselho Estratégico'}
+          active={focusedWindow === activeGlobalPanel}
+          onActivate={() => {
+            if (activeGlobalPanel) setFocusedWindow(activeGlobalPanel);
+          }}
+          onClose={() => setPanels((v) => v.filter((p) => !GLOBAL_PANELS.includes(p)))}
         >
-          {panels[0] === 'diplomacy' && (
+          {activeGlobalPanel === 'diplomacy' && (
             <DiplomacyDrawer
               game={game}
               playerId={playerId}
@@ -1100,17 +1232,19 @@ export default function App() {
               onDeclareWar={(id) => setWarRequest({ targetId: id })}
             />
           )}
-          {panels[0] === 'skills' && (
+          {activeGlobalPanel === 'skills' && (
             <SkillTreeDrawer game={game} playerId={playerId} command={command} />
           )}
-          {panels[0] === 'maritime' && <MaritimeOverview game={game} playerId={playerId} />}
-          {panels[0] === 'world' && (
+          {activeGlobalPanel === 'maritime' && <MaritimeOverview game={game} playerId={playerId} />}
+          {activeGlobalPanel === 'world' && (
             <WorldDrawer game={game} playerId={playerId} command={command} />
           )}
-          {panels[0] === 'secret' && (
+          {activeGlobalPanel === 'secret' && (
             <SecretDrawer game={game} playerId={playerId} command={command} />
           )}
-          {panels[0] === 'analytics' && <PostGameAnalytics game={game} playerId={playerId} />}
+          {activeGlobalPanel === 'analytics' && (
+            <PostGameAnalytics game={game} playerId={playerId} />
+          )}
         </TopBarModal>
       )}
       {tacticalBattle && (
@@ -1151,7 +1285,7 @@ export default function App() {
           id="province"
           key={selected.id}
           active={focusedWindow === 'province'}
-          onActivate={() => open('province')}
+          onActivate={() => setFocusedWindow('province')}
           title="Inspeção de Província"
           icon={<Castle size={15} />}
           onClose={() => close('province')}
@@ -1182,10 +1316,10 @@ export default function App() {
           id="battalion"
           key={selectedArmy.id}
           active={focusedWindow === 'battalion'}
-          onActivate={() => open('battalion')}
+          onActivate={() => setFocusedWindow('battalion')}
           title="Comando de Batalhão"
           icon={<Swords size={15} />}
-          anchor="right"
+          anchor="left"
           width={340}
           height={610}
           onClose={() => close('battalion')}
@@ -1288,7 +1422,7 @@ export default function App() {
         <PanelWindow
           id="report"
           active={focusedWindow === 'report'}
-          onActivate={() => open('report')}
+          onActivate={() => setFocusedWindow('report')}
           title={REPORT_TITLES[reportTab]}
           headerActions={
             (reportTab === 'personal' || reportTab === 'world') && (
@@ -1312,7 +1446,7 @@ export default function App() {
             )
           }
           icon={<ScrollText size={15} />}
-          anchor="bottom"
+          anchor="right"
           width={640}
           height={330}
           onClose={() => close('report')}
@@ -1412,7 +1546,13 @@ export default function App() {
         </span>
       </div>
       {menu && (
-        <TopBarModal id="council-menu" title="Conselho da nação" onClose={closeMenu}>
+        <TopBarModal
+          id="council-menu"
+          title="Conselho da nação"
+          onClose={closeMenu}
+          active={focusedWindow === 'council-menu'}
+          onActivate={() => setFocusedWindow('council-menu')}
+        >
           <section className="council-menu popup-sheet">
             <span className="eyebrow">SOB A SUA BANDEIRA</span>
             <CoatOfArms nationId={me.nationId} size={48} />
@@ -1428,7 +1568,6 @@ export default function App() {
                 onChange={(e) => {
                   const enabled = e.target.checked;
                   setCartographic(enabled);
-                  setPanels((v) => v.slice(-1));
                   try {
                     localStorage.setItem(
                       'concordia-interface',
@@ -1462,7 +1601,14 @@ export default function App() {
                 integral, use o Save JSON completo.
               </p>
             )}
-            <AudioControls />
+            <button
+              onClick={() => {
+                audio.unlock();
+                setAudioSettingsOpen(true);
+              }}
+            >
+              🔊 Mixer de Som
+            </button>
             {game.hostId === playerId && (
               <CampaignSaveControls send={send} canExport invites={seatInvites} />
             )}
@@ -1528,6 +1674,8 @@ export default function App() {
         <TopBarModal
           id="result"
           title="Resultado da campanha"
+          active={focusedWindow === 'result'}
+          onActivate={() => setFocusedWindow('result')}
           onClose={closeResult}
           footer={
             <>
@@ -1630,7 +1778,7 @@ export default function App() {
           playerId={playerId}
           selectedArmyId={armyId}
           selectedProvinceId={provinceId}
-          activePanel={panels[0] ?? ''}
+          activePanel={activeGlobalPanel ?? panels[0] ?? ''}
           onClose={() => setTutorialOpen(false)}
           onComplete={() => {
             setTutorialOpen(false);

@@ -164,7 +164,7 @@ export default function TutorialOverlay({
     if (progress.step === 2)
       return city && controller(city) === playerId
         ? '[data-window="province"]'
-        : '.province-shape[data-province="portugal"]';
+        : `.province-shape[data-province="${game.provinces.find((p) => p.capitalOf === playerId)?.id ?? ownArmy?.provinceId ?? 'castile'}"]`;
     if (progress.step === 3)
       return progress.recruited ? '[data-window="battalion"]' : '[data-window="province"]';
     return '.unified-navigation';

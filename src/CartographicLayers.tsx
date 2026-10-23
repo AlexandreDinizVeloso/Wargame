@@ -4,42 +4,6 @@ import type { Province } from '../shared/types';
 export function CartographicDefs() {
   return (
     <>
-      <filter
-        id="province-relief"
-        x="-10%"
-        y="-10%"
-        width="120%"
-        height="120%"
-        colorInterpolationFilters="sRGB"
-      >
-        <feGaussianBlur in="SourceAlpha" stdDeviation=".55" result="soft" />
-        <feSpecularLighting
-          in="soft"
-          surfaceScale="2"
-          specularConstant=".25"
-          specularExponent="14"
-          lightingColor="#ffe7ac"
-          result="light"
-        >
-          <feDistantLight azimuth="225" elevation="48" />
-        </feSpecularLighting>
-        <feComposite in="light" in2="SourceAlpha" operator="in" result="inside" />
-        <feBlend in="SourceGraphic" in2="inside" mode="screen" />
-      </filter>
-      <filter id="shoreline-glow" x="-5%" y="-5%" width="110%" height="110%">
-        <feMorphology in="SourceAlpha" operator="dilate" radius="2.3" result="wide" />
-        <feComposite in="wide" in2="SourceAlpha" operator="out" result="outer" />
-        <feFlood floodColor="#72b2ac" floodOpacity=".32" />
-        <feComposite in2="outer" operator="in" result="halo" />
-        <feMorphology in="SourceAlpha" operator="dilate" radius=".65" result="thin" />
-        <feComposite in="thin" in2="SourceAlpha" operator="out" result="edge" />
-        <feFlood floodColor="#d7dfb6" floodOpacity=".85" />
-        <feComposite in2="edge" operator="in" result="foam" />
-        <feMerge>
-          <feMergeNode in="halo" />
-          <feMergeNode in="foam" />
-        </feMerge>
-      </filter>
       <radialGradient id="chart-frost">
         <stop stopColor="#d4f1ff" stopOpacity=".04" />
         <stop offset="1" stopColor="#b9dcf0" stopOpacity=".4" />
@@ -49,16 +13,15 @@ export function CartographicDefs() {
         <stop offset=".42" stopColor="#c5b98d" stopOpacity=".01" />
         <stop offset="1" stopColor="#071b20" stopOpacity=".25" />
       </linearGradient>
-      <filter id="fog-clouds">
-        <feTurbulence type="fractalNoise" baseFrequency=".025" numOctaves="2" seed="17" />
-        <feColorMatrix type="saturate" values="0" />
-        <feComponentTransfer>
-          <feFuncA type="linear" slope=".3" />
-        </feComponentTransfer>
-      </filter>
       <pattern id="fog-of-war-pattern" width="180" height="150" patternUnits="userSpaceOnUse">
         <rect width="180" height="150" fill="#09141e" fillOpacity=".45" />
-        <rect width="180" height="150" fill="#82939b" filter="url(#fog-clouds)" opacity=".28" />
+        <path
+          d="M-20 35Q35 2 90 35T200 35M-20 105Q35 72 90 105T200 105"
+          fill="none"
+          stroke="#82939b"
+          strokeOpacity=".16"
+          strokeWidth="16"
+        />
       </pattern>
     </>
   );

@@ -1,5 +1,4 @@
 import { getNationAuthority } from '../shared/economy';
-import { verticalRules } from '../shared/fogOfWar';
 import { rightClickProvince } from './map-interactions';
 import { seedBrowserFixtures, fixturePeer, type FixtureSession } from './browser-fixtures';
 import { chromium, type Page } from 'playwright-core';
@@ -10,7 +9,7 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { GameView, PublicRoom } from '../shared/types';
-let child: ChildProcess | undefined;
+let child: ChildProcess | undefined, debugPage: Page | undefined;
 const temp = await mkdtemp(path.join(os.tmpdir(), 'concordia-browser-rc-'));
 let base = process.env.BASE_URL;
 const fixtures = !base ? seedBrowserFixtures(path.join(temp, 'rooms.json')) : null;
@@ -125,13 +124,14 @@ try {
     states = pages.map(observe),
     page = pages[0];
   await page.addInitScript(() => {
-    const original = AudioContext.prototype.createOscillator;
-    AudioContext.prototype.createOscillator = function () {
+    const original = AudioContext.prototype.createBufferSource;
+    AudioContext.prototype.createBufferSource = function () {
       const w = window as unknown as { audioNodes: number };
       w.audioNodes = (w.audioNodes ?? 0) + 1;
       return original.call(this);
     };
   });
+  debugPage = page;
   await page.goto(base);
   await page.getByRole('button', { name: 'Criar uma sala', exact: true }).click();
   await page.getByLabel('Como devemos chamar você?').fill('Capitã');
@@ -363,6 +363,10 @@ try {
   await page.getByRole('button', { name: 'Treinar · 6 ouro', exact: true }).click();
   await states[0].until((g) => g.plannedOrders.some((o) => o.type === 'TRAIN_BATTALION'));
   await closeWindows(page);
+  await rightClickProvince(page, adjacent.id);
+  await states[0].until((g) =>
+    g.plannedOrders.some((o) => o.type === 'MOVE_BATTALION' && o.battalionId === own.id),
+  );
   await page.getByRole('button', { name: 'Fechar Comando de Batalhão', exact: true }).click();
   await page.getByRole('button', { name: 'Crises & Coalizões', exact: true }).click();
   await page
@@ -376,7 +380,7 @@ try {
   assert.ok((await page.locator('.first-ready-banner.counting').count()) > 0);
   assert.ok(
     await page.evaluate(() => ((window as unknown as { audioNodes?: number }).audioNodes ?? 0) > 0),
-    'Áudio sintetizado não foi acionado.',
+    'Nenhum buffer PCM de áudio foi acionado.',
   );
   await pages[1].getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
   await pages[2].getByRole('button', { name: 'Confirmar ordens', exact: false }).click();
@@ -384,9 +388,24 @@ try {
   assert.equal(states[0].get().turnDeadlineAt, null);
   await page.getByRole('button', { name: 'Encerrar animação', exact: true }).click();
   assert.equal(states[0].get().provinces.find((p) => p.id === own.provinceId)?.barracksLevel, 1);
-  assert.equal(states[0].get().players[0].militaryXP, 38);
+  assert.equal(states[0].get().players[0].militaryXP, 6);
   // Attack an independent neighbor: no occupation is allowed on arrival.
-  const neutral = states[0].get().provinces.find((p) => p.id === 'balkans')!;
+  const activeNow = states[0].get().battalions.find((a) => a.id === own.id)!;
+  const source = states[0].get().provinces.find((p) => p.id === activeNow.provinceId)!;
+  const neutral = states[0]
+    .get()
+    .provinces.find((p) => p.kind === 'LAND' && !p.ownerId && source.neighbors.includes(p.id));
+  assert.ok(neutral, 'A formação principal deve ter um vizinho independente para testar cerco.');
+  for (let i = 0; i < pages.length; i++) {
+    if (states[i].get().players[i].activeDilemma) {
+      await pages[i]
+        .getByRole('region', { name: 'Dilema Nacional', exact: true })
+        .getByRole('button')
+        .first()
+        .click();
+      await states[i].until((g) => !g.players[i].activeDilemma);
+    }
+  }
   assert.equal(neutral.ownerId, null);
   await page.locator(`[data-battalion="${own.id}"]`).press('Enter');
   await closeWindows(page);
@@ -406,28 +425,18 @@ try {
   assert.ok((await page.locator('.siege-miniature').count()) > 0);
   await page.screenshot({ path: '.local/screenshots/rc-multiplayer-cerco.png' });
   await page.getByRole('button', { name: 'Fechar Comando de Batalhão', exact: true }).click();
-  const authorityResearch = verticalRules(states[0].get());
-  const xpBeforeResearch = authorityResearch
-    ? getNationAuthority(states[0].get().players[0])
-    : states[0].get().players[0].militaryXP;
+  const xpBeforeResearch = getNationAuthority(states[0].get().players[0]);
   await page.getByRole('button', { name: 'Árvore Militar', exact: true }).click();
   await page.locator('.skill-node').first().waitFor();
   assert.equal(await page.locator('.skill-node').count(), 16);
-  await page
+  const firstDoctrine = page
     .locator('.skill-node')
     .filter({ hasText: 'Formação de Escudos' })
-    .getByRole('button', {
-      name: `Desbloquear · 25 ${authorityResearch ? 'Autoridade' : 'XP'}`,
-      exact: true,
-    })
-    .click();
-  await states[0].until((g) => g.players[0].unlockedSkills.includes('INF_T1'));
-  assert.equal(
-    authorityResearch
-      ? getNationAuthority(states[0].get().players[0])
-      : states[0].get().players[0].militaryXP,
-    xpBeforeResearch - 25,
-  );
+    .getByRole('button');
+  assert.ok(xpBeforeResearch < 25, 'A abertura escassa não financia uma doutrina imediatamente.');
+  assert.equal(await firstDoctrine.isDisabled(), true);
+  assert.match((await firstDoctrine.textContent()) ?? '', /Autoridade/i);
+  assert.equal(states[0].get().players[0].unlockedSkills.includes('INF_T1'), false);
   await page.screenshot({ path: '.local/screenshots/rc-multiplayer-doutrinas.png' });
   await closeWindows(page);
 
@@ -480,6 +489,7 @@ try {
       );
       const page = await context.newPage(),
         state = observe(page);
+      debugPage = page;
       await page.goto(base!);
       await state.until((g) => g.code === session.code);
       return { context, page, state };
@@ -537,7 +547,7 @@ try {
       cameraBefore,
     );
     await alerts.page.keyboard.press('Escape');
-    await alerts.page.locator('.province-shape[data-province="portugal"]').press('Enter');
+    await alerts.page.locator('.province-shape[data-province="castile"]').press('Enter');
     await alerts.page
       .getByRole('tab', { name: '⚔️ Recrutamento & Guarnição', exact: true })
       .click();
@@ -625,8 +635,14 @@ try {
   }
   assert.deepEqual(errors, []);
   console.log(
-    'Smoke v1.0 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
+    'Smoke v1.01 passou: 3 navegadores, salas públicas, oito nações, cartas privadas, edição de nomes, nações dos bots e troca atômica, três acessos à guerra, pacto inicial, estreitos, fretamento pago, alertas pessoais, foco de câmera, aceitar/recusar, Defesa da Pátria, sandbox, fusão/divisão instantâneas, líderes, edifícios, doutrinas, cerco, comando tático, cancelamento, First-Ready, reconexão, cinco mapas, recursos, exportações e celular.',
   );
+} catch (error) {
+  await debugPage
+    ?.screenshot({ path: '.local/screenshots/browser-v101-failure.png' })
+    .catch(() => {});
+  if (errors.length) console.error('Erros de navegador:', errors);
+  throw error;
 } finally {
   await browser.close();
   if (child && child.exitCode === null) {

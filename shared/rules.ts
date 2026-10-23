@@ -1,3 +1,6 @@
+import { ECONOMY_BALANCE } from './balance';
+import { councilModifiers } from './councilEffects';
+import { continentBonuses } from './risk';
 import { isImpassableCrossing } from './map';
 import { BUILDINGS, buildingLevel, constructionType, imperialInflation } from './development';
 import {
@@ -28,6 +31,8 @@ import type {
 export { FACTION_TRAITS, FRIEND_PASS } from './factions';
 export const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(max, n));
 export const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+/** Ignore binary arithmetic noise without forgiving a missing cent. */
+export const MONEY_EPSILON = 1e-7;
 export const UNIT_KEYS = ['infantry', 'cavalry', 'artillery', 'warships', 'transports'] as const;
 export const zeroComposition = (): Composition => ({
   infantry: 0,
@@ -88,10 +93,10 @@ export const NATIONS: NationDefinition[] = [
     religion: 'ANCESTRAL',
     homeProvinceId: 'scandinavia',
     style: 'Saqueadores',
-    mechanic: '+8 ouro por baixa inimiga; saque recupera moral; imune a inverno e floresta',
+    mechanic: '+2 ouro por baixa inimiga; saque recupera moral; imune a inverno e floresta',
     ideas: [
       'Saqueadores',
-      '+8 ouro por baixa inimiga; saque recupera moral; imune a inverno e floresta',
+      '+2 ouro por baixa inimiga; saque recupera moral; imune a inverno e floresta',
     ],
     modifiers: {},
     initial: {
@@ -109,7 +114,7 @@ export const NATIONS: NationDefinition[] = [
     color: '#70acd4',
     emblem: 'anchor',
     religion: 'MERCHANT',
-    homeProvinceId: 'portugal',
+    homeProvinceId: 'castile',
     style: 'Talassocracia e procuração',
     mechanic: 'Mercenários −35%; portos/mercados +30%; compra visão e dobra suborno',
     ideas: [
@@ -134,10 +139,10 @@ export const NATIONS: NationDefinition[] = [
     religion: 'SOLAR',
     homeProvinceId: 'arabia',
     style: 'Teocracia militar',
-    mechanic: 'Conversões +25 ouro e Autoridade; guerra de outra fé +20% ataque e moral',
+    mechanic: 'Conversões +8 ouro e +1 Autoridade; guerra de outra fé +20% ataque e moral',
     ideas: [
       'Teocracia militar',
-      'Conversões +25 ouro e Autoridade; guerra de outra fé +20% ataque e moral',
+      'Conversões +8 ouro e +1 Autoridade; guerra de outra fé +20% ataque e moral',
     ],
     modifiers: {},
     initial: {
@@ -182,8 +187,8 @@ export const NATIONS: NationDefinition[] = [
     religion: 'ANCESTRAL',
     homeProvinceId: 'mongolia',
     style: 'Horda nômade',
-    mechanic: 'Cavalaria pura percorre 2 planícies/costas; arrasar rende 80 ouro',
-    ideas: ['Horda nômade', 'Cavalaria pura percorre 2 planícies/costas; arrasar rende 80 ouro'],
+    mechanic: 'Cavalaria pura percorre 2 planícies/costas; arrasar rende 20 ouro',
+    ideas: ['Horda nômade', 'Cavalaria pura percorre 2 planícies/costas; arrasar rende 20 ouro'],
     modifiers: {},
     initial: {
       infantry: 0,
@@ -223,7 +228,7 @@ export const NATIONS: NationDefinition[] = [
     color: '#6db6a1',
     emblem: 'mountain',
     religion: 'ANCESTRAL',
-    homeProvinceId: 'amazon',
+    homeProvinceId: 'brazil',
     style: 'Guerrilha e emboscada',
     mechanic: 'Camuflagem em florestas/colinas próprias; +50% dano na defesa local',
     ideas: [
@@ -255,7 +260,7 @@ export const RELIGIONS: Record<
     name: 'Conclave Mercante',
     tenet: '+25% receita em províncias com porto/mercado e −25% contratação de mercenários.',
     color: '#67baa7',
-    holyCityId: 'portugal',
+    holyCityId: 'castile',
   },
   REFORMED: {
     name: 'Sínodo Reformado',
@@ -274,10 +279,38 @@ export const holyCityId = (religion: ReligionId, provinces: Province[]) => {
   const fixed = RELIGIONS[religion].holyCityId;
   if (provinces.some((p) => p.id === fixed)) return fixed;
   const local: Record<ReligionId, Record<string, string>> = {
-    SOLAR: { EUROPE: 'italy', AMERICAS: 'andes', ASIA: 'india-north' },
-    MERCHANT: { EUROPE: 'portugal', AMERICAS: 'mexico', ASIA: 'malaya' },
-    REFORMED: { EUROPE: 'germany', AMERICAS: 'usa-east', ASIA: 'china-east' },
-    ANCESTRAL: { EUROPE: 'scandinavia', AMERICAS: 'brazil', ASIA: 'japan' },
+    SOLAR: {
+      EUROPE: 'italy',
+      AMERICAS: 'andes',
+      SOUTH_AMERICA: 'andes',
+      NORTH_AMERICA: 'mexico',
+      MENA_AFRICA: 'arabia',
+      ASIA: 'india-north',
+    },
+    MERCHANT: {
+      EUROPE: 'castile',
+      AMERICAS: 'mexico',
+      SOUTH_AMERICA: 'brazil',
+      NORTH_AMERICA: 'mexico',
+      MENA_AFRICA: 'maghreb',
+      ASIA: 'indochina',
+    },
+    REFORMED: {
+      EUROPE: 'germany',
+      AMERICAS: 'usa-east',
+      SOUTH_AMERICA: 'rioplata',
+      NORTH_AMERICA: 'usa-east',
+      MENA_AFRICA: 'persia',
+      ASIA: 'china-east',
+    },
+    ANCESTRAL: {
+      EUROPE: 'scandinavia',
+      AMERICAS: 'brazil',
+      SOUTH_AMERICA: 'brazil',
+      NORTH_AMERICA: 'canada-west',
+      MENA_AFRICA: 'east-africa',
+      ASIA: 'japan',
+    },
   };
   const continent = provinces.find((p) => p.kind === 'LAND')?.continent ?? 'EUROPE';
   const localId = local[religion][continent];
@@ -451,7 +484,8 @@ export function effectiveTax(
 ) {
   return p.kind === 'SEA_ZONE'
     ? 0
-    : 0.55 *
+    : ECONOMY_BALANCE.taxMultiplier *
+        0.55 *
         ((p.baseTax * p.pacification) / 100) *
         (p.religion === stateReligion ? 1.15 : 0.85) *
         (1 - p.unrest / 200) *
@@ -459,15 +493,20 @@ export function effectiveTax(
         (policy === 'TOLERANCE' ? 0.9 : 1);
 }
 export const tradeIncomeOf = (p: Province) =>
-  (p.resource === 'trade' ? 2 * 0.55 : 0) +
-  p.portLevel * 2.5 +
-  p.marketLevel * 3 +
-  (p.strategicResource === 'SPICES' ? 2 : 0) +
-  (p.strategicResource === 'TIMBER' ? p.portLevel * 0.25 : 0) +
-  (p.strategicResource === 'GOLD' ? 2 : 0);
+  (p.resource === 'trade' ? ECONOMY_BALANCE.tradeResourceIncome : 0) +
+  p.portLevel * ECONOMY_BALANCE.portIncome +
+  p.marketLevel * ECONOMY_BALANCE.marketIncome +
+  (p.strategicResource === 'SPICES' ? ECONOMY_BALANCE.spiceIncome : 0) +
+  (p.strategicResource === 'TIMBER' ? p.portLevel * ECONOMY_BALANCE.timberPortIncome : 0) +
+  (p.strategicResource === 'GOLD' ? ECONOMY_BALANCE.goldTradeIncome : 0);
 export interface RealmEconomy {
+  continentGold: number;
+  continentManpower: number;
+  continentAuthority: number;
+  controlledContinents: string[];
   owned: Province[];
   reparationsNet: number;
+  councilCashflow: number;
   taxes: number;
   trade: number;
   maritimeTrade: number;
@@ -507,6 +546,7 @@ export function realmEconomy(
 ): RealmEconomy {
   const actor = g.players.find((p) => p.id === id)!,
     nat = nationOf(actor.nationId),
+    policy = councilModifiers(actor, g.turn),
     active = g.provinces.some((p) => p.kind === 'LAND' && p.ownerId === id),
     owned = g.provinces.filter((p) => active && p.kind === 'LAND' && controller(p) === id);
   const modifier = (p: Province, owner: Player) =>
@@ -532,8 +572,10 @@ export function realmEconomy(
   ];
   const revenue = (p: Province, owner: Player) => ({
     tax:
-      effectiveTax(p, owner.faith, isBlockaded(g, p), owner.religiousPolicy) * modifier(p, owner),
-    trade: tradeIncomeOf(p) * modifier(p, owner),
+      effectiveTax(p, owner.faith, isBlockaded(g, p), owner.religiousPolicy) *
+      modifier(p, owner) *
+      councilModifiers(owner, g.turn).incomeMultiplier,
+    trade: tradeIncomeOf(p) * modifier(p, owner) * councilModifiers(owner, g.turn).incomeMultiplier,
   });
   const rawTaxes = owned.reduce(
       (n, p) => n + revenue(p, actor).tax * (raiders(p).length ? 0.65 : 1),
@@ -545,7 +587,9 @@ export function realmEconomy(
   let embargo = 1;
   for (const r of g.relations.filter((r) => r.a === id || r.b === id))
     for (const issuer of r.embargoes) embargo *= issuer === id ? 0.95 : 0.85;
-  const maritimeTrade = active ? maritimeIncome(g, id) : 0;
+  const maritimeTrade = active
+    ? maritimeIncome(g, id) * ECONOMY_BALANCE.maritimeIncomeMultiplier * policy.incomeMultiplier
+    : 0;
   const trade =
     maritimeTrade +
     owned.reduce((n, p) => n + revenue(p, actor).trade * (raiders(p).length ? 0.65 : 1), 0) *
@@ -557,28 +601,32 @@ export function realmEconomy(
       city: g.provinces.find((p) => p.id === holyCityId(f as ReligionId, g.provinces)),
     }))
     .filter((x) => active && x.city && controller(x.city) === id);
-  const titheCap = holyCities.some((x) => x.city!.templeLevel > 0) ? 12 : 6;
-  const tithes = Math.min(
-    titheCap,
-    holyCities.reduce(
-      (n, { faith }) =>
-        n +
-        0.5 *
-          g.provinces.filter(
-            (p) =>
-              p.kind === 'LAND' &&
-              p.ownerId !== null &&
-              p.religion === faith &&
-              g.players.some(
-                (q) =>
-                  q.id === p.ownerId &&
-                  q.faith === faith &&
-                  g.provinces.some((land) => land.ownerId === q.id),
-              ),
-          ).length,
-      0,
-    ),
-  );
+  const titheCap = holyCities.some((x) => x.city!.templeLevel > 0)
+    ? ECONOMY_BALANCE.developedHolyCityIncomeCap
+    : ECONOMY_BALANCE.holyCityIncomeCap;
+  const tithes =
+    policy.incomeMultiplier *
+    Math.min(
+      titheCap,
+      holyCities.reduce(
+        (n, { faith }) =>
+          n +
+          ECONOMY_BALANCE.holyCityIncomePerProvince *
+            g.provinces.filter(
+              (p) =>
+                p.kind === 'LAND' &&
+                p.ownerId !== null &&
+                p.religion === faith &&
+                g.players.some(
+                  (q) =>
+                    q.id === p.ownerId &&
+                    q.faith === faith &&
+                    g.provinces.some((land) => land.ownerId === q.id),
+                ),
+            ).length,
+        0,
+      ),
+    );
   const plunder = (active ? g.provinces : [])
     .filter((p) => p.kind === 'LAND' && controller(p) && controller(p) !== id)
     .reduce((n, p) => {
@@ -588,20 +636,32 @@ export function realmEconomy(
       const r = revenue(p, owner);
       return n + ((r.tax + r.trade) * 0.35) / corsairs.length;
     }, 0);
-  const industry = owned.reduce((n, p) => n + p.foundryLevel * 2, 0),
+  const industry = owned.reduce(
+      (n, p) => n + p.foundryLevel * ECONOMY_BALANCE.industryIncome * policy.incomeMultiplier,
+      0,
+    ),
     buildingUpkeep = owned.reduce(
-      (n, p) => n + (p.strategicResource === 'IRON' ? 0 : p.foundryLevel * 1.5),
+      (n, p) =>
+        n + (p.strategicResource === 'IRON' ? 0 : p.foundryLevel * ECONOMY_BALANCE.foundryUpkeep),
       0,
     );
+  const continents = continentBonuses(g, id);
   const grossIncome = roundMoney(
       taxes +
         trade +
         tithes +
         industry +
         plunder +
-        (active ? resourceCount(g, id, 'RELIC') : 0) * 3,
+        continents.gold * policy.incomeMultiplier +
+        (active ? resourceCount(g, id, 'RELIC') : 0) *
+          ECONOMY_BALANCE.relicIncome *
+          policy.incomeMultiplier,
     ),
-    income = roundMoney(grossIncome * (1 - actor.warExhaustion * 0.004));
+    income = roundMoney(
+      (grossIncome - continents.gold * policy.incomeMultiplier) *
+        (1 - actor.warExhaustion * 0.004) +
+        continents.gold * policy.incomeMultiplier,
+    );
   const limits = realmLimits(g, id),
     units = g.battalions.filter((a) => a.ownerId === id);
   const totalTroops = units.reduce((n, a) => n + unitCount(a), 0);
@@ -614,6 +674,7 @@ export function realmEconomy(
         n +
         maintenanceOf(a, goldRules(g) ? actor.nationId : undefined) *
           logisticsPosture(g, a).multiplier *
+          policy.upkeepMultiplier *
           capMultiplier *
           (a.isMercenary ? 2.2 : 1) *
           (coalitionFighter(g, id) ? 0.75 : 1) *
@@ -630,7 +691,12 @@ export function realmEconomy(
         )
       : 0;
   return {
+    continentGold: roundMoney(continents.gold * policy.incomeMultiplier),
+    continentManpower: continents.manpower,
+    continentAuthority: continents.authority,
+    controlledContinents: continents.controlledContinents,
     reparationsNet,
+    councilCashflow: policy.goldPerTurn,
     owned,
     taxes: roundMoney(taxes),
     trade: roundMoney(trade),
@@ -643,7 +709,7 @@ export function realmEconomy(
     grossIncome,
     income,
     upkeep: roundMoney(upkeep),
-    net: roundMoney(income - roundMoney(upkeep) + reparationsNet),
+    net: roundMoney(income - roundMoney(upkeep) + reparationsNet + policy.goldPerTurn),
     armyCap: limits.armyCap,
     totalTroops,
     overCap,
@@ -680,19 +746,21 @@ export function orderCost(
   if (o.type === 'BOMBARD_COAST') gold = BOMBARDMENT_COST;
   else if (o.type === 'RECRUIT_BATTALION') {
     gold =
-      (o.infantry ?? 0) * 3 * (p?.strategicResource === 'IRON' ? 0.85 : 1) +
+      (o.infantry ?? 0) *
+        ECONOMY_BALANCE.recruitGold.infantry *
+        (p?.strategicResource === 'IRON' ? 0.85 : 1) +
       (o.cavalry ?? 0) *
-        6 *
+        ECONOMY_BALANCE.recruitGold.cavalry *
         (p?.strategicResource === 'HORSES' ||
         (actor && g?.provinces && resourceCount({ provinces: g.provinces }, actor.id, 'HORSES') > 0)
           ? 0.8
           : 1) +
       (o.artillery ?? 0) *
-        8 *
+        ECONOMY_BALANCE.recruitGold.artillery *
         (p?.strategicResource === 'IRON' ? 0.85 : 1) *
         (actor?.nationId === 'kaldor' ? 0.75 : 1) +
-      (o.warships ?? 0) * 9 +
-      (o.transports ?? 0) * 6;
+      (o.warships ?? 0) * ECONOMY_BALANCE.recruitGold.warships +
+      (o.transports ?? 0) * ECONOMY_BALANCE.recruitGold.transports;
     gold *= o.isFleet
       ? actor
         ? (nationOf(actor.nationId).modifiers.fleetCost ?? 1)
@@ -703,7 +771,7 @@ export function orderCost(
     gold *= p?.barracksLevel ? 0.85 : 1;
     if (o.isMercenary)
       gold *=
-        2 *
+        ECONOMY_BALANCE.mercenaryCostMultiplier *
         (actor?.faith === 'MERCHANT' ? 0.75 : 1) *
         (actor?.nationId === 'vespera' ? 0.65 : 1) *
         (g?.globalEvent?.id === 'MERCENARY_CRISIS' ? 0.6 : 1);
@@ -729,11 +797,11 @@ export function orderCost(
       gold *= 0.85;
   } else if (o.type === 'AUTO_TRANSPORT')
     gold = o.fleetId ? 0 : goldRules(g) && actor?.nationId === 'vespera' ? 7.5 : 15;
-  else if (o.type === 'PACIFY') gold = goldRules(g) && (g?.turn ?? 1) <= 8 ? 4 : 8;
+  else if (o.type === 'PACIFY') gold = ECONOMY_BALANCE.pacifyGold;
   else if (o.type === 'CONVERT') {
-    gold = 8;
-    influence = 2;
-  } else if (o.type === 'TRAIN_BATTALION') gold = 6;
+    gold = ECONOMY_BALANCE.conversionCostGold;
+    influence = ECONOMY_BALANCE.conversionCostAuthority;
+  } else if (o.type === 'TRAIN_BATTALION') gold = ECONOMY_BALANCE.trainingGold;
   else if (o.type === 'DIPLOMACY' && ['SEND_SUBSIDY', 'FUND_REBELS'].includes(o.action))
     gold = o.amount ?? 0;
   if (
@@ -747,7 +815,7 @@ export function orderCost(
       'FUND_REBELS',
     ].includes(o.action)
   )
-    influence = 3;
+    influence = ECONOMY_BALANCE.diplomacyAuthority;
   return { gold: roundMoney(gold), manpower, influence };
 }
 export function reservedResources(
@@ -900,7 +968,7 @@ export function peaceDescription(term: import('./types').PeaceTerm, provinces: P
     case 'WHITE_PEACE':
       return 'Paz Branca — restituição das ocupações';
     case 'HUMILIATE_DEMILITARIZE':
-      return 'Humilhação: transferir 15 Autoridade; desarmamento de quatro rodadas e trégua de seis';
+      return `Humilhação: transferir ${ECONOMY_BALANCE.authorityFromGoldHumiliation} Autoridade; desarmamento de quatro rodadas e trégua de seis`;
     case 'SUBJUGATE_VASSAL':
       return 'Vassalagem ao vencedor';
     case 'CEDE_PROVINCES':
@@ -908,7 +976,7 @@ export function peaceDescription(term: import('./types').PeaceTerm, provinces: P
     case 'WAR_REPARATIONS':
       return `Pagar ${term.immediateTribute} ouro imediato e 25% da renda bruta por cinco rodadas`;
     case 'HUMILIATE_DISARM':
-      return 'Humilhação: vencedor +20 Autoridade e +15% moral; derrotado limitado a oito tropas por quatro rodadas';
+      return `Humilhação: vencedor +${ECONOMY_BALANCE.authorityFromHumiliation} Autoridade e +15% moral; derrotado limitado a oito tropas por quatro rodadas`;
     case 'FORCE_EMPIRE_OR_RELIGION':
       return term.choice === 'EMPIRE'
         ? 'Ingressar na Dieta Imperial'

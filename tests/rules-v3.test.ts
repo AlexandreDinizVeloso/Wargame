@@ -38,7 +38,10 @@ test('imposto mantém pacificação/revolta e aplica tolerância e bloqueio', ()
     } = setup(),
     p = g.provinces[0];
   Object.assign(p, { baseTax: 6, pacification: 40, unrest: 30, marketLevel: 2, religion: 'SOLAR' });
-  close(effectiveTax(p, a.faith, true, 'TOLERANCE'), 0.55 * 6 * 0.4 * 0.85 * 0.85 * 0.5 * 0.9);
+  close(
+    effectiveTax(p, a.faith, true, 'TOLERANCE'),
+    0.65 * 0.55 * 6 * 0.4 * 0.85 * 0.85 * 0.5 * 0.9,
+  );
   p.pacification = 0;
   assert.equal(effectiveTax(p, a.faith), 0);
 });
@@ -147,7 +150,7 @@ test('artilharia neutraliza fortes e doutrina reformada aumenta fogo em 20%', ()
       g,
       players: [a, b],
     } = setup(),
-    p = g.provinces.find((p) => p.id === 'castile')!,
+    p = g.provinces.find((p) => p.id === 'france')!,
     unit = army(g, a.id, p.id, { infantry: 5, artillery: 2 }),
     defender = army(g, b.id, p.id, { infantry: 4 });
   a.faith = 'REFORMED';
@@ -161,8 +164,8 @@ test('artilharia exposta sofre 75% de baixas adicionais', () => {
       g,
       players: [a],
     } = setup(),
-    exposed = army(g, a.id, 'portugal', { infantry: 1, artillery: 8 }),
-    protectedArmy = army(g, a.id, 'portugal', { infantry: 8, artillery: 8 });
+    exposed = army(g, a.id, 'castile', { infantry: 1, artillery: 8 }),
+    protectedArmy = army(g, a.id, 'castile', { infantry: 8, artillery: 8 });
   const exposedLoss = removeUnits(exposed, 4, true);
   assert.ok(exposedLoss.artillery >= 6);
   const protectedLoss = removeUnits(protectedArmy, 4, true);
@@ -173,10 +176,10 @@ test('cavalaria vencedora aumenta perdas na retirada sem trocar propriedade', ()
     second = setup(12);
   const p1 = first.players[0],
     p2 = second.players[0];
-  first.g.provinces.find((p) => p.id === 'france')!.ownerId = p1.id;
-  second.g.provinces.find((p) => p.id === 'france')!.ownerId = p2.id;
-  const a = army(first.g, p1.id, 'castile', { infantry: 20 }),
-    b = army(second.g, p2.id, 'castile', { infantry: 20 });
+  first.g.provinces.find((p) => p.id === 'germany')!.ownerId = p1.id;
+  second.g.provinces.find((p) => p.id === 'germany')!.ownerId = p2.id;
+  const a = army(first.g, p1.id, 'france', { infantry: 20 }),
+    b = army(second.g, p2.id, 'france', { infantry: 20 });
   a.id = b.id = 'same';
   a.morale = b.morale = 20;
   const r1 = emptyTurnReport(1, first.g.diet),
@@ -192,14 +195,14 @@ test('aniquilação só ocorre por 2,5x ou moral zero sem rota segura', () => {
       g,
       players: [a],
     } = setup(),
-    unit = army(g, a.id, 'castile', { infantry: 10 });
+    unit = army(g, a.id, 'france', { infantry: 10 });
   unit.morale = 30;
   const report = emptyTurnReport(1, g.diet);
   assert.equal(retreatArmy(g, unit, 2, report).wiped, false);
   const doomed = army(g, a.id, 'japan', { infantry: 8 });
   doomed.morale = 0;
   assert.equal(retreatArmy(g, doomed, 1, report).wiped, true);
-  const overwhelming = army(g, a.id, 'castile');
+  const overwhelming = army(g, a.id, 'france');
   assert.equal(retreatArmy(g, overwhelming, 2.5, report).wiped, true);
 });
 test('invasão precisa de guerra formal e ocupa sem transferir propriedade definitiva', () => {
@@ -207,22 +210,22 @@ test('invasão precisa de guerra formal e ocupa sem transferir propriedade defin
       g,
       players: [a, b],
     } = setup(),
-    unit = army(g, a.id, 'portugal', { infantry: 10 });
+    unit = army(g, a.id, 'castile', { infantry: 10 });
   assert.throws(() =>
     submitOrder(g, a.id, {
       type: 'MOVE_BATTALION',
       battalionId: unit.id,
-      targetProvinceId: 'castile',
+      targetProvinceId: 'france',
     }),
   );
   declareWar(g, a.id, b.id, 'CONQUEST');
   submitOrder(g, a.id, {
     type: 'MOVE_BATTALION',
     battalionId: unit.id,
-    targetProvinceId: 'castile',
+    targetProvinceId: 'france',
   });
   resolveTurn(g);
-  const p = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'france')!;
   assert.equal(p.ownerId, b.id);
   assert.equal(p.occupierId, null);
   assert.equal(p.siege?.progress, 1);
@@ -292,7 +295,7 @@ test('mercado e porto exigem terra/costa; frotas exigem porto e composição nav
   } = setup();
   submitOrder(g, a.id, {
     type: 'RECRUIT_BATTALION',
-    provinceId: 'portugal',
+    provinceId: 'castile',
     isFleet: true,
     warships: 1,
     transports: 1,
@@ -302,13 +305,13 @@ test('mercado e porto exigem terra/costa; frotas exigem porto e composição nav
   assert.throws(() =>
     submitOrder(g, a.id, {
       type: 'RECRUIT_BATTALION',
-      provinceId: 'portugal',
+      provinceId: 'castile',
       isFleet: true,
       infantry: 1,
       warships: 1,
     }),
   );
-  const p = g.provinces.find((p) => p.id === 'alps')!;
+  const p = g.provinces.find((p) => p.id === 'central-asia')!;
   p.ownerId = a.id;
   assert.throws(() => submitOrder(g, a.id, { type: 'BUILD_PORT', provinceId: p.id }));
 });
@@ -317,8 +320,8 @@ test('embarque respeita capacidade, frota transporta e desembarque preserva trop
       g,
       players: [a],
     } = setup(),
-    unit = army(g, a.id, 'portugal', { infantry: 6 }),
-    fleet = createBattalion(g, a.id, 'portugal', compositionOf({ warships: 1, transports: 2 }), {
+    unit = army(g, a.id, 'castile', { infantry: 6 }),
+    fleet = createBattalion(g, a.id, 'castile', compositionOf({ warships: 1, transports: 2 }), {
       isFleet: true,
     });
   submitOrder(g, a.id, { type: 'EMBARK_BATTALION', battalionId: unit.id, fleetId: fleet.id });
@@ -366,7 +369,7 @@ test('tratado cede apenas terras ocupadas e restitui as demais ocupações', () 
   } = setup();
   const w = declareWar(g, a.id, b.id, 'CONQUEST');
   w.battleScore = 100;
-  const p = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'france')!;
   assert.throws(() => applyPeace(g, w, a.id, [{ type: 'CEDE_PROVINCES', provinceIds: [p.id] }]));
   p.occupierId = a.id;
   updateWarScores(g);
@@ -413,7 +416,7 @@ test('doutrinas, cidades sagradas e inquisição alteram a economia e conversão
   city.ownerId = a.id;
   a.faith = 'SOLAR';
   for (const p of g.provinces.filter((p) => p.kind === 'LAND')) p.religion = 'SOLAR';
-  close(realmEconomy(g, a.id).tithes, 1.5);
+  close(realmEconomy(g, a.id).tithes, 0.75);
   const p = g.provinces[0];
   a.faith = 'MERCHANT';
   a.religiousPolicy = 'INQUISITION';
@@ -436,7 +439,7 @@ test('embargo, rebeldes, subsídio e autoria encoberta continuam funcionais', ()
     action: 'FUND_REBELS',
     targetRealmId: b.id,
     amount: 12,
-    targetProvinceId: 'castile',
+    targetProvinceId: 'france',
   });
   const r = resolveTurn(g);
   assert.ok(r.diplomaticChanges.some((c) => c.covert && c.actorId === a.id));
@@ -448,7 +451,7 @@ test('telemetria JSON e crônica contêm todas as rodadas, guerras, batalhas, Di
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  army(g, a.id, 'portugal', { infantry: 8 });
+  army(g, a.id, 'castile', { infantry: 8 });
   resolveTurn(g);
   resolveTurn(g);
   const view = viewFor(g, a.id),
@@ -490,7 +493,7 @@ test('forte vazio ainda exige tropas de cerco e frotas não ocupam cidades', () 
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'france')!;
   p.fortLevel = 3;
   const small = army(g, a.id, p.id, { infantry: 2 });
   const report = emptyTurnReport(1, g.diet);
@@ -510,7 +513,7 @@ test('perdas dos aliados defensores são atribuídas ao reino correto', () => {
   } = setup();
   g.relations.find((r) => r.a === b.id && r.b === c.id)!.allied = true;
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'france')!;
   const invader = army(g, a.id, p.id, { infantry: 12 });
   army(g, b.id, p.id, { infantry: 2 });
   army(g, c.id, p.id, { infantry: 2 });
@@ -526,7 +529,7 @@ test('dissolução encerra guerras sem lado vivo e permite a paz mundial', () =>
     players: [a, b],
   } = setup();
   const w = declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = g.provinces.find((p) => p.id === 'castile')!;
+  const p = g.provinces.find((p) => p.id === 'france')!;
   p.pacification = 0;
   p.unrest = 100;
   army(g, b.id, p.id, { infantry: 1 });
@@ -544,7 +547,7 @@ test('ocupação completa do líder causa capitulação real e permite impor sub
     players: [a, b],
   } = setup();
   const w = declareWar(g, a.id, b.id, 'CONQUEST');
-  g.provinces.find((p) => p.id === 'castile')!.occupierId = a.id;
+  g.provinces.find((p) => p.id === 'france')!.occupierId = a.id;
   updateWarScores(g);
   assert.equal(w.warScore, 100);
   offerPeace(g, a.id, w.id, [{ type: 'SUBJUGATE' }]);
@@ -583,7 +586,7 @@ test('submissão incorpora os súditos anteriores e concede acesso militar recí
   } = setup();
   c.subjectOfId = b.id;
   const w = declareWar(g, a.id, b.id, 'CONQUEST');
-  g.provinces.find((p) => p.id === 'castile')!.occupierId = a.id;
+  g.provinces.find((p) => p.id === 'france')!.occupierId = a.id;
   updateWarScores(g);
   applyPeace(g, w, a.id, [{ type: 'SUBJUGATE' }]);
   assert.equal(b.subjectOfId, a.id);
@@ -616,11 +619,11 @@ test('desarmamento remove formações vazias e deixa o snapshot pronto para pers
     g,
     players: [a, b],
   } = setup();
-  army(g, b.id, 'castile', { infantry: 10 });
-  army(g, b.id, 'castile', { infantry: 10 });
-  army(g, b.id, 'castile', { infantry: 10 });
+  army(g, b.id, 'france', { infantry: 10 });
+  army(g, b.id, 'france', { infantry: 10 });
+  army(g, b.id, 'france', { infantry: 10 });
   const w = declareWar(g, a.id, b.id, 'CONQUEST');
-  g.provinces.find((p) => p.id === 'castile')!.occupierId = a.id;
+  g.provinces.find((p) => p.id === 'france')!.occupierId = a.id;
   updateWarScores(g);
   applyPeace(g, w, a.id, [{ type: 'HUMILIATE_DISARM' }]);
   assert.equal(
@@ -650,15 +653,15 @@ test('tropa com acesso estacionada em cidade estrangeira precisa lutar após dec
     players: [a, b],
   } = setup();
   g.relations.find((r) => r.a === a.id && r.b === b.id)!.militaryAccess.push(a.id);
-  army(g, a.id, 'castile', { infantry: 10 });
-  army(g, b.id, 'castile', { infantry: 2 });
+  army(g, a.id, 'france', { infantry: 10 });
+  army(g, b.id, 'france', { infantry: 2 });
   declareWar(g, a.id, b.id, 'CONQUEST');
   const r = resolveTurn(g);
-  assert.ok(r.battles.some((b) => b.provinceId === 'castile'));
-  assert.equal(g.provinces.find((p) => p.id === 'castile')!.occupierId, null);
-  assert.equal(g.provinces.find((p) => p.id === 'castile')!.siege?.progress, 1);
+  assert.ok(r.battles.some((b) => b.provinceId === 'france'));
+  assert.equal(g.provinces.find((p) => p.id === 'france')!.occupierId, null);
+  assert.equal(g.provinces.find((p) => p.id === 'france')!.siege?.progress, 1);
   resolveTurn(g);
-  assert.equal(g.provinces.find((p) => p.id === 'castile')!.occupierId, a.id);
+  assert.equal(g.provinces.find((p) => p.id === 'france')!.occupierId, a.id);
 });
 test('formação que recuou na rodada não recebe recuperação de moral nem pacificação estacionária', () => {
   const {
@@ -666,8 +669,8 @@ test('formação que recuou na rodada não recebe recuperação de moral nem pac
     players: [a, b],
   } = setup();
   declareWar(g, a.id, b.id, 'CONQUEST');
-  const p = g.provinces.find((p) => p.id === 'castile')!;
-  const attacker = army(g, a.id, 'portugal', { infantry: 7 });
+  const p = g.provinces.find((p) => p.id === 'france')!;
+  const attacker = army(g, a.id, 'castile', { infantry: 7 });
   attacker.morale = 85;
   army(g, b.id, p.id, { infantry: 7 });
   submitOrder(g, a.id, {
@@ -689,16 +692,16 @@ test('recuo para aliado neutro preserva a formação sem doar tropas ou exigir a
   } = setup();
   declareWar(g, c.id, b.id, 'CONQUEST');
   g.relations.find((r) => r.a === a.id && r.b === b.id)!.allied = true;
-  const defender = army(g, b.id, 'castile', { infantry: 7 });
-  const invader = army(g, c.id, 'aquitaine', { infantry: 6, artillery: 3 });
+  const defender = army(g, b.id, 'france', { infantry: 7 });
+  const invader = army(g, c.id, 'italy', { infantry: 6, artillery: 3 });
   submitOrder(g, c.id, {
     type: 'MOVE_BATTALION',
     battalionId: invader.id,
-    targetProvinceId: 'castile',
+    targetProvinceId: 'france',
   });
   const report = resolveTurn(g);
-  assert.ok(report.retreats.some((r) => r.armyId === defender.id && r.toProvinceId === 'portugal'));
-  assert.equal(defender.provinceId, 'portugal');
+  assert.ok(report.retreats.some((r) => r.armyId === defender.id && r.toProvinceId === 'castile'));
+  assert.equal(defender.provinceId, 'castile');
   assert.equal(defender.ownerId, b.id);
   assert.equal(defender.morale, 15);
   assert.equal(g.provinces[0].ownerId, a.id);
@@ -709,15 +712,11 @@ test('reagrupamento de frota isolada também move seu batalhão embarcado', () =
     g,
     players: [a],
   } = setup();
-  g.provinces.find((p) => p.id === 'lowlands')!.portLevel = 1;
-  const fleet = createBattalion(
-      g,
-      a.id,
-      'lowlands',
-      compositionOf({ warships: 2, transports: 2 }),
-      { isFleet: true },
-    ),
-    cargo = army(g, a.id, 'lowlands', { infantry: 3 });
+  g.provinces.find((p) => p.id === 'italy')!.portLevel = 1;
+  const fleet = createBattalion(g, a.id, 'italy', compositionOf({ warships: 2, transports: 2 }), {
+      isFleet: true,
+    }),
+    cargo = army(g, a.id, 'italy', { infantry: 3 });
   fleet.embarkedArmyId = cargo.id;
   cargo.embarkedOnId = fleet.id;
   fleet.stranded = true;

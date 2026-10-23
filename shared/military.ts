@@ -106,16 +106,21 @@ export function skillBlock(p: Player, id: SkillId, g?: Pick<GameState, 'turn'>):
     return 'Escolha uma especialização de nível 2.';
   return null;
 }
-export function movementAllowance(g: Pick<GameState, 'players'>, a: Battalion) {
-  if (a.isFleet) return hasSkill(g, a.ownerId, 'NAV_T3') ? 2 : 1;
+export function movementAllowance(
+  g: Pick<GameState, 'players'> & Partial<Pick<GameState, 'turn'>>,
+  a: Battalion,
+) {
+  const blitz = g.turn !== undefined && a.blitzUntilTurn === g.turn ? 2 : 1;
+  if (a.isFleet) return Math.max(blitz, hasSkill(g, a.ownerId, 'NAV_T3') ? 2 : 1);
   const pure = a.cavalry > 0 && a.infantry === 0 && a.artillery === 0;
   const base = pure && g.players.find((p) => p.id === a.ownerId)?.nationId === 'turan' ? 2 : 1;
-  return (
+  return Math.max(
+    blitz,
     base +
-    (hasSkill(g, a.ownerId, 'CAV_T3') &&
-    a.cavalry >= Math.ceil((a.infantry + a.cavalry + a.artillery) / 2) &&
-    a.cavalry > 0
-      ? 1
-      : 0)
+      (hasSkill(g, a.ownerId, 'CAV_T3') &&
+      a.cavalry >= Math.ceil((a.infantry + a.cavalry + a.artillery) / 2) &&
+      a.cavalry > 0
+        ? 1
+        : 0),
   );
 }

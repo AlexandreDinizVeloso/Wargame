@@ -572,7 +572,6 @@ function finalizeV6(g: GameState): GameState {
     const l = realmLimits(g, p.id);
     p.armyCap = l.armyCap;
     p.manpowerCap = l.manpowerCap;
-    p.manpower = Math.min(p.manpower, l.manpowerCap);
     const kind = p.secretObjectives.find((c) => c.id === p.selectedObjectiveId)?.kind;
     if (g.enableSecretObjectives && g.players.length >= 3) {
       p.secretObjectives = objectiveCards(g, p);
