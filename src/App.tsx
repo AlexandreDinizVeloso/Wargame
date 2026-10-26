@@ -80,7 +80,7 @@ import ProvinceDrawer from './ProvinceDrawer';
 import type { ReportTab } from './TurnPanel';
 import WarModal from './WarModal';
 import { audio } from './audio';
-import { CoatOfArms, number, typing } from './ui';
+import { CoatOfArms, ImperialViewportFrame, OrnatePanelFrame, number, typing } from './ui';
 import { useGame } from './useGame';
 const SkillTreeDrawer = lazy(() => import('./SkillTreeDrawer'));
 const DiplomacyDrawer = lazy(() => import('./DiplomacyDrawer'));
@@ -119,74 +119,103 @@ function Manual({
       onActivate={onActivate}
     >
       <section className="manual-modal popup-sheet">
-        <span className="eyebrow">A ARTE DE GOVERNAR</span>
-        <h2>Um mundo. Dois legados.</h2>
+        <span className="eyebrow">A ARTE DE GOVERNAR · COMPÊNDIO COMPLETO (v1.2)</span>
+        <h2>Um mundo. Oito coroas. Dois caminhos para a glória.</h2>
         <div className="manual-grid">
           <section>
             <Swords size={25} />
-            <h3>Dominação Total</h3>
+            <h3>Dominação Imperial (75%)</h3>
             <p>
-              Controle 75% das terras. Vassalos contribuem com metade de suas terras. Subjugar uma
-              grande potência exige ocupação da capital e de 75% de seu território.
+              Controle 75% das 42 províncias terrestres. Vassalos contribuem com 50% de suas terras.
+              Subjugar uma potência exige ocupar sua capital e 75% do seu território.
             </p>
           </section>
           <section>
             <Crown size={25} />
             <h3>Objetivos Secretos</h3>
             <p>
-              Escolha uma carta secreta no primeiro turno. Cumpra todos os seus requisitos para
-              vencer, mesmo sem dominar o mundo.
+              Escolha uma carta secreta no primeiro turno. Cumpra todos os seus requisitos
+              estratégicos para conquistar a vitória imediata, mesmo sem dominar o globo.
             </p>
           </section>
         </div>
-        <h3>Cidades constroem. Batalhões se movem.</h3>
+
+        <h3>1. Movimento, Combate, Rios & Cercos</h3>
         <p>
-          Clique no território para administrar a província. Clique em uma ficha para comandar a
-          formação; ela pode marchar enquanto a cidade constrói. Clique Esquerdo: Selecionar |
-          Clique Direito: Mover / Atacar. Clique direito em qualquer região para preparar o menor
-          caminho legal. Uma ligação é percorrida por rodada.
+          <strong>Clique Esquerdo:</strong> seleciona província ou formação.{' '}
+          <strong>Clique Direito:</strong> prepara marcha ou ataque pelo menor caminho legal.
+          Infantaria protege a artilharia; Cavalaria flanqueia em planícies (+20%); Artilharia
+          neutraliza níveis de Forte e acelera cercos, mas sofre baixas extras se superar a
+          infantaria. Atravessar rios impõe −15% de ataque (−25% na Primavera). Tropas acima do
+          Suprimento da província ou cercadas sofrem atrito.
         </p>
-        <h3>Declare antes de invadir</h3>
+
+        <h3>2. Economia, 6 Construções, Especialização & Recrutamento em Massa (⚡)</h3>
         <p>
-          Outro reino só pode ser atravessado com acesso militar ou guerra formal. Os aliados
-          defensivos recebem chamado; recusar custa reputação. Ocupação não transfere propriedade:
-          negocie cessões no tratado.
+          Todas as construções custam apenas <strong>Ouro (🪙)</strong> — Mercado, Quartel, Forte e
+          Porto custam 20 Ouro no nível 1; Fundição e Templo habilitam artilharia pesada e fé/ordem
+          pública. Cidades evoluídas podem receber uma <strong>Especialização</strong> permanente.
+          Use o painel <strong>⚡ Ações Rápidas</strong> na barra superior para realizar{' '}
+          <strong>Recrutamento em Massa</strong> distribuído automaticamente entre suas províncias.
         </p>
-        <h3>Componha seus exércitos</h3>
+
+        <h3>3. Autoridade (👑), Doutrinas & os 5 Atos do Comando Supremo</h3>
         <p>
-          Infantaria protege canhões; cavalaria flanqueia em planícies e litoral. Artilharia reduz
-          fortes e destrói moral, mas sofre baixas extras quando supera a infantaria. Treinamento,
-          terreno, moral e suprimento decidem a batalha.
+          A <strong>Autoridade (👑)</strong> unifica Influência, Prestígio e XP Militar. Além de
+          desbloquear a Árvore Militar e ações diplomáticas, ela aciona os{' '}
+          <strong>5 Comandos Supremos</strong> repetíveis na barra inferior:
         </p>
-        <h3>Domine as rotas</h3>
+        <ul>
+          <li>
+            <strong>⚡ Marcha Forçada (35 👑):</strong> +25 moral, remove desorganização, +1
+            movimento e ignora penalidades de rio e terreno no combate.
+          </li>
+          <li>
+            <strong>🪙 Títulos de Guerra (30 👑):</strong> injeta +120 Ouro imediatamente no
+            tesouro nacional.
+          </li>
+          <li>
+            <strong>🛡️ Guarda Imperial (50 👑):</strong> convoca um batalhão de elite (4 Infantaria,
+            2 Cavalaria, moral 100%, treino 1,3×) sem consumir Recrutas.
+          </li>
+          <li>
+            <strong>💣 Rompe-Muralhas (45 👑):</strong> demole 1 nível de forte e ocupa
+            imediatamente uma província inimiga vizinha sem guarnição.
+          </li>
+          <li>
+            <strong>🔥 Sabotagem de Suprimento (40 👑):</strong> reduz em −40 a moral de um batalhão
+            inimigo em guerra e zera seu suprimento na rodada.
+          </li>
+        </ul>
+
+        <h3>4. Estações do Ano (Ciclo de 3 Rodadas), Eras & Dilemas do Conselho</h3>
         <p>
-          Portos constroem navios. Cada transporte leva quatro unidades; embarque em um porto e
-          desembarque em uma costa alcançada pela frota. Navios de guerra bloqueiam a economia e
-          enfraquecem cercos.
+          Cada estação dura <strong>3 rodadas</strong>:{' '}
+          <strong>🌸 Primavera</strong> (+100% Recrutas, −25% ataque em rios),{' '}
+          <strong>☀️ Verão</strong> (+1 movimento terrestre, +15% ataque em terra, +1 cerco),{' '}
+          <strong>🍂 Outono</strong> (+100% comércio marítimo, −25% custo de Mercado/Porto) e{' '}
+          <strong>❄️ Inverno</strong> (20% atrito hostil/cerco, −15 moral, +50% manutenção em
+          campanha). A campanha avança pela <strong>Era da Consolidação (R1–8)</strong>,{' '}
+          <strong>Era dos Impérios (R9–20, −10% doutrinas)</strong> e{' '}
+          <strong>Era da Hegemonia (R21+, +1 cerco)</strong>. O Conselho propõe{' '}
+          <strong>Dilemas</strong> periódicos de Crise, Tática e Política com efeitos temporários.
         </p>
-        <h3>Governe o território</h3>
+
+        <h3>5. Bônus Continentais, Mares, Tratados & Lentes (F1–F5)</h3>
         <p>
-          Conquistas precisam de pacificação. Exércitos desorganizados devem descansar em terra
-          amiga. Mercados ampliam receitas; tropas além do suprimento sofrem atrito. Cidades
-          Sagradas recolhem dízimos limitados de nações ativas da sua fé. Inquisição converte em uma
-          missão e cria tensão; tolerância requer duas missões e reduz impostos em 10%.
+          Controlar todos os territórios de um continente garante renda extra por rodada:{' '}
+          <strong>América do Sul</strong> (+3🪙/+0,5👥), <strong>América do Norte</strong>{' '}
+          (+5🪙/+1👥), <strong>MENA & África</strong> (+6🪙/+1👥), <strong>Europa</strong>{' '}
+          (+7🪙/+1,5👥/+1👑) e <strong>Ásia</strong> (+10🪙/+2👥/+2👑). Nos mares, Navios de Guerra
+          disputam nós comerciais e bloqueiam portos; Transportes levam 4 unidades (ou use{' '}
+          <strong>Fretamento Automático</strong>). Nos Tratados de Paz, use seu War Score (até 100)
+          para exigir Províncias (20), Reparações de 25% por 5 rodadas (25), Humilhação (30) ou
+          Vassalagem (75).
         </p>
-        <h3>O preço da guerra</h3>
-        <p>
-          Desgaste cresce com os combates e reduz renda e recuperação de moral. Tratados podem
-          exigir terras, reparações, desarmamento, religião ou submissão. A partida segue sem limite
-          de rodadas até uma vitória.
-        </p>
-        <h3>Seu conselho, sua mesa</h3>
-        <p>
-          O dock reúne as ações da cidade ou formação selecionada; os botões do conselho abrem uma
-          consulta por vez. Arraste o título para mover e as bordas para redimensionar. Use Esc para
-          fechar. Estatísticas mostra gráficos da campanha; o Conselho da nação permite baixar JSON
-          e TXT.
-        </p>
+
         <div className="keyboard-guide">
           <span>
-            <kbd>F1–F5</kbd> lentes
+            <kbd>F1–F5</kbd> lentes do mapa
           </span>
           <span>
             <kbd>Scroll</kbd> zoom
@@ -195,7 +224,10 @@ function Manual({
             <kbd>Espaço + arraste</kbd> câmera
           </span>
           <span>
-            <kbd>Esc</kbd> fechar
+            <kbd>Alt + Clique</kbd> sinalizar aliado
+          </span>
+          <span>
+            <kbd>Esc</kbd> fechar janela
           </span>
         </div>
         <button className="primary" onClick={close}>
@@ -620,14 +652,26 @@ export default function App() {
     setQuickActionsOpen(false);
   }, [currentCode]);
   const rootClick = (event: React.MouseEvent) => {
-    if (event.target instanceof Element && event.target.closest('button')) {
-      audio.unlock();
-      audio.play(event.target.closest('[data-sound=coins]') ? 'coins' : 'click');
+    if (event.target instanceof Element) {
+      const btn = event.target.closest('button');
+      if (btn) {
+        audio.unlock();
+        if (btn.closest('[data-sound=coins]')) audio.play('coins');
+        else if (btn.matches('.ready-button, .primary, [data-dilemma-option]')) audio.play('seal');
+        else if (
+          btn.closest('.hud-navigation, .footer-tabs, .context-tabs') ||
+          btn.matches('.nation-heading')
+        )
+          audio.play('parchment');
+        else if (btn.closest('.supreme-quickbar')) audio.play('fanfare');
+        else audio.play('click');
+      }
     }
   };
   if (!game)
     return (
       <div className="application" onClickCapture={rootClick}>
+        <ImperialViewportFrame />
         <Entry
           send={send}
           online={status === 'online'}
@@ -657,6 +701,7 @@ export default function App() {
   if (game.phase === 'lobby')
     return (
       <div className="application" onClickCapture={rootClick}>
+        <ImperialViewportFrame />
         <Lobby
           game={game}
           playerId={playerId}
@@ -707,7 +752,9 @@ export default function App() {
   const signal = (p: Province, note = '') => send({ type: 'map_ping', provinceId: p.id, note });
   const selectArmy = (a: Battalion) => {
     setReference('');
+    audio.unlock();
     if (a.isFleet) audio.playSailSound();
+    else audio.play('steel-draw');
     setUnitTab('command');
     setArmy(a.id);
     setProvince(a.provinceId);
@@ -716,6 +763,8 @@ export default function App() {
   const selectProvince = (p: Province) => {
     setReference('');
     setArmy('');
+    audio.unlock();
+    audio.play('parchment');
     setProvinceTab('build');
     setProvince(p.id);
     open('province');
@@ -813,6 +862,7 @@ export default function App() {
       data-audio-muted={muted}
       data-season={currentSeason.season}
     >
+      <ImperialViewportFrame />
       {gallery}
       {!tacticalBattle && !galleryOpen && cinematic?.type === 'season' && (
         <SeasonTransitionBanner
@@ -865,6 +915,7 @@ export default function App() {
         </Suspense>
       )}
       <details className="continent-bonus-legend framed-panel" data-hud-surface>
+        <OrnatePanelFrame variant="compact" seal="top-right" />
         <summary>🌍 Bônus dos Continentes</summary>
         <div>
           {Object.entries(CONTINENT_BONUSES).map(([id, bonus]) => (
@@ -910,6 +961,7 @@ export default function App() {
         }}
       />
       <header className="top-bar framed-panel" data-hud-surface>
+        <OrnatePanelFrame variant="topbar" seal="bottom-right" />
         <button className="nation-heading" onClick={openMenu} title="Conselho da nação">
           <CoatOfArms nationId={me.nationId} size={32} />
           <span>
@@ -1119,6 +1171,7 @@ export default function App() {
         </Suspense>
       )}
       <nav className="supreme-quickbar framed-panel" aria-label="Comando Supremo" data-hud-surface>
+        <OrnatePanelFrame variant="quickbar" seal="none" />
         <SupremeCommandButtons
           game={game}
           playerId={playerId}
@@ -1509,7 +1562,8 @@ export default function App() {
           />
         </PanelWindow>
       )}
-      <footer className="hud-footer" data-hud-surface>
+      <footer className="hud-footer framed-panel" data-hud-surface>
+        <OrnatePanelFrame variant="footer" seal="top-left" />
         <div className="footer-tabs">
           <button onClick={() => showReport('world')} aria-label="Crônica">
             🗺️ Crônica
@@ -1559,6 +1613,7 @@ export default function App() {
         </span>
       </footer>
       <div className="map-controls framed-panel" data-hud-surface>
+        <OrnatePanelFrame variant="compact" seal="none" />
         <div className="camera-controls">
           <button aria-label="Diminuir zoom" onClick={() => camera.current?.zoomOut()}>
             <Minus size={15} />

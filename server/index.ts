@@ -245,7 +245,7 @@ const vite =
     ? null
     : await (
         await import('vite')
-      ).createServer({ root, server: { middlewareMode: true, hmr: { server } }, appType: 'spa' });
+      ).createServer({ root, server: { middlewareMode: true, hmr: false }, appType: 'spa' });
 const port = Number(process.env.PORT ?? 3000),
   host = process.env.HOST ?? '0.0.0.0';
 server.listen(port, host, () => {

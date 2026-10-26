@@ -41,24 +41,49 @@
   margin-top: 18px;
 }
 
-.sound-library-tracks > button {
+.sound-track-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.sound-library-tracks > button,
+.sound-track-item > button:first-child {
   display: flex;
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 13px 14px;
+  padding: 12px 14px;
   text-align: left;
   background: linear-gradient(100deg, #292a27, #182025);
-  border: 1px solid #6c614340;
+  border: 1px solid #8a734455;
 }
 
-.sound-library-tracks > button:hover {
+.sound-library-tracks > button:hover,
+.sound-track-item > button:first-child:hover {
   border-color: #c5a568;
 }
 
-.sound-library-tracks > button > span:first-child {
+.sound-library-tracks > button > span:first-child,
+.sound-track-item > button:first-child > span:first-child {
   color: #d4b77b;
-  font-size: 28px;
+  font-size: 24px;
+}
+
+.track-lock-btn {
+  padding: 0 12px;
+  font-size: 11px;
+  border: 1px solid #8a734455;
+  background: rgba(20, 29, 40, 0.9);
+  color: #c6b898;
+  white-space: nowrap;
+}
+
+.track-lock-btn.active {
+  background: linear-gradient(135deg, #4b3b22, #262015);
+  border-color: #dfc07b;
+  color: #f7e4b2;
 }
 
 .sound-library-tracks strong,
@@ -83,9 +108,16 @@
   font-size: 12px;
 }
 
-.sound-library-stop {
-  width: 100%;
+.sound-library-actions-row {
+  display: flex;
+  gap: 8px;
   margin: 10px 0 18px;
+}
+
+.sound-library-stop {
+  flex: 1;
+  width: 100%;
+  margin: 0;
   padding: 8px;
 }
 

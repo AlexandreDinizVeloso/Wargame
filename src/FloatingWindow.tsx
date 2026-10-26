@@ -5,6 +5,7 @@ import {
 } from '../shared/windowLayout';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Maximize2, Minus, X } from 'lucide-react';
+import { OrnatePanelFrame } from './ui';
 type Geometry = WindowGeometry;
 type GestureKind = 'drag' | 'right' | 'bottom' | 'corner';
 export interface WindowProps {
@@ -142,7 +143,7 @@ export function FloatingWindow({
       role={role}
       tabIndex={-1}
       aria-label={title}
-      className={`floating-window ${geometry.minimized ? 'minimized' : ''} ${className}`}
+      className={`floating-window framed-panel ${geometry.minimized ? 'minimized' : ''} ${className}`}
       data-window={id}
       data-context-panel={id === 'province' || id === 'battalion' || undefined}
       data-hud-surface={hudSurface || undefined}
@@ -150,6 +151,7 @@ export function FloatingWindow({
       onFocusCapture={() => onActivate?.()}
       style={{ left, top, width: actualWidth, height: visibleHeight, zIndex: active ? 76 : 72 }}
     >
+      <OrnatePanelFrame variant="window" seal={geometry.minimized ? 'none' : 'bottom-left'} />
       <header
         className="window-title"
         onPointerDown={(e) => begin(e, 'drag')}

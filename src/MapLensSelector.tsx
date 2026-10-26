@@ -1,5 +1,6 @@
 import { MAP_LENSES } from '../shared/mapLenses';
 import type { MapMode } from '../shared/types';
+import { OrnatePanelFrame } from './ui';
 export default function MapLensSelector({
   mode,
   onChange,
@@ -20,6 +21,7 @@ export default function MapLensSelector({
       aria-label="Lentes cartográficas"
       data-hud-surface
     >
+      <OrnatePanelFrame variant="lens" seal="bottom-right" />
       <nav>
         {MAP_LENSES.map((l) => (
           <button

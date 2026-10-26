@@ -23,7 +23,7 @@ import {
   InfrastructureSymbols,
 } from './CartographicLayers';
 import { crossingOptions } from '../shared/naval';
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useId, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type {
   Battalion,
   GameView,
@@ -109,11 +109,27 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
   ref,
 ) {
   const mapSeason = game ? seasonAt(game.turn) : undefined;
+  const clipPrefix = `atlas-clip-${useId().replace(/:/g, '')}`;
   const root = useRef<HTMLDivElement>(null),
     [bounds, setBounds] = useState({ width: 1440, height: 900 }),
     [hoveredId, setHoveredId] = useState(''),
     [pointer, setPointer] = useState({ x: 0, y: 0 }),
-    [isTurnReplayPlaying, setIsTurnReplayPlaying] = useState(false);
+    [isTurnReplayPlaying, setIsTurnReplayPlaying] = useState(false),
+    [ripples, setRipples] = useState<
+      { id: number; x: number; y: number; kind: 'select' | 'attack' | 'naval' | 'friendly' }[]
+    >([]);
+  const rippleCounter = useRef(0);
+  const spawnRipple = (
+    x: number,
+    y: number,
+    kind: 'select' | 'attack' | 'naval' | 'friendly' = 'select',
+  ) => {
+    const id = ++rippleCounter.current;
+    setRipples((prev) => [...prev.slice(-6), { id, x, y, kind }]);
+    setTimeout(() => {
+      setRipples((prev) => prev.filter((r) => r.id !== id));
+    }, 850);
+  };
   const lastTactical = useRef(0);
   useEffect(() => {
     if (!replay) {
@@ -121,10 +137,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
       return;
     }
     setIsTurnReplayPlaying(true);
-    const timer = setTimeout(
-      () => setIsTurnReplayPlaying(false),
-      verticalRules(game) ? 6500 : 4000,
-    );
+    const timer = setTimeout(() => setIsTurnReplayPlaying(false), 1500);
     return () => clearTimeout(timer);
   }, [replay?.nonce]);
   const extent = useMemo(() => {
@@ -431,6 +444,7 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
         : 'friendly';
   };
   const pick = (p: Province, alt = false) => {
+    spawnRipple(p.x, p.y, 'select');
     if (alt) {
       onPing?.(p);
       return;
@@ -439,6 +453,9 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
     onSelect?.(p);
   };
   const pickArmy = (a: Battalion) => {
+    const p = provinces.find((entry) => entry.id === a.provinceId);
+    const pos = markerPositions.get(a.id) ?? p;
+    if (pos) spawnRipple(pos.x, pos.y, 'select');
     onSelectArmy?.(a);
   };
   const pathFor = (ids: string[]) => {
@@ -484,6 +501,8 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           province = provinces.find((entry) => entry.id === id);
         if (province) {
           lastTactical.current = Date.now();
+          const destKind = highlight(province) ?? 'friendly';
+          spawnRipple(province.x, province.y, destKind);
           onTactical?.(province);
         }
       }}
@@ -534,6 +553,8 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
           const province = provinces.find((q) => q.id === p.provinceId)!;
           if (p.button === 2) {
             lastTactical.current = Date.now();
+            const destKind = highlight(province) ?? 'friendly';
+            spawnRipple(province.x, province.y, destKind);
             onTactical?.(province);
           } else if (p.touch) {
             const army = p.armyId ? armies.find((a) => a.id === p.armyId) : undefined;
@@ -593,6 +614,33 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             <path d="M0 0L10 5L0 10Z" fill="#e0c47c" />
           </marker>
         </defs>
+        <g className="portolan-rhumb-lines" pointerEvents="none" aria-hidden="true">
+          {provinces
+            .filter((p) => p.kind === 'SEA_ZONE')
+            .map((sea) => (
+              <g key={`rhumb-${sea.id}`} transform={`translate(${sea.x} ${sea.y})`} opacity=".14">
+                {[0, 45, 90, 135].map((angle) => (
+                  <line
+                    key={angle}
+                    x1="-260"
+                    y1="0"
+                    x2="260"
+                    y2="0"
+                    transform={`rotate(${angle})`}
+                    stroke="#dfc586"
+                    strokeWidth={0.45 / scale}
+                    strokeDasharray={`${8 / scale} ${4 / scale}`}
+                  />
+                ))}
+                <circle
+                  r={18 / scale}
+                  fill="none"
+                  stroke="#dfc586"
+                  strokeWidth={0.5 / scale}
+                />
+              </g>
+            ))}
+        </g>
         <g pointerEvents="none" aria-hidden="true" data-shoreline="double">
           {provinces
             .filter((p) => p.kind === 'LAND')
@@ -741,8 +789,13 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
                   fillRule="evenodd"
                 />
               )}
-              {cartographic && (
-                <ProvinceShading province={p} season={mapSeason} winter={mapSeason === 'WINTER'} />
+              {p.kind === 'LAND' && (
+                <ProvinceShading
+                  province={p}
+                  season={mapSeason}
+                  winter={mapSeason === 'WINTER'}
+                  clipPrefix={clipPrefix}
+                />
               )}
               {!preview && (
                 <InfrastructureSymbols
@@ -846,6 +899,21 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
               )}
               {p.kind === 'LAND' && !preview && (p.pacification < 50 || p.occupierId) && (
                 <path d={p.path} fill="url(#occupation)" pointerEvents="none" />
+              )}
+              {p.kind === 'LAND' && !preview && p.siege && (
+                <g
+                  className="siege-map-fx"
+                  transform={`translate(${p.x} ${p.y}) scale(${1 / scale})`}
+                  pointerEvents="none"
+                  aria-hidden="true"
+                >
+                  <circle className="siege-ring-pulse" r="18" />
+                  <circle className="siege-smoke s1" cx="-6" cy="-10" r="6" />
+                  <circle className="siege-smoke s2" cx="5" cy="-16" r="8" />
+                  <circle className="siege-smoke s3" cx="0" cy="-24" r="10" />
+                  <circle className="siege-ember e1" cx="-4" cy="-6" r="2" />
+                  <circle className="siege-ember e2" cx="6" cy="-8" r="1.8" />
+                </g>
               )}
               {p.kind === 'LAND' &&
                 (preview ||
@@ -1191,6 +1259,29 @@ const Atlas = forwardRef<CameraHandle, Props>(function Atlas(
             </g>
           ) : null;
         })}
+        {ripples.map((r) => (
+          <g
+            key={r.id}
+            className={`tactical-map-ripple kind-${r.kind}`}
+            transform={`translate(${r.x} ${r.y}) scale(${1 / scale})`}
+            pointerEvents="none"
+            aria-hidden="true"
+          >
+            <circle className="ripple-ring outer" r="26" />
+            <circle className="ripple-ring inner" r="14" />
+            {[0, 60, 120, 180, 240, 300].map((deg) => (
+              <line
+                key={deg}
+                className="ripple-spark"
+                x1="8"
+                y1="0"
+                x2="22"
+                y2="0"
+                transform={`rotate(${deg})`}
+              />
+            ))}
+          </g>
+        ))}
       </svg>
       {!preview && <SeasonAtmosphere season={mapSeason} />}
       {!preview && game && selectedArmy && hoveredId && !grabbing && (

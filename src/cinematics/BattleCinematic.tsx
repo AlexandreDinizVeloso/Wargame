@@ -157,34 +157,33 @@ export default function BattleCinematic({
     const hasInfantry = (compositionA?.infantry ?? 0) + (compositionD?.infantry ?? 0) > 0;
     const cues = battle.naval
       ? [
-          { at: 400, play: () => audio.play('battle-ambience') },
-          { at: 1_100, play: () => audio.play('sail') },
-          { at: 2_150, play: () => audio.play('naval') },
-          { at: 3_750, play: () => audio.play('cannon') },
-          { at: 4_350, play: () => audio.play('impact') },
-          { at: 5_450, play: () => audio.play('naval') },
-          { at: 6_950, play: () => audio.play('impact') },
+          { at: 40, play: () => audio.play('battle-ambience') },
+          { at: 150, play: () => audio.play('sail') },
+          { at: 300, play: () => audio.play('naval') },
+          { at: 520, play: () => audio.play('cannon') },
+          { at: 740, play: () => audio.play('impact') },
+          { at: 960, play: () => audio.play('naval') },
         ]
       : [
-          { at: 350, play: () => audio.play('battle-ambience') },
-          { at: 900, play: () => audio.play('march') },
+          { at: 40, play: () => audio.play('battle-ambience') },
+          { at: 140, play: () => audio.play('march') },
           ...(hasArtillery
             ? [
-                { at: 2_100, play: () => audio.play('cannon') },
-                { at: 2_850, play: () => audio.play('impact') },
+                { at: 280, play: () => audio.play('cannon') },
+                { at: 410, play: () => audio.play('impact') },
               ]
             : []),
           ...(hasInfantry || (!compositionA && !compositionD)
             ? [
-                { at: 3_650, play: () => audio.play('musket') },
-                { at: 4_150, play: () => audio.play('musket') },
+                { at: 520, play: () => audio.play('musket') },
+                { at: 640, play: () => audio.play('musket') },
               ]
             : []),
-          { at: 5_100, play: () => audio.play(hasCavalry ? 'charge' : 'march') },
-          { at: 6_950, play: () => audio.play('steel') },
-          { at: 7_550, play: () => audio.play('impact') },
+          { at: 750, play: () => audio.play(hasCavalry ? 'charge' : 'march') },
+          { at: 960, play: () => audio.play('steel') },
+          { at: 1_060, play: () => audio.play('impact') },
         ];
-    cues.push({ at: 8_200, play: () => audio.setCinematicMood(resultRef.current.musicMood) });
+    cues.push({ at: 1_160, play: () => audio.setCinematicMood(resultRef.current.musicMood) });
     const fired = new Set<number>();
     let frame = 0,
       last = performance.now(),
@@ -206,7 +205,7 @@ export default function BattleCinematic({
           if (!fired.has(cueIndex) && clock.current.elapsedMs >= cue.at) {
             fired.add(cueIndex);
             // A busy tab must not dump several old salvos into the mixer at once.
-            if (cue.at === 8_200 || clock.current.elapsedMs - cue.at < 500) cue.play();
+            if (cue.at === 1_160 || clock.current.elapsedMs - cue.at < 350) cue.play();
           }
         });
       }

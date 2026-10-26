@@ -7,7 +7,7 @@ import {
 } from '../shared/dilemmas';
 import { activeCouncilEffects, councilModifierLabels } from '../shared/councilEffects';
 import { reservedResources } from '../shared/rules';
-import type { Command } from './ui';
+import { OrnatePanelFrame, type Command } from './ui';
 
 export function CouncilEffectsPanel({ game, playerId }: { game: GameView; playerId: string }) {
   const me = game.players.find((p) => p.id === playerId),
@@ -62,6 +62,7 @@ export default function DilemmaCard({
       aria-label="Dilema Nacional"
       data-dilemma={active.id}
     >
+      <OrnatePanelFrame variant="decree" seal="top-right" />
       <small>
         ⚜ CONSELHO · RODADA {active.turn} ·{' '}
         <span className="council-category">{COUNCIL_CATEGORIES[dilemma.category]}</span>

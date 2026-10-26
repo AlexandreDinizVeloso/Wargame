@@ -28,7 +28,7 @@ interface Miniature {
 }
 
 const WIDTH = 1600;
-const DURATION = 10800;
+const DURATION = 1500;
 const clamp = (n: number, low = 0, high = 1) => Math.max(low, Math.min(high, n));
 const smooth = (from: number, to: number, n: number) => {
   const t = clamp((n - from) / (to - from));
@@ -562,8 +562,8 @@ export default function BattleTheatreCanvas({
       const h = (height * WIDTH) / width;
       const portrait = width <= 600 && height > width * 1.1;
       const movement = reducedMotion ? 0 : 1;
-      const approach = smooth(0, 5.6, time);
-      const aftermath = smooth(8.1, 10.6, time);
+      const approach = smooth(0, 0.78, time);
+      const aftermath = smooth(1.12, 1.46, time);
       const attackerWins = battle.outcome === 'attacker_victory';
       ctx.setTransform((width * pixelRatio) / WIDTH, 0, 0, (width * pixelRatio) / WIDTH, 0, 0);
       ctx.clearRect(0, 0, WIDTH, h);
@@ -630,7 +630,7 @@ export default function BattleTheatreCanvas({
               ? clamp(casualties / total)
               : 0;
         const isCasualty = unit.lossRank < lossFraction;
-        const fallen = isCasualty ? smooth(6.4 + unit.seed, 8.2 + unit.seed * 0.5, time) : 0;
+        const fallen = isCasualty ? smooth(0.88 + unit.seed * 0.14, 1.14 + unit.seed * 0.08, time) : 0;
         const retreat =
           losing && !battle.stackwipe && battle.retreatDestinationId
             ? aftermath * 90 * movement
@@ -664,9 +664,9 @@ export default function BattleTheatreCanvas({
         const y = baseY + flankOffset + (unit.seed - 0.5) * (battle.naval ? 14 : 9);
         const s = unit.scale * (battle.naval ? 1.12 : 1.18) * (portrait ? 2.3 : 1);
         const volleyTime =
-          unit.kind === 'artillery' ? 2.1 + unit.seed * 0.42 : 3.6 + unit.seed * 0.65;
+          unit.kind === 'artillery' ? 0.28 + unit.seed * 0.08 : 0.48 + unit.seed * 0.1;
         const volleyAge = time - volleyTime;
-        const secondAge = time - (battle.naval ? 5.4 + unit.seed * 0.55 : 6 + unit.seed * 0.5);
+        const secondAge = time - (battle.naval ? 0.74 + unit.seed * 0.08 : 0.82 + unit.seed * 0.08);
         shadow(
           ctx,
           x,
@@ -677,14 +677,14 @@ export default function BattleTheatreCanvas({
         ctx.save();
         ctx.translate(
           x,
-          y + (battle.naval ? Math.sin(time * 1.4 + unit.seed * 5) * 3 * movement : 0),
+          y + (battle.naval ? Math.sin(time * 2.4 + unit.seed * 5) * 3 * movement : 0),
         );
         ctx.scale(s * sideSign, s);
         ctx.globalAlpha = 1 - fallen * 0.72;
         if (battle.naval) {
           ctx.translate(0, fallen * 25 * movement);
           ctx.rotate(fallen * 0.17 * movement);
-          galleon(ctx, color, time * movement + unit.seed, unit.kind === 'transports');
+          galleon(ctx, color, time * 2 * movement + unit.seed, unit.kind === 'transports');
         } else {
           if (fallen) {
             ctx.translate(0, -3 * movement);
@@ -694,18 +694,18 @@ export default function BattleTheatreCanvas({
             soldier(
               ctx,
               color,
-              time * movement + unit.seed * 8,
-              time < 5.6 ? movement : 0,
-              time >= 3.2 && time < 7,
+              time * 2.4 * movement + unit.seed * 8,
+              time < 0.78 ? movement : 0,
+              time >= 0.44 && time < 0.98,
               unit.seed > 0.92,
             );
           else if (unit.kind === 'cavalry')
-            cavalry(ctx, color, time * movement + unit.seed * 8, time < 7 ? movement : 0);
+            cavalry(ctx, color, time * 2.4 * movement + unit.seed * 8, time < 0.98 ? movement : 0);
           else
             cannon(
               ctx,
               color,
-              volleyAge > 0 && volleyAge < 0.3 ? Math.sin(volleyAge * 10) * 6 * movement : 0,
+              volleyAge > 0 && volleyAge < 0.22 ? Math.sin(volleyAge * 14) * 6 * movement : 0,
             );
         }
         ctx.restore();
@@ -716,7 +716,7 @@ export default function BattleTheatreCanvas({
             const muzzleX =
               x + sideSign * (unit.kind === 'artillery' ? 34 : battle.naval ? 40 : 31) * s;
             const muzzleY = y - (unit.kind === 'artillery' ? 21 : battle.naval ? 2 : 20) * s;
-            const fireAge = battle.naval ? time - (2.3 + unit.seed * 0.7) : volleyAge;
+            const fireAge = battle.naval ? time - (0.32 + unit.seed * 0.1) : volleyAge;
             flash(ctx, muzzleX, muzzleY, fireAge, unit.kind === 'infantry' ? 17 : 40);
             flash(ctx, muzzleX, muzzleY, secondAge, unit.kind === 'infantry' ? 13 : 31);
             if (unit.seed > (width < 700 ? 0.85 : 0.72)) {
@@ -724,7 +724,7 @@ export default function BattleTheatreCanvas({
                 ctx,
                 muzzleX,
                 muzzleY,
-                fireAge,
+                fireAge * 2.2,
                 unit.seed * 12,
                 unit.kind === 'infantry' ? 0.7 : 1.2,
               );
@@ -732,13 +732,13 @@ export default function BattleTheatreCanvas({
                 ctx,
                 muzzleX,
                 muzzleY,
-                secondAge,
+                secondAge * 2.2,
                 unit.seed * 12,
                 unit.kind === 'infantry' ? 0.6 : 1.1,
               );
             }
-            if (unit.kind !== 'infantry' && fireAge > 0.08 && fireAge < 0.7) {
-              const travel = fireAge / 0.7;
+            if (unit.kind !== 'infantry' && fireAge > 0.03 && fireAge < 0.35) {
+              const travel = fireAge / 0.35;
               const tx = muzzleX + sideSign * travel * 300;
               const ty = muzzleY - Math.sin(travel * Math.PI) * 60;
               ctx.strokeStyle = 'rgba(224,193,139,.25)';
@@ -758,8 +758,8 @@ export default function BattleTheatreCanvas({
 
       // A few broad smoke banks read more like gunpowder than hundreds of glowing particles.
       for (let i = 0; i < (reducedMotion ? 3 : width < 700 ? 6 : 10); i++) {
-        const start = 3.1 + random(seed + i * 17) * 3;
-        const age = clamp(time - start, 0, 4);
+        const start = 0.42 + random(seed + i * 17) * 0.45;
+        const age = clamp((time - start) * 2.5, 0, 4);
         if (time < start) continue;
         const x = 470 + random(i * 11 + seed) * 650;
         const y = h * (0.63 + random(i + seed) * 0.16);

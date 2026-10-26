@@ -73,9 +73,9 @@ export default function ArchivedRoomControls({ send }: { send: (message: ClientM
     }
   };
   return (
-    <details className="archived-room-controls">
+    <details className="archived-room-controls framed-panel">
       <summary>🗃️ Recuperar sala pelo código</summary>
-      <div style={{ display: 'grid', gap: 6, maxWidth: 380, padding: 8 }}>
+      <div className="archived-room-body">
         <p>
           Salas sem atividade por 15 minutos ficam salvas e saem do lobby. Você pode reabrir seu
           lugar; o anfitrião também pode baixar o save completo.
@@ -85,6 +85,7 @@ export default function ArchivedRoomControls({ send }: { send: (message: ClientM
           <input
             aria-label="Código da sala arquivada"
             maxLength={6}
+            placeholder="EX: A3F021"
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
           />
@@ -95,27 +96,32 @@ export default function ArchivedRoomControls({ send }: { send: (message: ClientM
             aria-label="Convite privado de recuperação"
             type="password"
             autoComplete="off"
+            placeholder="Cole o link ou token privado"
             value={invite}
             onChange={(e) => setInvite(e.target.value)}
           />
         </label>
-        <button disabled={busy} onClick={() => void download()}>
-          💾 Baixar Save da Sala
-        </button>
-        <button
-          disabled={busy}
-          onClick={() => {
-            try {
-              const seat = credential();
-              setError('');
-              send({ type: 'resume', ...seat });
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Confira sua credencial.');
-            }
-          }}
-        >
-          ▶ Reabrir Sala Arquivada
-        </button>
+        <div className="archived-room-actions">
+          <button type="button" disabled={busy} onClick={() => void download()}>
+            💾 Baixar Save da Sala
+          </button>
+          <button
+            type="button"
+            className="primary"
+            disabled={busy}
+            onClick={() => {
+              try {
+                const seat = credential();
+                setError('');
+                send({ type: 'resume', ...seat });
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Confira sua credencial.');
+              }
+            }}
+          >
+            ▶ Reabrir Sala Arquivada
+          </button>
+        </div>
         <small>
           Para criar uma nova mesa a partir do arquivo baixado, use Importar Cenário / Save JSON.
         </small>

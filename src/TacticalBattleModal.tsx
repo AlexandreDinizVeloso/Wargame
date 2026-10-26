@@ -19,12 +19,12 @@ export default function TacticalBattleModal({
     const started = performance.now();
     let frame = 0;
     const tick = (now: number) => {
-      const value = Math.min(1, (now - started) / 2500);
+      const value = Math.min(1, (now - started) / 1500);
       setProgress(value);
       if (value < 1) frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    const timers = [0, 830, 1660].map((ms) => setTimeout(() => audio.playCombatSound(), ms));
+    const timers = [0, 480, 960].map((ms) => setTimeout(() => audio.playCombatSound(), ms));
     const escape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopImmediatePropagation();

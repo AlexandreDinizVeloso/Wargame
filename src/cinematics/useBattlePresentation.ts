@@ -95,14 +95,14 @@ export function useBattlePresentation(
     const current =
       clock.current?.nonce === replay.nonce ? clock.current : { nonce: replay.nonce, elapsed: 0 };
     clock.current = current;
-    const duration = modern ? CINEMATIC_DURATION : 4000;
+    const duration = 1500;
     const before = current.elapsed;
     let started = performance.now();
     let frame = 0;
     let published = 0;
     let pausedAt = document.hidden ? performance.now() : 0;
-    let marchPlayed = before >= 1500;
-    let peacePlayed = before >= 2900;
+    let marchPlayed = before >= 350;
+    let peacePlayed = before >= 700;
     if (before === 0) audio.play('horn');
     const visibility = () => {
       if (document.hidden) pausedAt = performance.now();
@@ -118,12 +118,12 @@ export function useBattlePresentation(
         return;
       }
       current.elapsed = Math.min(duration, before + time - started);
-      if (!marchPlayed && current.elapsed >= 1500) {
+      if (!marchPlayed && current.elapsed >= 350) {
         marchPlayed = true;
         if (replay.report.movements.some((move) => !move.isFleet)) audio.playMarchSound();
         if (replay.report.movements.some((move) => move.isFleet)) audio.playSailSound();
       }
-      if (!peacePlayed && current.elapsed >= 2900) {
+      if (!peacePlayed && current.elapsed >= 700) {
         peacePlayed = true;
         if (replay.report.diplomaticChanges.some((change) => change.action === 'PEACE'))
           audio.play('peace');

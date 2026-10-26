@@ -3,6 +3,7 @@ import { RoomSaveDownloadError, type attachRooms } from './rooms';
 
 type Rooms = ReturnType<typeof attachRooms>;
 const BODY_LIMIT = 128 * 1024;
+const IMPORT_BODY_LIMIT = 9 * 1024 * 1024;
 class ApiInputError extends Error {
   constructor(
     public status: number,
@@ -11,12 +12,15 @@ class ApiInputError extends Error {
     super(message);
   }
 }
-async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(
+  request: IncomingMessage,
+  limit = BODY_LIMIT,
+): Promise<Record<string, unknown>> {
   let bytes = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
     bytes += chunk.length;
-    if (bytes > BODY_LIMIT) throw new ApiInputError(413, 'Comando excede o limite de 128 KiB.');
+    if (bytes > limit) throw new ApiInputError(413, 'Comando excede o limite permitido.');
     chunks.push(Buffer.from(chunk));
   }
   let body: unknown;
@@ -37,10 +41,11 @@ export async function handleHttpGameApi(
 ): Promise<boolean> {
   const pathname = request.url?.split('?')[0] ?? '';
   const create = pathname === '/api/rooms' && request.method === 'POST';
+  const importRoom = pathname === '/api/rooms/import' && request.method === 'POST';
   const route = pathname.match(
-    /^\/api\/rooms\/([A-Za-z0-9]{6})\/(join|resume|state|commands|ready|declare-war|leave)$/,
+    /^\/api\/rooms\/([A-Za-z0-9]{6})\/(join|resume|state|commands|ready|declare-war|leave|ping)$/,
   );
-  if (!create && !route) return false;
+  if (!create && !importRoom && !route) return false;
   const reply = (status: number, value: unknown) => {
     response.writeHead(status, {
       'Content-Type': 'application/json; charset=utf-8',
@@ -51,6 +56,11 @@ export async function handleHttpGameApi(
   try {
     if (create) {
       reply(201, rooms.http.create(await readBody(request)));
+      return true;
+    }
+    if (importRoom) {
+      const body = await readBody(request, IMPORT_BODY_LIMIT);
+      reply(201, rooms.http.importCampaign(body.save));
       return true;
     }
     const [, code, action] = route!;
@@ -77,7 +87,11 @@ export async function handleHttpGameApi(
         throw new ApiInputError(401, 'Informe sua credencial privada para retomar.');
       reply(200, rooms.http.resume(code, id, credential));
     } else if (action === 'leave') reply(200, rooms.http.leave(code, playerId, token));
-    else {
+    else if (action === 'ping') {
+      if (!playerId || !token)
+        throw new ApiInputError(401, 'Envie Authorization Bearer e X-Concordia-Player.');
+      reply(200, rooms.http.ping(code, playerId, token, body.provinceId, body.note));
+    } else {
       if (!playerId || !token)
         throw new ApiInputError(401, 'Envie Authorization Bearer e X-Concordia-Player.');
       const command =

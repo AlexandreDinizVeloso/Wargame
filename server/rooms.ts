@@ -231,7 +231,20 @@ export function attachRooms(server: Server, options: Options = {}) {
     if (request.url?.split('?')[0] !== '/ws') return;
     if (request.headers.origin) {
       try {
-        if (new URL(request.headers.origin).host !== request.headers.host) {
+        const originUrl = new URL(request.headers.origin);
+        const forwardedHost =
+          typeof request.headers['x-forwarded-host'] === 'string'
+            ? request.headers['x-forwarded-host'].split(',')[0].trim()
+            : '';
+        const isCloudPreview =
+          originUrl.hostname.endsWith('.run.app') ||
+          originUrl.hostname.endsWith('.google.com') ||
+          originUrl.hostname.endsWith('.goog');
+        if (
+          originUrl.host !== request.headers.host &&
+          originUrl.host !== forwardedHost &&
+          !isCloudPreview
+        ) {
           socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
           return;
         }
@@ -828,6 +841,58 @@ export function attachRooms(server: Server, options: Options = {}) {
         httpEntry({ ...message, type: 'join', code }),
       resume: (code: string, playerId: string, token: string) =>
         httpEntry({ type: 'resume', code, playerId, token }),
+      importCampaign: (save: unknown) => {
+        assert(rooms.size < 200, 'Limite de salas atingido.');
+        let code = randomBytes(3).toString('hex').toUpperCase();
+        while (rooms.has(code) || archivedRoom(code))
+          code = randomBytes(3).toString('hex').toUpperCase();
+        const imported = importCampaign(save, code),
+          g = imported.game;
+        g.persistenceEnabled = !!options.stateFile;
+        const room: Room = {
+          game: g,
+          sessions: new Map(),
+          touched: clock(),
+          lastHumanActivityAt: clock(),
+          remainingMs: g.turnSeconds * 1000,
+        };
+        const invites: import('../shared/types').SeatInvite[] = [];
+        for (const p of g.players.filter((p) => !p.bot && p.id !== imported.hostId)) {
+          const seatToken = randomBytes(24).toString('hex');
+          room.sessions.set(p.id, { tokenHash: hashToken(seatToken), socket: null });
+          invites.push({ code, playerId: p.id, name: p.name, token: seatToken });
+        }
+        rooms.set(code, room);
+        const token = randomBytes(24).toString('hex');
+        activateSession(room, imported.hostId, token, null);
+        broadcast(room);
+        return {
+          code,
+          playerId: imported.hostId,
+          token,
+          invites,
+          ...httpState(room, imported.hostId),
+        };
+      },
+      ping: (code: string, playerId: string, token: string, provinceId: unknown, note: unknown) => {
+        const room = authenticatedRoom(code, playerId, token);
+        const now = clock();
+        const limits = lastPings.get(room) ?? new Map<string, number>();
+        assert(
+          now - (limits.get(playerId) ?? -Infinity) >= 1500,
+          'Aguarde um instante antes de sinalizar novamente.',
+        );
+        const ping = createMapPing(room.game, playerId, provinceId, note, now);
+        limits.set(playerId, now);
+        lastPings.set(room, limits);
+        room.lastHumanActivityAt = now;
+        persist();
+        for (const recipient of pingRecipients(room.game, playerId)) {
+          const socket = room.sessions.get(recipient)?.socket;
+          if (socket) send(socket, { type: 'map_ping', ping });
+        }
+        return { ping };
+      },
       state: (code: string, playerId: string, token: string) =>
         httpState(authenticatedRoom(code, playerId, token), playerId),
       command: (code: string, playerId: string, token: string, raw: unknown) => {

@@ -1,6 +1,7 @@
 import type { TurnResolutionReport } from '../shared/types';
 import { CINEMATIC_DURATION, resolutionPhase } from '../shared/cinematics';
 import { seasonAt, SEASON_RULES } from '../shared/world';
+import { OrnatePanelFrame } from './ui';
 export { CINEMATIC_DURATION } from '../shared/cinematics';
 export default function TurnResolutionSequencer({
   report,
@@ -31,6 +32,7 @@ export default function TurnResolutionSequencer({
       aria-label={`Resolução da rodada ${report.turn}`}
       data-cinematic-phase={phase}
     >
+      <OrnatePanelFrame variant="decree" seal="top-right" />
       <small>
         CRÔNICA IMPERIAL · RODADA {report.turn} · {season.icon} {season.name}
       </small>

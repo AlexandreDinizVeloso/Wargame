@@ -1,15 +1,15 @@
 import type { BattleReport, Player, Province, TurnResolutionReport } from '../../shared/types';
 
-export const BATTLE_CINEMATIC_DURATION = 10_800;
+export const BATTLE_CINEMATIC_DURATION = 1_500;
 export type BattlePhase = 'approach' | 'artillery' | 'volley' | 'charge' | 'clash' | 'result';
 
 export const BATTLE_PHASES: readonly { id: BattlePhase; at: number; label: string }[] = [
   { id: 'approach', at: 0, label: 'As linhas se formam' },
-  { id: 'artillery', at: 2_000, label: 'A pólvora desperta' },
-  { id: 'volley', at: 3_600, label: 'Salvas cruzam o campo' },
-  { id: 'charge', at: 5_000, label: 'O avanço das bandeiras' },
-  { id: 'clash', at: 6_900, label: 'O peso do confronto' },
-  { id: 'result', at: 8_200, label: 'O campo silencia' },
+  { id: 'artillery', at: 260, label: 'A pólvora desperta' },
+  { id: 'volley', at: 500, label: 'Salvas cruzam o campo' },
+  { id: 'charge', at: 720, label: 'O avanço das bandeiras' },
+  { id: 'clash', at: 960, label: 'O peso do confronto' },
+  { id: 'result', at: 1_160, label: 'O campo silencia' },
 ];
 
 export interface BattleClock {
@@ -28,9 +28,9 @@ export function battlePhaseAt(elapsedMs: number): BattlePhase {
 
 /** This is presentation timing, never a second simulation of combat. */
 export function battleLossProgress(elapsedMs: number): number {
-  if (elapsedMs <= 2_600) return 0;
-  if (elapsedMs >= 8_200) return 1;
-  const t = (elapsedMs - 2_600) / 5_600;
+  if (elapsedMs <= 340) return 0;
+  if (elapsedMs >= 1_160) return 1;
+  const t = (elapsedMs - 340) / 820;
   return t * t * (3 - 2 * t);
 }
 

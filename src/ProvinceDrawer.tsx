@@ -32,7 +32,9 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { provinceRecruitLimit, recruitedCount, recruitmentBlock } from '../shared/economy';
-import { TERRAIN_LABELS } from '../shared/map';
+import { TERRAIN_LABELS, impassableFeatures } from '../shared/map';
+import { TerrainBadgeIcon } from './CartographicLayers';
+import { seasonAt } from '../shared/world';
 import {
   compositionOf,
   controller,
@@ -192,6 +194,7 @@ export default function ProvinceDrawer({
     province.religion !== me.faith &&
     (own || adjacent) &&
     (!ruler || ruler.id === me.id || !getRelation(game, me.id, ruler.id)?.allied);
+  const provinceFeatures = impassableFeatures.filter((f) => f.provinces.includes(province.id));
   return (
     <div className="province-ledger">
       <SupremeCommandButtons
@@ -213,11 +216,43 @@ export default function ProvinceDrawer({
               (province.kind === 'SEA_ZONE' ? 'ROTA MARÍTIMA' : 'TERRA INDEPENDENTE')}
           </span>
           <h2>{province.name}</h2>
-          <span>
-            {province.kind === 'SEA_ZONE'
-              ? 'Zona marítima'
-              : `${TERRAIN_LABELS[province.terrain]} · defesa +${number((province.terrainDefenseBonus - 1) * 100)}%`}
+          <span className="province-terrain-pill">
+            {province.kind === 'SEA_ZONE' ? (
+              'Zona marítima'
+            ) : (
+              <>
+                <TerrainBadgeIcon
+                  terrain={province.terrain}
+                  season={seasonAt(game.turn)}
+                  size={20}
+                />
+                {`${TERRAIN_LABELS[province.terrain]} · defesa +${number((province.terrainDefenseBonus - 1) * 100)}%`}
+              </>
+            )}
           </span>
+          {provinceFeatures.map((feat) => {
+            const blockedPair = feat.blocked.find(
+              ([a, b]) => a === province.id || b === province.id,
+            );
+            const otherId = blockedPair
+              ? blockedPair[0] === province.id
+                ? blockedPair[1]
+                : blockedPair[0]
+              : null;
+            const otherName = otherId
+              ? game.provinces.find((p) => p.id === otherId)?.name ?? otherId
+              : null;
+            return (
+              <span
+                key={feat.id}
+                className={`province-barrier-pill ${blockedPair ? 'impassable' : 'cordillera'}`}
+              >
+                {blockedPair
+                  ? `⛔ ${feat.name}: Fronteira intransponível com ${otherName}`
+                  : `⛰️ ${feat.name}`}
+              </span>
+            );
+          })}
         </div>
         <button className="icon-button" title="Centralizar província" onClick={onFocus}>
           <ArrowUpRight size={17} />

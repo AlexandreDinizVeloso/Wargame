@@ -1,0 +1,7 @@
+{
+  "name": "Concórdia — Atlas de Impérios",
+  "description": "Concórdia: um protótipo de estratégia e diplomacia para 3 a 8 jogadores.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

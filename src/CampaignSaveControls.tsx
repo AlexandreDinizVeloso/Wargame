@@ -25,7 +25,8 @@ export default function CampaignSaveControls({
   return (
     <section className="campaign-save-controls" aria-label="Saves de campanha">
       <label className="file-button">
-        📂 Importar Cenário / Save JSON
+        <span className="file-button-title">📂 Importar Cenário / Save JSON</span>
+        <span className="file-button-badge">Arquivo .JSON</span>
         <input
           aria-label="Importar Cenário / Save JSON"
           type="file"
@@ -46,7 +47,9 @@ export default function CampaignSaveControls({
         />
       </label>
       {canExport && (
-        <button onClick={() => send({ type: 'export_campaign' })}>💾 Exportar Save JSON</button>
+        <button type="button" onClick={() => send({ type: 'export_campaign' })}>
+          💾 Exportar Save JSON
+        </button>
       )}
       <small>
         Importar cria uma nova sala privada. Relatórios antigos geram um cenário visível com ordens

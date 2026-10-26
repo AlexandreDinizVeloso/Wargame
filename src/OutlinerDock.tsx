@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { Battalion, GameView, Province } from '../shared/types';
 import { unitCount } from '../shared/rules';
 import { unitStatus, availableConstruction } from '../shared/outliner';
-import { typing } from './ui';
+import { OrnatePanelFrame, typing } from './ui';
 export default function OutlinerDock({
   game,
   playerId,
@@ -92,6 +92,7 @@ export default function OutlinerDock({
       aria-label="Outliner militar e econômico"
       data-hud-surface
     >
+      <OrnatePanelFrame variant="outliner" seal={open ? 'bottom-right' : 'none'} />
       <button
         className="outliner-toggle"
         aria-label={open ? 'Recolher Outliner' : 'Abrir Outliner'}

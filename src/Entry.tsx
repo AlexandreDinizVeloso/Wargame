@@ -27,7 +27,7 @@ import type {
 import { CONTINENTS, makeMap, THEATERS } from '../shared/map';
 import { NATIONS, RELIGIONS } from '../shared/rules';
 import Atlas from './Atlas';
-import { Brand, CoatOfArms, type Command } from './ui';
+import { Brand, CoatOfArms, OrnatePanelFrame, type Command } from './ui';
 import './cinematics/gallery.css';
 const world = makeMap();
 export function NationCards({
@@ -247,6 +247,7 @@ export function Entry({
               );
             }}
           >
+            <OrnatePanelFrame variant="parchment" seal="top-right" />
             <div className="section-heading">
               <span className="eyebrow">
                 {form === 'create' ? 'FUNDE SEU CONSELHO' : 'O CONSELHO AGUARDA'}
@@ -409,6 +410,7 @@ export function Entry({
         )}
       </div>
       <section className="server-browser framed-panel">
+        <OrnatePanelFrame variant="parchment" seal="top-right" />
         <div className="section-heading">
           <h2>🌐 Salas Abertas (Entrar em 1 Clique)</h2>
           <button onClick={() => void refresh()}>Atualizar salas</button>
@@ -486,6 +488,7 @@ export function Lobby({
         </button>
       </header>
       <div className="lobby-panel framed-panel">
+        <OrnatePanelFrame variant="parchment" seal="top-right" />
         <section className="lobby-council">
           <span className="eyebrow">SALA DE GUERRA</span>
           <h1>Reúna o conselho.</h1>

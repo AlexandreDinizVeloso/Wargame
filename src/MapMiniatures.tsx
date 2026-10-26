@@ -422,7 +422,16 @@ export function SeaZoneCompassNode({
 }
 function Structure({ kind, level }: { kind: string; level: number }) {
   return (
-    <g data-structure={kind} stroke="#243b43" strokeWidth=".65" strokeLinejoin="round">
+    <g data-structure={kind} stroke="#07151c" strokeWidth=".85" strokeLinejoin="round">
+      <circle
+        cx="0"
+        cy="0"
+        r="14.5"
+        fill="#07141c"
+        fillOpacity=".82"
+        stroke="#d8be7c"
+        strokeWidth="1.05"
+      />
       {kind === 'FORT' && (
         <>
           <path d="M-10 9V-7H-7V-11H-4V-7H4V-11H7V-7H10V9ZM-12 9H12" fill="url(#miniature-stone)" />
@@ -490,11 +499,12 @@ function Structure({ kind, level }: { kind: string; level: number }) {
       <text
         x="10"
         y="14"
-        fontSize="7"
+        fontSize="7.5"
+        fontWeight="700"
         textAnchor="middle"
-        fill="#fff0c2"
-        stroke="#153140"
-        strokeWidth="1.6"
+        fill="#fff5d0"
+        stroke="#06141d"
+        strokeWidth="2"
         paintOrder="stroke"
       >
         {level}
@@ -524,19 +534,20 @@ export function ProvinceStructuresVisual({
   const active = buildings.filter(([, n]) => n > 0),
     visible = expanded ? active : active.slice(0, 1);
   if (p.kind !== 'LAND' || (!active.length && !p.siege)) return null;
+  const clampedScale = Math.max(0.85, scale);
   return (
     <g
       data-infrastructure={p.id}
       className="province-structures"
       pointerEvents="none"
-      transform={`translate(${p.x} ${p.y + 33 / scale}) scale(${0.85 / scale})`}
+      transform={`translate(${p.x} ${p.y + 22 / clampedScale}) scale(${0.68 / clampedScale})`}
     >
       <title>
         {p.name}: {active.map(([kind, n]) => `${kind} ${n}`).join(', ')}
         {p.siege ? ` · cerco ${p.siege.progress}/${p.siege.required}` : ''}
       </title>
       {visible.map(([kind, level], i) => (
-        <g key={kind} transform={`translate(${(i - (visible.length - 1) / 2) * 28} 0)`}>
+        <g key={kind} transform={`translate(${(i - (visible.length - 1) / 2) * 24} 0)`}>
           <Structure kind={kind} level={level} />
         </g>
       ))}

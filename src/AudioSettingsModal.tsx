@@ -51,6 +51,12 @@ const EFFECTS: { key: Sound; label: string }[] = [
   { key: 'sail', label: 'Navegação' },
   { key: 'season', label: 'Estação' },
   { key: 'victory', label: 'Vitória' },
+  { key: 'horn', label: 'Trompa de Guerra' },
+  { key: 'coins', label: 'Tesouro Real' },
+  { key: 'seal', label: 'Sinete de Cera' },
+  { key: 'parchment', label: 'Pergaminho' },
+  { key: 'steel-draw', label: 'Desembainhar' },
+  { key: 'fanfare', label: 'Fanfarra Imperial' },
 ];
 export default function AudioSettingsModal({ onClose }: { onClose: () => void }) {
   const root = useRef<HTMLElement>(null),
@@ -73,6 +79,7 @@ export default function AudioSettingsModal({ onClose }: { onClose: () => void })
   }, []);
   const [mixer, setMixer] = useState<AudioMixerState>(audio.mixer),
     [muted, setMuted] = useState(audio.muted),
+    [lockedTrack, setLockedTrack] = useState(audio.lockedTrack),
     [tab, setTab] = useState<'mixer' | 'library'>('mixer');
   useEffect(() => () => audio.stopPreview(), []);
   useEffect(
@@ -80,6 +87,7 @@ export default function AudioSettingsModal({ onClose }: { onClose: () => void })
       audio.subscribe(() => {
         setMixer(audio.mixer);
         setMuted(audio.muted);
+        setLockedTrack(audio.lockedTrack);
       }),
     [],
   );
@@ -150,27 +158,50 @@ export default function AudioSettingsModal({ onClose }: { onClose: () => void })
           </header>
           <div className="sound-library-tracks">
             {SOUNDTRACKS.map((track) => (
-              <button
-                key={track.key}
-                type="button"
-                onClick={() => audio.previewTrack(track.key)}
-                aria-label={`Ouvir prévia de ${track.title}`}
-              >
-                <span aria-hidden="true">♪</span>
-                <span>
-                  <strong>{track.title}</strong>
-                  <small>{track.description}</small>
-                </span>
-                <span className="sound-library-play" aria-hidden="true">
-                  ▶
-                </span>
-              </button>
+              <div key={track.key} className="sound-track-item">
+                <button
+                  type="button"
+                  onClick={() => audio.previewTrack(track.key)}
+                  aria-label={`Ouvir prévia de ${track.title}`}
+                >
+                  <span aria-hidden="true">♪</span>
+                  <span>
+                    <strong>{track.title}</strong>
+                    <small>{track.description}</small>
+                  </span>
+                  <span className="sound-library-play" aria-hidden="true">
+                    ▶
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`track-lock-btn ${lockedTrack === track.key ? 'active' : ''}`}
+                  aria-pressed={lockedTrack === track.key}
+                  title="Fixar este tema como música contínua de fundo"
+                  onClick={() =>
+                    audio.setLockedTrack(lockedTrack === track.key ? null : track.key)
+                  }
+                >
+                  {lockedTrack === track.key ? '📌 Fixado' : 'Fixar'}
+                </button>
+              </div>
             ))}
           </div>
-          <button className="sound-library-stop" type="button" onClick={() => audio.stopPreview()}>
-            Parar prévia
-          </button>
-          <h4>Efeitos da campanha</h4>
+          <div className="sound-library-actions-row">
+            <button className="sound-library-stop" type="button" onClick={() => audio.stopPreview()}>
+              Parar prévia
+            </button>
+            {lockedTrack && (
+              <button
+                className="sound-library-stop"
+                type="button"
+                onClick={() => audio.setLockedTrack(null)}
+              >
+                Restaurar trilha dinâmica
+              </button>
+            )}
+          </div>
+          <h4>Efeitos diegéticos da campanha</h4>
           <div className="sound-library-effects">
             {EFFECTS.map((effect) => (
               <button key={effect.key} type="button" onClick={() => audio.play(effect.key)}>
